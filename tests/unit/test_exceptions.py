@@ -213,14 +213,11 @@ class TestExceptionHierarchy:
         ]
 
         for exc in exceptions_to_raise:
-            try:
+            with pytest.raises(MixpanelDataError) as caught:
                 raise exc
-            except MixpanelDataError as caught:
-                assert caught.code is not None
-                assert caught.to_dict() is not None
-            else:
-                pytest.fail(f"Exception {exc.__class__.__name__} was not caught")
 
+            assert caught.value.code is not None
+            assert caught.value.to_dict() is not None
     def test_error_codes_match_expected(self) -> None:
         """Verify all error codes match expected values."""
         expected_codes = {
