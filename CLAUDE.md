@@ -111,12 +111,21 @@ Config file: `~/.mp/config.toml`
 
 ## Implementation Phases
 
-1. ✅ **Foundation** (Complete): ConfigManager, Credentials, exceptions, result types, auth module
-2. ⏳ **Infrastructure**: MixpanelAPIClient, StorageEngine (DuckDB)
-3. ⏳ **Core Services**: FetcherService, DiscoveryService, Workspace facade
-4. ⏳ **Live Queries**: LiveQueryService, segmentation/funnel/retention
-5. ⏳ **CLI**: Typer app, all commands, formatters
-6. ⏳ **Polish**: SKILL.md, docs, PyPI release
+**Master Plan:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
+
+| Phase | Name | Status | Branch |
+|-------|------|--------|--------|
+| 001 | Foundation Layer | ✅ Complete | `001-foundation-layer` |
+| 002 | API Client | ⏳ Next | `002-api-client` |
+| 003 | Storage Engine | ⏳ Pending | `003-storage-engine` |
+| 004 | Discovery Service | ⏳ Pending | `004-discovery-service` |
+| 005 | Fetch Service | ⏳ Pending | `005-fetch-service` |
+| 006 | Live Queries | ⏳ Pending | `006-live-queries` |
+| 007 | Workspace Facade | ⏳ Pending | `007-workspace` |
+| 008 | CLI Application | ⏳ Pending | `008-cli` |
+| 009 | Polish & Release | ⏳ Pending | `009-polish` |
+
+**Next up:** Phase 002 (API Client) - implements `MixpanelAPIClient` with HTTP transport, regional endpoints, rate limiting, and streaming export.
 
 ## What's Implemented
 
