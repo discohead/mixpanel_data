@@ -744,13 +744,17 @@ class TestJQL:
     """Test JQL queries (US8)."""
 
     def test_jql_basic(self, test_credentials: Credentials) -> None:
-        """Should execute JQL script."""
-        captured_body: dict[str, Any] = {}
+        """Should execute JQL script with form-encoded data."""
+        captured_body: dict[str, str] = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
             if request.content:
                 nonlocal captured_body
-                captured_body = json.loads(request.content)
+                # Parse form-encoded data
+                from urllib.parse import parse_qs
+
+                parsed = parse_qs(request.content.decode())
+                captured_body = {k: v[0] for k, v in parsed.items()}
             return httpx.Response(200, json=[{"key": "value"}])
 
         with create_mock_client(test_credentials, handler) as client:
@@ -760,19 +764,25 @@ class TestJQL:
         assert result == [{"key": "value"}]
 
     def test_jql_with_params(self, test_credentials: Credentials) -> None:
-        """Should pass params to JQL script."""
-        captured_body: dict[str, Any] = {}
+        """Should pass params as JSON string in form data."""
+        captured_body: dict[str, str] = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
             if request.content:
                 nonlocal captured_body
-                captured_body = json.loads(request.content)
+                # Parse form-encoded data
+                from urllib.parse import parse_qs
+
+                parsed = parse_qs(request.content.decode())
+                captured_body = {k: v[0] for k, v in parsed.items()}
             return httpx.Response(200, json=[])
 
         with create_mock_client(test_credentials, handler) as client:
             client.jql("function main() { return []; }", params={"from": "2024-01-01"})
 
         assert "params" in captured_body
+        # params should be a JSON-encoded string
+        assert json.loads(captured_body["params"]) == {"from": "2024-01-01"}
 
 
 # =============================================================================

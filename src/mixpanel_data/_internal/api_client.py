@@ -216,6 +216,7 @@ class MixpanelAPIClient:
         *,
         params: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
+        form_data: dict[str, Any] | None = None,
         timeout: float | None = None,
     ) -> Any:
         """Make an authenticated request with retry on rate limit.
@@ -224,7 +225,8 @@ class MixpanelAPIClient:
             method: HTTP method (GET, POST, etc.).
             url: Full URL to request.
             params: Query parameters.
-            data: Request body (for POST).
+            data: Request body as JSON (for POST).
+            form_data: Request body as form-encoded (for POST).
             timeout: Override default timeout.
 
         Returns:
@@ -251,6 +253,7 @@ class MixpanelAPIClient:
                     url,
                     params=params,
                     json=data,
+                    data=form_data,
                     headers=headers,
                     timeout=timeout or self._timeout,
                 )
@@ -280,11 +283,7 @@ class MixpanelAPIClient:
                 return self._handle_response(response)
 
             except httpx.HTTPError as e:
-                # Re-raise our exceptions
-                if isinstance(
-                    e.__cause__, AuthenticationError | RateLimitError | QueryError
-                ):
-                    raise e.__cause__ from None
+                # Network/connection errors
                 raise MixpanelDataError(
                     f"HTTP error: {e}",
                     code="HTTP_ERROR",
@@ -359,10 +358,9 @@ class MixpanelAPIClient:
             "Accept-Encoding": "gzip",
         }
 
-        batch_count = 0
-
         # Stream with retry logic
         for attempt in range(self._max_retries + 1):
+            batch_count = 0  # Reset on each attempt
             try:
                 with client.stream(
                     "GET",
@@ -420,10 +418,7 @@ class MixpanelAPIClient:
                     return  # Success, exit retry loop
 
             except httpx.HTTPError as e:
-                if isinstance(
-                    e.__cause__, AuthenticationError | RateLimitError | QueryError
-                ):
-                    raise e.__cause__ from None
+                # Network/connection errors - retry if attempts remain
                 if attempt >= self._max_retries:
                     raise MixpanelDataError(
                         f"HTTP error during export: {e}",
@@ -732,10 +727,11 @@ class MixpanelAPIClient:
             RateLimitError: Rate limit exceeded.
         """
         url = self._build_url("query", "/jql")
-        data: dict[str, Any] = {"script": script}
+        # JQL API expects form-encoded data with params as JSON string
+        form: dict[str, Any] = {"script": script}
         if params:
-            data["params"] = json.dumps(params)
-        response = self._request("POST", url, data=data)
+            form["params"] = json.dumps(params)
+        response = self._request("POST", url, form_data=form)
         if isinstance(response, list):
             return response
         return []
