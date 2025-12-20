@@ -218,6 +218,7 @@ class TestExceptionHierarchy:
 
             assert caught.value.code is not None
             assert caught.value.to_dict() is not None
+            
     def test_error_codes_match_expected(self) -> None:
         """Verify all error codes match expected values."""
         expected_codes = {
