@@ -51,7 +51,8 @@
   "workspaceFolder": "/workspace",
   "mounts": [
     "source=mixpanel-data-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
-    "source=mixpanel-data-claude-config-${devcontainerId},target=/home/vscode/.claude,type=volume"
+    "source=mixpanel-data-claude-config-${devcontainerId},target=/home/vscode/.claude,type=volume",
+    "source=${localEnv:HOME}/.mp,target=/home/vscode/.mp,type=bind,consistency=cached"
   ],
   "containerEnv": {
     "PYTHONDONTWRITEBYTECODE": "1",
