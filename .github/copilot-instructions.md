@@ -14,33 +14,52 @@
 
 ### Prerequisites
 - Python 3.12.3 (or Python 3.11+)
-- pip 24.0+
+- [uv](https://docs.astral.sh/uv/) - Python package manager
+- [just](https://github.com/casey/just) - Command runner
+
+### Development Commands
+
+This project uses `just` as a command runner. **ALWAYS use just commands for development tasks.**
+
+Run `just` to see all available commands:
+
+| Command | Description |
+|---------|-------------|
+| `just` | List all available commands |
+| `just check` | Run all checks (lint, typecheck, test) |
+| `just test` | Run tests (supports args: `just test -k foo`) |
+| `just test-cov` | Run tests with coverage |
+| `just lint` | Lint code with ruff |
+| `just lint-fix` | Auto-fix lint errors |
+| `just fmt` | Format code with ruff |
+| `just typecheck` | Type check with mypy |
+| `just sync` | Sync dependencies |
+| `just clean` | Remove caches and build artifacts |
+| `just build` | Build package |
 
 ### Installation & Setup
-**ALWAYS run installation before any development work:**
+**ALWAYS sync dependencies before any development work:**
 ```bash
-cd /home/runner/work/mixpanel_data/mixpanel_data
-pip install -e ".[dev]"
+just sync
 ```
 
-This installs the package in editable mode with all dev dependencies (pytest, ruff, mypy, pytest-cov, pandas-stubs). Installation takes ~30-60 seconds.
+This installs all dependencies including dev extras (pytest, ruff, mypy, pytest-cov, pandas-stubs).
 
 ### Testing
-**Run all tests (93 tests, ~1 second):**
+**Run all tests:**
 ```bash
-cd /home/runner/work/mixpanel_data/mixpanel_data
-pytest -v
+just test
 ```
 
 **Run tests with coverage (target: 95%+):**
 ```bash
-pytest --cov=src/mixpanel_data --cov-report=term
+just test-cov
 ```
 
-**Run specific test files:**
+**Run specific tests:**
 ```bash
-pytest tests/unit/test_config.py -v
-pytest tests/integration/test_foundation.py -v
+just test -k test_name
+just test tests/unit/test_config.py
 ```
 
 Tests are organized:
@@ -50,34 +69,34 @@ Tests are organized:
 
 ### Linting & Type Checking
 
-**ALWAYS run linting before committing:**
+**ALWAYS run all checks before committing:**
 ```bash
-cd /home/runner/work/mixpanel_data/mixpanel_data
-ruff check .
+just check
 ```
 
-**Auto-fix linting issues (14 of 19 current issues are auto-fixable):**
+This runs lint, typecheck, and test in sequence.
+
+**Auto-fix linting issues:**
 ```bash
-ruff check --fix .
+just lint-fix
 ```
 
 **Known acceptable linting warnings:**
 - B017: Tests use `pytest.raises(Exception)` for frozen dataclass validation - this is intentional
 - Some unused imports in test files that verify public API exports
 
-**Type checking (must pass with zero errors):**
+**Type checking only (must pass with zero errors):**
 ```bash
-mypy src
+just typecheck
 ```
 Note: Tests are excluded from strict type checking (see pyproject.toml `tool.mypy.overrides`)
 
 ### Building the Package
 **To build distribution packages:**
 ```bash
-pip install build --user
-python -m build
+just build
 ```
-Creates `dist/mixpanel_data-0.1.0.tar.gz` and `dist/mixpanel_data-0.1.0-py3-none-any.whl` (~30 seconds)
+Creates wheel and sdist in `dist/`
 
 ## Project Structure
 
@@ -209,16 +228,17 @@ The codebase currently has 19 ruff findings:
 
 **These instructions have been validated** by running all commands in the actual environment. If you encounter issues:
 1. First verify you're in the correct directory: `/home/runner/work/mixpanel_data/mixpanel_data`
-2. Check if dependencies are installed: `pip install -e ".[dev]"`
+2. Check if dependencies are synced: `just sync`
 3. Only then search for additional information or report the issue
 
 **Command execution times** (for timeout planning):
-- `pip install -e ".[dev]"`: 30-60 seconds
-- `pytest -v`: 1 second
-- `pytest --cov`: 1 second
-- `ruff check .`: <1 second
-- `mypy src`: 2-3 seconds
-- `python -m build`: 30 seconds
+- `just sync`: 30-60 seconds (first run), <5 seconds (subsequent)
+- `just test`: ~1 second
+- `just test-cov`: ~1 second
+- `just lint`: <1 second
+- `just typecheck`: 2-3 seconds
+- `just check`: ~5 seconds (runs lint, typecheck, test)
+- `just build`: ~30 seconds
 
 ---
 
