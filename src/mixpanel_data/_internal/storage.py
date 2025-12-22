@@ -418,7 +418,11 @@ class StorageEngine:
         total_rows = 0
         batch = []
         quoted_name = _quote_identifier(name)
-        insert_sql = f"INSERT INTO {quoted_name} VALUES (?, ?, ?, ?, ?)"
+        # Use INSERT OR IGNORE to skip duplicates silently.
+        # The Mixpanel Export API returns raw data without deduplication,
+        # so duplicate insert_ids are expected. We deduplicate on insert
+        # to match Mixpanel's query-time behavior.
+        insert_sql = f"INSERT OR IGNORE INTO {quoted_name} VALUES (?, ?, ?, ?, ?)"
 
         for record in data:
             # Validate record
@@ -484,7 +488,9 @@ class StorageEngine:
         total_rows = 0
         batch = []
         quoted_name = _quote_identifier(name)
-        insert_sql = f"INSERT INTO {quoted_name} VALUES (?, ?, ?)"
+        # Use INSERT OR IGNORE to skip duplicates silently.
+        # Duplicate distinct_ids can occur in profile exports.
+        insert_sql = f"INSERT OR IGNORE INTO {quoted_name} VALUES (?, ?, ?)"
 
         for record in data:
             # Validate record

@@ -1731,3 +1731,251 @@ def test_query_error_includes_query_text(tmp_path: Path) -> None:
             "table_does_not_exist" in error_str.lower()
             or "catalog" in error_str.lower()
         )
+
+
+# =============================================================================
+# Duplicate Handling Tests
+# =============================================================================
+# The Mixpanel Export API returns raw data without deduplication, so duplicate
+# insert_ids are expected. We use INSERT OR IGNORE to skip duplicates silently,
+# matching Mixpanel's query-time deduplication behavior.
+
+
+def test_create_events_table_skips_duplicate_insert_ids(tmp_path: Path) -> None:
+    """Test that duplicate insert_ids are silently skipped."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path) as storage:
+        # Create events with duplicate insert_ids (simulating raw export data)
+        events = [
+            {
+                "event_name": "Page View",
+                "event_time": datetime(2024, 1, 15, 10, 30, tzinfo=UTC),
+                "distinct_id": "user_123",
+                "insert_id": "duplicate_id",  # First occurrence
+                "properties": {"page": "/home"},
+            },
+            {
+                "event_name": "Page View",
+                "event_time": datetime(2024, 1, 15, 10, 30, tzinfo=UTC),
+                "distinct_id": "user_123",
+                "insert_id": "duplicate_id",  # Duplicate - should be skipped
+                "properties": {"page": "/home"},
+            },
+            {
+                "event_name": "Button Click",
+                "event_time": datetime(2024, 1, 15, 11, 0, tzinfo=UTC),
+                "distinct_id": "user_456",
+                "insert_id": "unique_id",  # Unique
+                "properties": {"button": "submit"},
+            },
+        ]
+
+        metadata = TableMetadata(
+            type="events",
+            fetched_at=datetime.now(UTC),
+            from_date="2024-01-15",
+            to_date="2024-01-15",
+        )
+
+        # Should not raise - duplicates silently skipped
+        row_count = storage.create_events_table(
+            name="test_events",
+            data=iter(events),
+            metadata=metadata,
+        )
+
+        # Row count reflects attempted inserts (3), not unique rows
+        assert row_count == 3
+
+        # But table should only have 2 unique rows
+        actual_count = storage.execute_scalar("SELECT COUNT(*) FROM test_events")
+        assert actual_count == 2
+
+
+def test_create_events_table_keeps_first_duplicate(tmp_path: Path) -> None:
+    """Test that the first occurrence of a duplicate is kept."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path) as storage:
+        # Create events with same insert_id but different properties
+        events = [
+            {
+                "event_name": "Page View",
+                "event_time": datetime(2024, 1, 15, 10, 30, tzinfo=UTC),
+                "distinct_id": "user_123",
+                "insert_id": "same_id",
+                "properties": {"version": "first"},  # First - should be kept
+            },
+            {
+                "event_name": "Page View",
+                "event_time": datetime(2024, 1, 15, 10, 30, tzinfo=UTC),
+                "distinct_id": "user_123",
+                "insert_id": "same_id",
+                "properties": {"version": "second"},  # Duplicate - skipped
+            },
+        ]
+
+        metadata = TableMetadata(
+            type="events",
+            fetched_at=datetime.now(UTC),
+            from_date="2024-01-15",
+            to_date="2024-01-15",
+        )
+
+        storage.create_events_table(
+            name="test_events",
+            data=iter(events),
+            metadata=metadata,
+        )
+
+        # Query the stored version
+        df = storage.execute_df("SELECT properties FROM test_events")
+        assert len(df) == 1
+
+        # First occurrence should be kept
+        import json
+
+        props = json.loads(df["properties"].iloc[0])
+        assert props["version"] == "first"
+
+
+def test_create_profiles_table_skips_duplicate_distinct_ids(tmp_path: Path) -> None:
+    """Test that duplicate distinct_ids are silently skipped."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path) as storage:
+        # Create profiles with duplicate distinct_ids
+        profiles = [
+            {
+                "distinct_id": "user_123",  # First occurrence
+                "last_seen": datetime(2024, 1, 15, 10, 30, tzinfo=UTC),
+                "properties": {"name": "Alice"},
+            },
+            {
+                "distinct_id": "user_123",  # Duplicate - should be skipped
+                "last_seen": datetime(2024, 1, 16, 10, 30, tzinfo=UTC),
+                "properties": {"name": "Alice Updated"},
+            },
+            {
+                "distinct_id": "user_456",  # Unique
+                "last_seen": datetime(2024, 1, 15, 11, 0, tzinfo=UTC),
+                "properties": {"name": "Bob"},
+            },
+        ]
+
+        metadata = TableMetadata(
+            type="profiles",
+            fetched_at=datetime.now(UTC),
+        )
+
+        # Should not raise - duplicates silently skipped
+        row_count = storage.create_profiles_table(
+            name="test_profiles",
+            data=iter(profiles),
+            metadata=metadata,
+        )
+
+        # Row count reflects attempted inserts (3), not unique rows
+        assert row_count == 3
+
+        # But table should only have 2 unique rows
+        actual_count = storage.execute_scalar("SELECT COUNT(*) FROM test_profiles")
+        assert actual_count == 2
+
+
+def test_create_profiles_table_keeps_first_duplicate(tmp_path: Path) -> None:
+    """Test that the first occurrence of a duplicate profile is kept."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path) as storage:
+        # Create profiles with same distinct_id but different properties
+        profiles = [
+            {
+                "distinct_id": "user_123",
+                "last_seen": datetime(2024, 1, 15, 10, 30, tzinfo=UTC),
+                "properties": {"version": "first"},  # First - should be kept
+            },
+            {
+                "distinct_id": "user_123",
+                "last_seen": datetime(2024, 1, 16, 10, 30, tzinfo=UTC),
+                "properties": {"version": "second"},  # Duplicate - skipped
+            },
+        ]
+
+        metadata = TableMetadata(
+            type="profiles",
+            fetched_at=datetime.now(UTC),
+        )
+
+        storage.create_profiles_table(
+            name="test_profiles",
+            data=iter(profiles),
+            metadata=metadata,
+        )
+
+        # Query the stored version
+        df = storage.execute_df("SELECT properties FROM test_profiles")
+        assert len(df) == 1
+
+        # First occurrence should be kept
+        import json
+
+        props = json.loads(df["properties"].iloc[0])
+        assert props["version"] == "first"
+
+
+def test_create_events_table_handles_many_duplicates(tmp_path: Path) -> None:
+    """Test that many duplicates are handled efficiently."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path) as storage:
+        # Create 100 events where each insert_id appears 3 times
+        # (simulating the ai_demo project's ~65% duplicate rate)
+        events = []
+        for i in range(100):
+            base_event = {
+                "event_name": "Event",
+                "event_time": datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+                "distinct_id": f"user_{i}",
+                "insert_id": f"id_{i}",
+                "properties": {"index": i},
+            }
+            # Add each event 3 times
+            events.extend([base_event.copy() for _ in range(3)])
+
+        metadata = TableMetadata(
+            type="events",
+            fetched_at=datetime.now(UTC),
+            from_date="2024-01-15",
+            to_date="2024-01-15",
+        )
+
+        # Should handle 300 records efficiently
+        row_count = storage.create_events_table(
+            name="test_events",
+            data=iter(events),
+            metadata=metadata,
+        )
+
+        # Row count reflects all 300 attempted inserts
+        assert row_count == 300
+
+        # But table should only have 100 unique rows
+        actual_count = storage.execute_scalar("SELECT COUNT(*) FROM test_events")
+        assert actual_count == 100
