@@ -55,7 +55,6 @@ class StorageEngine:
         self._path: Path | None = None
         self._conn: duckdb.DuckDBPyConnection | None = None
         self._is_ephemeral = _ephemeral
-        self._temp_file: Any = None
 
         if path is not None:
             # Persistent mode: create database at specified path
@@ -95,16 +94,14 @@ class StorageEngine:
             # Database automatically deleted here
         """
         # Create temporary file (delete=False so we control when it's deleted)
-        temp_file = tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False)
-        temp_path = Path(temp_file.name)
+        with tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False) as temp_file:
+            temp_path = Path(temp_file.name)
 
-        # Close and delete the file handle (DuckDB needs to create it fresh)
-        temp_file.close()
+        # File is closed here. Delete it so DuckDB can create it fresh.
         temp_path.unlink()
 
         # Create storage engine with ephemeral flag
         storage = cls(path=temp_path, _ephemeral=True)
-        storage._temp_file = temp_file
 
         return storage
 

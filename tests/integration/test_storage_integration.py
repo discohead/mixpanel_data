@@ -534,7 +534,7 @@ def test_table_replacement_pattern_create_drop_recreate(tmp_path: Path) -> None:
 
         try:
             storage.create_events_table("my_events", iter(new_events), metadata_v1)
-            assert False, "Should have raised TableExistsError"
+            raise AssertionError("Should have raised TableExistsError")
         except TableExistsError:
             # Expected behavior - table exists
             pass
@@ -929,14 +929,14 @@ def test_introspection_after_table_drop(tmp_path: Path) -> None:
 
         try:
             storage.get_schema("table1")
-            assert False, "Should have raised TableNotFoundError"
+            raise AssertionError("Should have raised TableNotFoundError")
         except TableNotFoundError:
             pass
 
         # Verify get_metadata raises error for dropped table
         try:
             storage.get_metadata("table1")
-            assert False, "Should have raised TableNotFoundError"
+            raise AssertionError("Should have raised TableNotFoundError")
         except TableNotFoundError:
             pass
 
