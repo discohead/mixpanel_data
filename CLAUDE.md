@@ -225,7 +225,10 @@ just fmt && just lint
 ```
 
 ## Recent Changes
+- 005-fetch-service: Added Python 3.11+ (type hints throughout per constitution) + httpx (HTTP), DuckDB (storage), Pydantic v2 (validation)
 - Added `just` command runner with justfile for common development tasks
 - 004-discovery-service: Added Python 3.11+ + httpx (via MixpanelAPIClient from Phase 002)
-- 003-storage-engine: ✅ Complete - Implemented `StorageEngine` with DuckDB lifecycle management, streaming ingestion, query execution, and introspection
-- 002-api-client: ✅ Complete - Implemented `MixpanelAPIClient` with HTTP transport, regional endpoints, rate limiting, and streaming export
+
+## Active Technologies
+- Python 3.11+ (type hints throughout per constitution) + httpx (HTTP), DuckDB (storage), Pydantic v2 (validation) (005-fetch-service)
+- DuckDB (embedded analytical database, per constitution) (005-fetch-service)
