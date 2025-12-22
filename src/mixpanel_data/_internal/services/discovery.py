@@ -38,7 +38,8 @@ class DiscoveryService:
             api_client: Authenticated Mixpanel API client.
         """
         self._api_client = api_client
-        self._cache: dict[tuple[str, ...], list[str]] = {}
+        # Cache key can contain str, None, or int values
+        self._cache: dict[tuple[str | int | None, ...], list[str]] = {}
 
     def list_events(self) -> list[str]:
         """List all event names in the project.
@@ -54,12 +55,12 @@ class DiscoveryService:
         """
         cache_key = ("list_events",)
         if cache_key in self._cache:
-            return self._cache[cache_key]
+            return list(self._cache[cache_key])
 
         result = self._api_client.get_events()
         sorted_result = sorted(result)
         self._cache[cache_key] = sorted_result
-        return sorted_result
+        return list(sorted_result)
 
     def list_properties(self, event: str) -> list[str]:
         """List all properties for a specific event.
@@ -79,12 +80,12 @@ class DiscoveryService:
         """
         cache_key = ("list_properties", event)
         if cache_key in self._cache:
-            return self._cache[cache_key]
+            return list(self._cache[cache_key])
 
         result = self._api_client.get_event_properties(event)
         sorted_result = sorted(result)
         self._cache[cache_key] = sorted_result
-        return sorted_result
+        return list(sorted_result)
 
     def list_property_values(
         self,
@@ -110,17 +111,17 @@ class DiscoveryService:
             Results are cached per (property, event, limit) combination.
             Values are returned as strings regardless of original type.
         """
-        # Use str(event) to handle None in cache key consistently
-        cache_key = ("list_property_values", property_name, str(event), str(limit))
+        # Use actual values in cache key (None and int are hashable)
+        cache_key = ("list_property_values", property_name, event, limit)
         if cache_key in self._cache:
-            return self._cache[cache_key]
+            return list(self._cache[cache_key])
 
         result = self._api_client.get_property_values(
             property_name, event=event, limit=limit
         )
         # Note: values are NOT sorted per research.md
         self._cache[cache_key] = result
-        return result
+        return list(result)
 
     def clear_cache(self) -> None:
         """Clear all cached discovery results.

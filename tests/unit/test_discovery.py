@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def discovery_factory(
+    request: pytest.FixtureRequest,
     mock_client_factory: Callable[
         [Callable[[httpx.Request], httpx.Response]], MixpanelAPIClient
     ],
@@ -34,6 +35,7 @@ def discovery_factory(
             discovery = discovery_factory(handler)
             result = discovery.list_events()
     """
+    clients: list[MixpanelAPIClient] = []
 
     def factory(
         handler: Callable[[httpx.Request], httpx.Response],
@@ -41,8 +43,14 @@ def discovery_factory(
         client = mock_client_factory(handler)
         # Enter context to ensure client is initialized
         client.__enter__()
+        clients.append(client)
         return DiscoveryService(client)
 
+    def cleanup() -> None:
+        for client in clients:
+            client.__exit__(None, None, None)
+
+    request.addfinalizer(cleanup)
     return factory
 
 
