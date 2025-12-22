@@ -22,34 +22,41 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "pip"
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-      
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Sync dependencies
+        run: just sync
+
       - name: Lint with ruff
-        run: ruff check .
-      
+        run: just lint
+
       - name: Type check with mypy
-        run: mypy src
-      
+        run: just typecheck
+
       - name: Run tests with pytest
         if: matrix.python-version != '3.12'
-        run: pytest -v
-      
+        run: just test
+
       - name: Run tests with coverage (Python 3.12 only)
         if: matrix.python-version == '3.12'
-        run: pytest -v --cov --cov-report=term --cov-report=xml
+        run: just test-cov
       
       - name: Upload coverage to codecov
         if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@v4
         with:
           fail_ci_if_error: false
+
+      - name: Build package
+        if: matrix.python-version == '3.12'
+        run: just build

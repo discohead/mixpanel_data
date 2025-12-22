@@ -45,6 +45,20 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Sync dependencies
+        run: just sync
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -58,10 +72,9 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # Restrict Claude to only the Bash commands needed in this repository
-          # (install dev dependencies, run tests, lint, and type check).
+          # Restrict Claude to only the Bash commands needed in this repository.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options.
           claude_args: >
             --allowed-tools
-            Bash(pip install -e ".[dev]"*|pytest*|ruff*|mypy*)
+            Bash(just *)
