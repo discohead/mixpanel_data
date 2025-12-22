@@ -27,7 +27,7 @@ class TestCredentials:
         """Test creating valid credentials."""
         creds = Credentials(
             username="sa_test",
-            secret="secret123",  # type: ignore[arg-type]
+            secret="secret123",
             project_id="12345",
             region="us",
         )
@@ -43,9 +43,9 @@ class TestCredentials:
         for region in ("us", "eu", "in", "US", "EU", "IN"):
             creds = Credentials(
                 username="user",
-                secret="secret",  # type: ignore[arg-type]
+                secret="secret",
                 project_id="123",
-                region=region,  # type: ignore[arg-type]
+                region=region,
             )
             assert creds.region == region.lower()
 
@@ -53,9 +53,9 @@ class TestCredentials:
         with pytest.raises(ValueError, match="Region must be one of"):
             Credentials(
                 username="user",
-                secret="secret",  # type: ignore[arg-type]
+                secret="secret",
                 project_id="123",
-                region="invalid",  # type: ignore[arg-type]
+                region="invalid",
             )
 
     def test_empty_field_validation(self) -> None:
@@ -63,7 +63,7 @@ class TestCredentials:
         with pytest.raises(ValueError, match="cannot be empty"):
             Credentials(
                 username="",
-                secret="secret",  # type: ignore[arg-type]
+                secret="secret",
                 project_id="123",
                 region="us",
             )
@@ -71,7 +71,7 @@ class TestCredentials:
         with pytest.raises(ValueError, match="cannot be empty"):
             Credentials(
                 username="user",
-                secret="secret",  # type: ignore[arg-type]
+                secret="secret",
                 project_id="   ",
                 region="us",
             )
@@ -80,7 +80,7 @@ class TestCredentials:
         """Secret should never appear in repr/str output."""
         creds = Credentials(
             username="sa_test",
-            secret="my_super_secret_value",  # type: ignore[arg-type]
+            secret="my_super_secret_value",
             project_id="12345",
             region="us",
         )
@@ -98,7 +98,7 @@ class TestCredentials:
         """Credentials should be immutable (frozen)."""
         creds = Credentials(
             username="sa_test",
-            secret="secret123",  # type: ignore[arg-type]
+            secret="secret123",
             project_id="12345",
             region="us",
         )

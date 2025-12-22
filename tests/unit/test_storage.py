@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import UTC
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -237,16 +239,16 @@ def test_create_events_table_inserts_all_records(tmp_path: Path) -> None:
         assert row_count == 2
 
         # Verify data was inserted
-        result = storage.connection.execute(
+        count_result = storage.connection.execute(
             "SELECT COUNT(*) FROM test_events"
         ).fetchone()
-        assert result == (2,)
+        assert count_result == (2,)
 
         # Verify schema is correct
-        result = storage.connection.execute(
+        rows = storage.connection.execute(
             "SELECT event_name, distinct_id FROM test_events ORDER BY event_time"
         ).fetchall()
-        assert result == [("Page View", "user_123"), ("Button Click", "user_456")]
+        assert rows == [("Page View", "user_123"), ("Button Click", "user_456")]
     finally:
         storage.close()
 
@@ -260,7 +262,7 @@ def test_create_events_table_handles_large_batches(tmp_path: Path) -> None:
 
     try:
         # Create 5000 events to test batching
-        def event_generator():
+        def event_generator() -> Iterator[dict[str, Any]]:
             for i in range(5000):
                 yield {
                     "event_name": "Event",
@@ -523,16 +525,16 @@ def test_create_profiles_table_inserts_all_records(tmp_path: Path) -> None:
         assert row_count == 2
 
         # Verify data was inserted
-        result = storage.connection.execute(
+        count_result = storage.connection.execute(
             "SELECT COUNT(*) FROM test_profiles"
         ).fetchone()
-        assert result == (2,)
+        assert count_result == (2,)
 
         # Verify schema is correct
-        result = storage.connection.execute(
+        rows = storage.connection.execute(
             "SELECT distinct_id FROM test_profiles ORDER BY distinct_id"
         ).fetchall()
-        assert result == [("user_123",), ("user_456",)]
+        assert rows == [("user_123",), ("user_456",)]
     finally:
         storage.close()
 
@@ -608,7 +610,7 @@ def test_create_events_table_invokes_progress_callback(tmp_path: Path) -> None:
 
     try:
         # Create events generator
-        def event_generator():
+        def event_generator() -> Iterator[dict[str, Any]]:
             for i in range(3000):
                 yield {
                     "event_name": "Event",
@@ -658,7 +660,7 @@ def test_create_profiles_table_invokes_progress_callback(tmp_path: Path) -> None
 
     try:
         # Create profiles generator
-        def profile_generator():
+        def profile_generator() -> Iterator[dict[str, Any]]:
             for i in range(1500):
                 yield {
                     "distinct_id": f"user_{i}",
@@ -725,6 +727,7 @@ def test_ephemeral_creates_temporary_database() -> None:
         # Cleanup
         temp_path = storage.path
         storage.close()
+        assert temp_path is not None
 
         # After close, temp file should be deleted
         assert not temp_path.exists()
@@ -761,6 +764,7 @@ def test_cleanup_deletes_ephemeral_database() -> None:
     """Test that cleanup() deletes ephemeral database file."""
     storage = StorageEngine.ephemeral()
     temp_path = storage.path
+    assert temp_path is not None
 
     # Before cleanup, file should exist
     assert temp_path.exists()
@@ -776,6 +780,7 @@ def test_cleanup_is_idempotent() -> None:
     """Test that cleanup() can be called multiple times safely."""
     storage = StorageEngine.ephemeral()
     temp_path = storage.path
+    assert temp_path is not None
 
     # Call cleanup multiple times
     storage.cleanup()
@@ -790,6 +795,7 @@ def test_cleanup_removes_wal_files_if_present() -> None:
     """Test that cleanup() removes WAL files if they exist."""
     storage = StorageEngine.ephemeral()
     temp_path = storage.path
+    assert temp_path is not None
 
     # Create some data to potentially trigger WAL creation
     storage.connection.execute("CREATE TABLE test (id INTEGER)")
