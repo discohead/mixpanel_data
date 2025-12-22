@@ -69,7 +69,7 @@ src/mixpanel_data/
 │   └── services/
 │       ├── __init__.py      # ✅ Services package
 │       ├── discovery.py     # ✅ DiscoveryService
-│       ├── fetcher.py       # ⏳ FetcherService
+│       ├── fetcher.py       # ✅ FetcherService
 │       └── live_query.py    # ⏳ LiveQueryService
 └── cli/
     ├── main.py              # ⏳ Typer app entry point
@@ -122,13 +122,13 @@ Config file: `~/.mp/config.toml`
 | 002 | API Client | ✅ Complete | `002-api-client` |
 | 003 | Storage Engine | ✅ Complete | `003-storage-engine` |
 | 004 | Discovery Service | ✅ Complete | `004-discovery-service` |
-| 005 | Fetch Service | ⏳ Next | `005-fetch-service` |
-| 006 | Live Queries | ⏳ Pending | `006-live-queries` |
+| 005 | Fetch Service | ✅ Complete | `005-fetch-service` |
+| 006 | Live Queries | ⏳ Next | `006-live-queries` |
 | 007 | Workspace Facade | ⏳ Pending | `007-workspace` |
 | 008 | CLI Application | ⏳ Pending | `008-cli` |
 | 009 | Polish & Release | ⏳ Pending | `009-polish` |
 
-**Next up:** Phase 005 (Fetch Service) - implements `FetcherService` for fetching and storing events/profiles in DuckDB.
+**Next up:** Phase 006 (Live Queries) - implements `LiveQueryService` for segmentation, funnels, retention, and JQL queries.
 
 ## What's Implemented
 
@@ -183,8 +183,17 @@ All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
 - `clear_cache()` — Clear all cached discovery results
 - Constructor injection of `MixpanelAPIClient` for testing
 
+### Fetcher Service (`_internal/services/fetcher.py`)
+- `FetcherService` — Coordinates fetches from Mixpanel API to DuckDB storage
+- `fetch_events(name, from_date, to_date, events, where, progress_callback)` — Fetch and store events
+- `fetch_profiles(name, where, progress_callback)` — Fetch and store user profiles
+- Streaming transformation: API events → storage format (memory efficient)
+- Progress callback integration for fetch monitoring
+- Returns `FetchResult` with table name, row count, duration, and metadata
+- Constructor injection of `MixpanelAPIClient` and `StorageEngine` for testing
+
 ### Tests
-- Unit tests for exceptions, config, types, storage, discovery
+- Unit tests for exceptions, config, types, storage, discovery, fetcher
 - Integration tests for config file CRUD, foundation layer, storage engine
 - Requires Python 3.11+ (use devcontainer or pyenv)
 
@@ -225,10 +234,12 @@ just fmt && just lint
 ```
 
 ## Recent Changes
-- 005-fetch-service: Added Python 3.11+ (type hints throughout per constitution) + httpx (HTTP), DuckDB (storage), Pydantic v2 (validation)
+- 005-fetch-service: Implemented FetcherService for fetching events/profiles from Mixpanel API to DuckDB storage
 - Added `just` command runner with justfile for common development tasks
-- 004-discovery-service: Added Python 3.11+ + httpx (via MixpanelAPIClient from Phase 002)
+- 004-discovery-service: Added DiscoveryService with session-scoped caching
 
 ## Active Technologies
-- Python 3.11+ (type hints throughout per constitution) + httpx (HTTP), DuckDB (storage), Pydantic v2 (validation) (005-fetch-service)
-- DuckDB (embedded analytical database, per constitution) (005-fetch-service)
+- Python 3.11+ with full type hints throughout (per constitution)
+- httpx for HTTP client (API communication)
+- DuckDB for embedded analytical database (local storage)
+- Pydantic v2 for validation and configuration

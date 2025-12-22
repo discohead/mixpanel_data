@@ -2,7 +2,7 @@
 
 A Python library and CLI for working with Mixpanel analytics data, designed for AI coding agents.
 
-**Status:** Foundation, API client, storage engine, and discovery service complete — fetch service next.
+**Status:** Foundation through fetch service complete — live queries next.
 
 ## The Problem
 
@@ -178,8 +178,8 @@ Implementation following the phased roadmap in [IMPLEMENTATION_PLAN.md](IMPLEMEN
 2. ✅ **API Client** — MixpanelAPIClient with HTTP transport, rate limiting, streaming
 3. ✅ **Storage Engine** — DuckDB operations, schema management, query execution
 4. ✅ **Discovery Service** — DiscoveryService with caching
-5. ⏳ **Fetch Service** — FetcherService for events/profiles (next)
-6. ⏳ **Live Queries** — LiveQueryService for segmentation, funnels, retention
+5. ✅ **Fetch Service** — FetcherService for events/profiles ingestion
+6. ⏳ **Live Queries** — LiveQueryService for segmentation, funnels, retention (next)
 7. ⏳ **Workspace** — Facade class, lifecycle management
 8. ⏳ **CLI** — Typer application, all commands
 9. ⏳ **Polish** — SKILL.md, documentation, PyPI release
