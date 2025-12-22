@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import UTC
 from pathlib import Path
+from typing import Any
 
 from mixpanel_data._internal.storage import StorageEngine
 
@@ -107,7 +109,7 @@ def test_large_dataset_ingestion_100k_events(tmp_path: Path) -> None:
 
     try:
         # Create generator for 100K events
-        def event_generator():
+        def event_generator() -> Iterator[dict[str, Any]]:
             for i in range(100_000):
                 yield {
                     "event_name": "Event",
@@ -168,7 +170,7 @@ def test_large_dataset_ingestion_50k_profiles(tmp_path: Path) -> None:
 
     try:
         # Create generator for 50K profiles
-        def profile_generator():
+        def profile_generator() -> Iterator[dict[str, Any]]:
             for i in range(50_000):
                 yield {
                     "distinct_id": f"user_{i:08d}",
@@ -312,6 +314,7 @@ def test_ephemeral_cleanup_on_normal_exit() -> None:
     # Create ephemeral storage
     storage = StorageEngine.ephemeral()
     temp_path = storage.path
+    assert temp_path is not None
 
     # Verify file exists
     assert temp_path.exists()
@@ -340,6 +343,7 @@ def test_ephemeral_cleanup_on_exception() -> None:
     try:
         storage = StorageEngine.ephemeral()
         temp_path = storage.path
+        assert temp_path is not None
 
         # Verify file exists
         assert temp_path.exists()
@@ -373,6 +377,7 @@ def test_ephemeral_cleanup_via_context_manager() -> None:
 
     with StorageEngine.ephemeral() as storage:
         temp_path = storage.path
+        assert temp_path is not None
 
         # Verify file exists
         assert temp_path.exists()
@@ -393,6 +398,7 @@ def test_ephemeral_cleanup_via_context_manager_with_exception() -> None:
     try:
         with StorageEngine.ephemeral() as storage:
             temp_path = storage.path
+            assert temp_path is not None
 
             # Verify file exists
             assert temp_path.exists()
@@ -513,13 +519,15 @@ def test_table_replacement_pattern_create_drop_recreate(tmp_path: Path) -> None:
         assert row_count == 2
 
         # Step 2: Verify initial data
-        result = storage.connection.execute("SELECT COUNT(*) FROM my_events").fetchone()
-        assert result == (2,)
+        count_result = storage.connection.execute(
+            "SELECT COUNT(*) FROM my_events"
+        ).fetchone()
+        assert count_result == (2,)
 
-        result = storage.connection.execute(
+        rows = storage.connection.execute(
             "SELECT event_name FROM my_events ORDER BY event_time"
         ).fetchall()
-        assert result == [("Initial Event",), ("Initial Event 2",)]
+        assert rows == [("Initial Event",), ("Initial Event 2",)]
 
         # Step 3: Attempting to recreate without dropping should fail
         new_events = [
@@ -583,13 +591,15 @@ def test_table_replacement_pattern_create_drop_recreate(tmp_path: Path) -> None:
         assert row_count == 3
 
         # Step 6: Verify new data is correct (old data is gone)
-        result = storage.connection.execute("SELECT COUNT(*) FROM my_events").fetchone()
-        assert result == (3,)
+        count_result = storage.connection.execute(
+            "SELECT COUNT(*) FROM my_events"
+        ).fetchone()
+        assert count_result == (3,)
 
-        result = storage.connection.execute(
+        rows = storage.connection.execute(
             "SELECT event_name FROM my_events ORDER BY event_time"
         ).fetchall()
-        assert result == [
+        assert rows == [
             ("Replacement Event",),
             ("Replacement Event 2",),
             ("Replacement Event 3",),
