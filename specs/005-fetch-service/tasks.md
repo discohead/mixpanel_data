@@ -25,7 +25,7 @@
 
 **Purpose**: Project already initialized; verify dependencies and structure
 
-- [ ] T001 Verify existing project structure matches plan in src/mixpanel_data/_internal/services/
+- [X] T001 Verify existing project structure matches plan in src/mixpanel_data/_internal/services/
 
 **Note**: No additional setup required. Project structure from previous phases is already in place.
 
@@ -37,9 +37,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T002 Create FetcherService class skeleton with constructor in src/mixpanel_data/_internal/services/fetcher.py
-- [ ] T003 [P] Implement _transform_event generator function in src/mixpanel_data/_internal/services/fetcher.py
-- [ ] T004 [P] Implement _transform_profile generator function in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T002 Create FetcherService class skeleton with constructor in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T003 [P] Implement _transform_event generator function in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T004 [P] Implement _transform_profile generator function in src/mixpanel_data/_internal/services/fetcher.py
 
 **Checkpoint**: Foundation ready - FetcherService class exists with transformation helpers
 
@@ -53,18 +53,18 @@
 
 ### Tests for User Story 1
 
-- [ ] T005 [P] [US1] Unit test for _transform_event with valid event data in tests/unit/test_fetcher_service.py
-- [ ] T006 [P] [US1] Unit test for _transform_event with missing $insert_id in tests/unit/test_fetcher_service.py
-- [ ] T007 [P] [US1] Unit test for fetch_events with mocked API client in tests/unit/test_fetcher_service.py
-- [ ] T008 [P] [US1] Unit test for fetch_events TableExistsError in tests/unit/test_fetcher_service.py
-- [ ] T009 [US1] Integration test for fetch_events with real DuckDB in tests/integration/test_fetch_service.py
+- [X] T005 [P] [US1] Unit test for _transform_event with valid event data in tests/unit/test_fetcher_service.py
+- [X] T006 [P] [US1] Unit test for _transform_event with missing $insert_id in tests/unit/test_fetcher_service.py
+- [X] T007 [P] [US1] Unit test for fetch_events with mocked API client in tests/unit/test_fetcher_service.py
+- [X] T008 [P] [US1] Unit test for fetch_events TableExistsError in tests/unit/test_fetcher_service.py
+- [X] T009 [US1] Integration test for fetch_events with real DuckDB in tests/integration/test_fetch_service.py
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement fetch_events method in src/mixpanel_data/_internal/services/fetcher.py
-- [ ] T011 [US1] Add progress callback forwarding from API client on_batch in src/mixpanel_data/_internal/services/fetcher.py
-- [ ] T012 [US1] Add FetchResult construction with timing in src/mixpanel_data/_internal/services/fetcher.py
-- [ ] T013 [US1] Add TableMetadata construction with filter context in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T010 [US1] Implement fetch_events method in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T011 [US1] Add progress callback forwarding from API client on_batch in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T012 [US1] Add FetchResult construction with timing in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T013 [US1] Add TableMetadata construction with filter context in src/mixpanel_data/_internal/services/fetcher.py
 
 **Checkpoint**: User Story 1 fully functional - events can be fetched and queried via SQL
 
@@ -78,17 +78,17 @@
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Unit test for _transform_profile with valid profile data in tests/unit/test_fetcher_service.py
-- [ ] T015 [P] [US2] Unit test for _transform_profile with missing $last_seen in tests/unit/test_fetcher_service.py
-- [ ] T016 [P] [US2] Unit test for fetch_profiles with mocked API client in tests/unit/test_fetcher_service.py
-- [ ] T017 [P] [US2] Unit test for fetch_profiles TableExistsError in tests/unit/test_fetcher_service.py
-- [ ] T018 [US2] Integration test for fetch_profiles with real DuckDB in tests/integration/test_fetch_service.py
+- [X] T014 [P] [US2] Unit test for _transform_profile with valid profile data in tests/unit/test_fetcher_service.py
+- [X] T015 [P] [US2] Unit test for _transform_profile with missing $last_seen in tests/unit/test_fetcher_service.py
+- [X] T016 [P] [US2] Unit test for fetch_profiles with mocked API client in tests/unit/test_fetcher_service.py
+- [X] T017 [P] [US2] Unit test for fetch_profiles TableExistsError in tests/unit/test_fetcher_service.py
+- [X] T018 [US2] Integration test for fetch_profiles with real DuckDB in tests/integration/test_fetch_service.py
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] Implement fetch_profiles method in src/mixpanel_data/_internal/services/fetcher.py
-- [ ] T020 [US2] Add progress callback forwarding from API client on_batch in src/mixpanel_data/_internal/services/fetcher.py
-- [ ] T021 [US2] Add FetchResult construction with date_range=None in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T019 [US2] Implement fetch_profiles method in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T020 [US2] Add progress callback forwarding from API client on_batch in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T021 [US2] Add FetchResult construction with date_range=None in src/mixpanel_data/_internal/services/fetcher.py
 
 **Checkpoint**: User Story 2 fully functional - profiles can be fetched and queried via SQL
 
@@ -98,11 +98,11 @@
 
 **Purpose**: Documentation, exports, and validation
 
-- [ ] T022 [P] Add comprehensive docstrings to FetcherService class and methods in src/mixpanel_data/_internal/services/fetcher.py
-- [ ] T023 [P] Export FetcherService from services __init__.py in src/mixpanel_data/_internal/services/__init__.py
-- [ ] T024 Run quickstart.md examples to validate implementation
-- [ ] T025 Run all tests and verify 100% pass rate with `just test`
-- [ ] T026 Run linting and type checking with `just check`
+- [X] T022 [P] Add comprehensive docstrings to FetcherService class and methods in src/mixpanel_data/_internal/services/fetcher.py
+- [X] T023 [P] Export FetcherService from services __init__.py in src/mixpanel_data/_internal/services/__init__.py
+- [X] T024 Run quickstart.md examples to validate implementation
+- [X] T025 Run all tests and verify 100% pass rate with `just test`
+- [X] T026 Run linting and type checking with `just check`
 
 ---
 
