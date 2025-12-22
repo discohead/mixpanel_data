@@ -5,11 +5,9 @@ on:
     types: [opened, synchronize]
     # Optional: Only run on specific file changes
     # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
-
+    #   - "src/**/*.py"
+    #   - "tests/**/*.py"
+    #   - "pyproject.toml"
 jobs:
   claude-review:
     # Optional: Filter by PR author
@@ -53,5 +51,5 @@ jobs:
 
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
+          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(pytest *),Bash(ruff check *),Bash(mypy *)"'
 
