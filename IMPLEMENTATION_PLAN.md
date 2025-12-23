@@ -84,7 +84,7 @@ This document defines the complete implementation roadmap for `mixpanel_data`, o
 │                │                                                            │
 │                ▼                                                            │
 │         ┌──────────────┐                                                    │
-│         │ 010-CLI      │                                                    │
+│         │ 010-CLI      │ ✅                                                  │
 │         │ (Typer App)  │                                                    │
 │         └──────┬───────┘                                                    │
 │                │                                                            │
@@ -113,8 +113,8 @@ This document defines the complete implementation roadmap for `mixpanel_data`, o
 | 007 | Discovery Enhancements | Funnels, Cohorts, Top Events, Event/Property Counts | ✅ Complete | `007-discovery-enhancements` |
 | 008 | Query Service Enhancements | Activity Feed, Insights, Frequency, Numeric Aggregations | ✅ Complete | `008-query-service-enhancements` |
 | 009 | Workspace Facade | Workspace class, Lifecycle Management | ✅ Complete | `009-workspace` |
-| 010 | CLI Application | Typer app, Commands, Formatters | ⏳ Next | `010-cli` |
-| 011 | Polish & Release | SKILL.md, Documentation, PyPI | ⏳ Pending | `011-polish` |
+| 010 | CLI Application | Typer app, Commands, Formatters | ✅ Complete | `010-cli-application` |
+| 011 | Polish & Release | SKILL.md, Documentation, PyPI | ⏳ Next | `011-polish` |
 
 ---
 
@@ -891,26 +891,30 @@ class Workspace:
 
 ---
 
-## Phase 010: CLI Application ⏳
+## Phase 010: CLI Application ✅
 
-**Status:** PENDING
-**Branch:** `010-cli`
+**Status:** COMPLETE
+**Branch:** `010-cli-application`
 **Dependencies:** Phase 009 (Workspace)
 
 ### Overview
 
 The CLI is a thin wrapper over the library using Typer. Every command maps directly to library methods.
 
-### Components to Build
+### Delivered Components
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| Main App | `src/mixpanel_data/cli/main.py` | Typer app entry |
-| Auth Commands | `src/mixpanel_data/cli/commands/auth.py` | `mp auth *` |
-| Fetch Commands | `src/mixpanel_data/cli/commands/fetch.py` | `mp fetch *` |
-| Query Commands | `src/mixpanel_data/cli/commands/query.py` | `mp sql`, `mp segmentation`, etc. |
-| Inspect Commands | `src/mixpanel_data/cli/commands/inspect.py` | `mp events`, `mp tables`, etc. |
-| Formatters | `src/mixpanel_data/cli/formatters/` | JSON, Table, CSV output |
+| Main App | `src/mixpanel_data/cli/main.py` | Typer app entry with global options |
+| Auth Commands | `src/mixpanel_data/cli/commands/auth.py` | 6 account management commands |
+| Fetch Commands | `src/mixpanel_data/cli/commands/fetch.py` | 2 data fetching commands |
+| Query Commands | `src/mixpanel_data/cli/commands/query.py` | 13 query commands (local + live) |
+| Inspect Commands | `src/mixpanel_data/cli/commands/inspect.py` | 10 discovery/introspection commands |
+| Formatters | `src/mixpanel_data/cli/formatters.py` | JSON, JSONL, Table, CSV, Plain output |
+| Utilities | `src/mixpanel_data/cli/utils.py` | Exit codes, error handling, console |
+| Validators | `src/mixpanel_data/cli/validators.py` | Input validation for Literal types |
+| Unit Tests | `tests/unit/cli/` | 49 unit tests |
+| Integration Tests | `tests/integration/cli/` | 46 integration tests |
 
 ### Command Groups
 
@@ -918,111 +922,95 @@ The CLI is a thin wrapper over the library using Typer. Every command maps direc
 |-------|----------|
 | `mp auth` | `list`, `add`, `remove`, `switch`, `show`, `test` |
 | `mp fetch` | `events`, `profiles` |
-| `mp` (query) | `sql`, `segmentation`, `funnel`, `retention`, `jql`, `event-counts`, `property-counts`, `activity-feed`, `insights`, `frequency`, `segmentation-numeric`, `segmentation-sum`, `segmentation-average` |
-| `mp` (inspect) | `events`, `properties`, `values`, `funnels`, `cohorts`, `top-events`, `info`, `tables`, `schema`, `drop` |
+| `mp query` | `sql`, `segmentation`, `funnel`, `retention`, `jql`, `event-counts`, `property-counts`, `activity-feed`, `insights`, `frequency`, `segmentation-numeric`, `segmentation-sum`, `segmentation-average` |
+| `mp inspect` | `events`, `properties`, `values`, `funnels`, `cohorts`, `top-events`, `info`, `tables`, `schema`, `drop` |
 
-### User Stories
-
-1. **Manage authentication** (P1)
-   - Add/remove/switch accounts
-   - Test credentials
-
-2. **Fetch data** (P1)
-   - Fetch events with date range and filters
-   - Show progress bars
-
-3. **Query data** (P1)
-   - Execute SQL queries
-   - Run live Mixpanel queries
-
-4. **Inspect data** (P2)
-   - List events, properties, values
-   - Show table info and schema
-
-### Tasks (Estimated: 55-60)
+### Key Deliverables
 
 **Setup:**
-- [ ] Create `cli/main.py` with Typer app
-- [ ] Register entry point in `pyproject.toml`
-- [ ] Create command group structure
+- [x] Create `cli/main.py` with Typer app
+- [x] Register entry point in `pyproject.toml`
+- [x] Create command group structure
 
 **Auth Commands:**
-- [ ] Implement `mp auth list`
-- [ ] Implement `mp auth add` with options
-- [ ] Implement `mp auth remove`
-- [ ] Implement `mp auth switch`
-- [ ] Implement `mp auth show`
-- [ ] Implement `mp auth test`
+- [x] Implement `mp auth list`
+- [x] Implement `mp auth add` with options
+- [x] Implement `mp auth remove`
+- [x] Implement `mp auth switch`
+- [x] Implement `mp auth show`
+- [x] Implement `mp auth test`
 
 **Fetch Commands:**
-- [ ] Implement `mp fetch events` with progress bar
-- [ ] Implement `mp fetch profiles` with progress bar
+- [x] Implement `mp fetch events` with progress bar
+- [x] Implement `mp fetch profiles` with progress bar
 
 **Query Commands (Core):**
-- [ ] Implement `mp sql` with format options
-- [ ] Implement `mp segmentation`
-- [ ] Implement `mp funnel`
-- [ ] Implement `mp retention`
-- [ ] Implement `mp jql`
+- [x] Implement `mp query sql` with format options
+- [x] Implement `mp query segmentation`
+- [x] Implement `mp query funnel`
+- [x] Implement `mp query retention`
+- [x] Implement `mp query jql`
 
 **Query Commands (Phase 007):**
-- [ ] Implement `mp event-counts`
-- [ ] Implement `mp property-counts`
+- [x] Implement `mp query event-counts`
+- [x] Implement `mp query property-counts`
 
 **Query Commands (Phase 008):**
-- [ ] Implement `mp activity-feed`
-- [ ] Implement `mp insights`
-- [ ] Implement `mp frequency`
-- [ ] Implement `mp segmentation-numeric`
-- [ ] Implement `mp segmentation-sum`
-- [ ] Implement `mp segmentation-average`
+- [x] Implement `mp query activity-feed`
+- [x] Implement `mp query insights`
+- [x] Implement `mp query frequency`
+- [x] Implement `mp query segmentation-numeric`
+- [x] Implement `mp query segmentation-sum`
+- [x] Implement `mp query segmentation-average`
 
 **Discovery Commands:**
-- [ ] Implement `mp events`
-- [ ] Implement `mp properties`
-- [ ] Implement `mp values`
-- [ ] Implement `mp funnels` (Phase 007)
-- [ ] Implement `mp cohorts` (Phase 007)
-- [ ] Implement `mp top-events` (Phase 007)
+- [x] Implement `mp inspect events`
+- [x] Implement `mp inspect properties`
+- [x] Implement `mp inspect values`
+- [x] Implement `mp inspect funnels` (Phase 007)
+- [x] Implement `mp inspect cohorts` (Phase 007)
+- [x] Implement `mp inspect top-events` (Phase 007)
 
 **Introspection Commands:**
-- [ ] Implement `mp info`
-- [ ] Implement `mp tables`
-- [ ] Implement `mp schema`
-- [ ] Implement `mp drop`
+- [x] Implement `mp inspect info`
+- [x] Implement `mp inspect tables`
+- [x] Implement `mp inspect schema`
+- [x] Implement `mp inspect drop`
 
 **Formatters:**
-- [ ] Implement JSON formatter
-- [ ] Implement Table formatter (Rich)
-- [ ] Implement CSV formatter
-- [ ] Implement JSONL formatter
+- [x] Implement JSON formatter (pretty-printed)
+- [x] Implement Table formatter (Rich ASCII tables)
+- [x] Implement CSV formatter (with headers)
+- [x] Implement JSONL formatter (newline-delimited)
+- [x] Implement Plain formatter (minimal text)
 
 **Polish:**
-- [ ] Global options: `--account`, `--format`, `--quiet`, `--verbose`
-- [ ] Error handling with exit codes
-- [ ] Help text for all commands
-- [ ] Shell completion generation
+- [x] Global options: `--account`, `--format`, `--quiet`, `--verbose`, `--version`
+- [x] Error handling with standardized exit codes
+- [x] Help text for all commands
+- [x] Shell completion generation (via Typer)
+- [x] SIGINT (Ctrl+C) handling
 
 ### Success Criteria
 
-- [ ] All 31 commands implemented and functional
-- [ ] All commands exit with documented codes
-- [ ] Data goes to stdout, status to stderr
-- [ ] Progress bars work in interactive mode
-- [ ] All output formats work correctly (json, table, csv, jsonl)
-- [ ] `--help` on every command
-- [ ] Global options work on all commands (--account, --format, --quiet, --verbose)
-- [ ] Phase 007 commands: funnels, cohorts, top-events, event-counts, property-counts
-- [ ] Phase 008 commands: activity-feed, insights, frequency, segmentation-numeric/sum/average
-- [ ] Integration tests for all command groups
-- [ ] mypy --strict passes
-- [ ] ruff check passes
+- [x] All 31 commands implemented and functional
+- [x] All commands exit with documented codes (0=success, 1-5=errors, 130=interrupted)
+- [x] Data goes to stdout, status to stderr
+- [x] Progress bars work in interactive mode
+- [x] All output formats work correctly (json, jsonl, table, csv, plain)
+- [x] `--help` on every command
+- [x] Global options work on all commands (--account, --format, --quiet, --verbose)
+- [x] Phase 007 commands: funnels, cohorts, top-events, event-counts, property-counts
+- [x] Phase 008 commands: activity-feed, insights, frequency, segmentation-numeric/sum/average
+- [x] 95 CLI tests (49 unit + 46 integration)
+- [x] mypy --strict passes
+- [x] ruff check passes
 
 ---
 
 ## Phase 011: Polish & Release ⏳
 
-**Status:** PENDING
+**Status:** NEXT
 **Branch:** `011-polish`
 **Dependencies:** All previous phases
 

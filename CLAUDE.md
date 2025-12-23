@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `mixpanel_data` is a Python library and CLI for working with Mixpanel analytics data, designed for AI coding agents. The core insight: agents should fetch data once into a local DuckDB database, then query it repeatedly with SQL—preserving context window for reasoning rather than consuming it with raw API responses.
 
-**Status:** Foundation through query service enhancements complete. Workspace facade is next.
+**Status:** All core components complete. Polish and release (Phase 011) is next.
 
 ## Naming Convention
 
@@ -72,8 +72,17 @@ src/mixpanel_data/
 │       ├── fetcher.py       # ✅ FetcherService
 │       └── live_query.py    # ✅ LiveQueryService
 └── cli/
-    ├── main.py              # ⏳ Typer app entry point
-    └── commands/            # ⏳ auth, fetch, query, inspect commands
+    ├── __init__.py          # ✅ CLI package
+    ├── main.py              # ✅ Typer app entry point
+    ├── utils.py             # ✅ Error handling, console, output helpers
+    ├── formatters.py        # ✅ JSON, JSONL, Table, CSV, Plain formatters
+    ├── validators.py        # ✅ Input validation for Literal types
+    └── commands/            # ✅ auth, fetch, query, inspect commands
+        ├── __init__.py      # ✅ Commands package
+        ├── auth.py          # ✅ 6 account management commands
+        ├── fetch.py         # ✅ 2 data fetching commands
+        ├── query.py         # ✅ 13 query commands (local + live)
+        └── inspect.py       # ✅ 10 discovery/introspection commands
 
 tests/
 ├── conftest.py              # ✅ Shared pytest fixtures
@@ -127,10 +136,10 @@ Config file: `~/.mp/config.toml`
 | 007 | Discovery Enhancements | ✅ Complete | `007-discovery-enhancements` |
 | 008 | Query Service Enhancements | ✅ Complete | `008-query-service-enhancements` |
 | 009 | Workspace Facade | ✅ Complete | `009-workspace` |
-| 010 | CLI Application | ⏳ Next | `010-cli` |
-| 011 | Polish & Release | ⏳ Pending | `011-polish` |
+| 010 | CLI Application | ✅ Complete | `010-cli-application` |
+| 011 | Polish & Release | ⏳ Next | `011-polish` |
 
-**Next up:** Phase 010 (CLI Application) - implements the `mp` command-line interface using Typer.
+**Next up:** Phase 011 (Polish & Release) - SKILL.md, documentation, and PyPI release.
 
 ## What's Implemented
 
@@ -248,9 +257,23 @@ All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
 - Credential resolution: env vars → named account → default account
 - Query-only mode via `Workspace.open(path)` without credentials
 
+### CLI Application (`cli/`) [Phase 010]
+- `mp` — Main Typer application with global options (--account, --format, --quiet, --verbose)
+- **Auth Commands (6):** `mp auth list/add/remove/switch/show/test` — Account management
+- **Fetch Commands (2):** `mp fetch events/profiles` — Data fetching with progress bars
+- **Query Commands (13):** `mp query sql/segmentation/funnel/retention/jql/event-counts/property-counts/activity-feed/insights/frequency/segmentation-numeric/segmentation-sum/segmentation-average`
+- **Inspect Commands (10):** `mp inspect events/properties/values/funnels/cohorts/top-events/info/tables/schema/drop`
+- **Output Formats (5):** json, jsonl, table, csv, plain via --format option
+- **Exit Codes:** 0=success, 1=general error, 2=auth error, 3=invalid args, 4=not found, 5=rate limit, 130=interrupted
+- Formatters: JSON (pretty), JSONL (streaming), Table (Rich), CSV (with headers), Plain (minimal)
+- Error handling: All MixpanelDataError subclasses mapped to exit codes with colored stderr output
+- 95 tests (49 unit + 46 integration)
+
 ### Tests
-- Unit tests for exceptions, config, types, storage, discovery, fetcher, live_query, workspace
-- Integration tests for config file CRUD, foundation layer, storage engine
+- 633 total tests across unit and integration suites
+- Unit tests for exceptions, config, types, storage, discovery, fetcher, live_query, workspace, CLI
+- Integration tests for config file CRUD, foundation layer, storage engine, CLI commands
+- 95 CLI tests (49 unit + 46 integration)
 - Requires Python 3.11+ (use devcontainer or pyenv)
 
 ## Development Commands
@@ -292,10 +315,13 @@ just fmt && just lint
 ```
 
 ## Recent Changes
-- 010-cli-application: Added Python 3.11+ (per constitution, with full type hints) + Typer (CLI framework), Rich (output formatting), existing mixpanel_data library
+- 010-cli-application: Implemented complete CLI with 31 commands across 4 command groups (auth, fetch, query, inspect). 5 output formats (json, jsonl, table, csv, plain), standardized exit codes, Rich progress bars, error handling. Added 95 new tests (49 unit, 46 integration).
 - 009-workspace: Implemented Workspace facade class with 40+ public methods covering discovery (7), fetching (2), local queries (3), live queries (12), introspection (3), table management (2), and escape hatches (2). Added 51 new tests (45 unit, 6 integration)
 - 008-query-service-enhancements: Added 6 new LiveQueryService methods (activity_feed, insights, frequency, segmentation_numeric, segmentation_sum, segmentation_average) with 7 new result types and 61 new tests
 
 ## Active Technologies
-- Python 3.11+ (per constitution, with full type hints) + Typer (CLI framework), Rich (output formatting), existing mixpanel_data library (010-cli-application)
-- DuckDB (via existing StorageEngine, already implemented) (010-cli-application)
+- Python 3.11+ with full type hints (mypy --strict compliant)
+- Typer (CLI framework) + Rich (output formatting, progress bars, tables)
+- DuckDB (embedded analytical database via StorageEngine)
+- httpx (HTTP client with rate limiting), Pydantic (validation)
+- uv (package manager), just (command runner)

@@ -2,7 +2,7 @@
 
 A Python library and CLI for working with Mixpanel analytics data, designed for AI coding agents.
 
-**Status:** Foundation through workspace facade complete — CLI next.
+**Status:** All core components complete — polish and release next.
 
 ## The Problem
 
@@ -185,8 +185,8 @@ Implementation following the phased roadmap in [IMPLEMENTATION_PLAN.md](IMPLEMEN
 7. ✅ **Discovery Enhancements** — Funnels, cohorts, top events; event/property counts
 8. ✅ **Query Service Enhancements** — Activity feed, insights, frequency, numeric aggregations
 9. ✅ **Workspace** — Facade class, lifecycle management
-10. ⏳ **CLI** — Typer application, all commands (next)
-11. ⏳ **Polish** — SKILL.md, documentation, PyPI release
+10. ✅ **CLI** — Typer application with 31 commands, 5 output formats
+11. ⏳ **Polish** — SKILL.md, documentation, PyPI release (next)
 
 ## License
 
