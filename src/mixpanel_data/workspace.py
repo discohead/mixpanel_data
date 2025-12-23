@@ -31,7 +31,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import duckdb
 import pandas as pd
@@ -64,9 +64,6 @@ from mixpanel_data.types import (
     TopEvent,
     WorkspaceInfo,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 class Workspace:
@@ -513,8 +510,8 @@ class Workspace:
                     pbar.update(task, completed=count)
 
                 progress_callback = callback
-            except ImportError:
-                # Rich not available, skip progress bar
+            except Exception:
+                # Progress bar unavailable or failed to initialize, skip silently
                 pass
 
         try:
@@ -572,8 +569,8 @@ class Workspace:
                     pbar.update(task, completed=count)
 
                 progress_callback = callback
-            except ImportError:
-                # Rich not available, skip progress bar
+            except Exception:
+                # Progress bar unavailable or failed to initialize, skip silently
                 pass
 
         try:
@@ -1034,15 +1031,17 @@ class Workspace:
         path = self._storage.path
         tables = [t.name for t in self._storage.list_tables()]
 
-        # Calculate database size
+        # Calculate database size and creation time
         size_mb = 0.0
-        if path is not None and path.exists():
-            size_mb = path.stat().st_size / 1_000_000
-
-        # Get creation time
         created_at: datetime | None = None
         if path is not None and path.exists():
-            created_at = datetime.fromtimestamp(path.stat().st_ctime)
+            try:
+                stat = path.stat()
+                size_mb = stat.st_size / 1_000_000
+                created_at = datetime.fromtimestamp(stat.st_ctime)
+            except (OSError, PermissionError):
+                # File became inaccessible, use defaults
+                pass
 
         return WorkspaceInfo(
             path=path,

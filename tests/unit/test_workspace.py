@@ -1172,3 +1172,18 @@ class TestContextManager:
 
         # Should be cleaned up
         assert not path.exists()
+
+    def test_close_calls_api_client_close(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        mock_storage: StorageEngine,
+    ) -> None:
+        """Test that close() calls api_client.close()."""
+        ws = Workspace(
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+            _storage=mock_storage,
+        )
+        ws.close()
+        mock_api_client.close.assert_called_once()
