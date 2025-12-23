@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `mixpanel_data` is a Python library and CLI for working with Mixpanel analytics data, designed for AI coding agents. The core insight: agents should fetch data once into a local DuckDB database, then query it repeatedly with SQL—preserving context window for reasoning rather than consuming it with raw API responses.
 
-**Status:** Foundation through discovery enhancements complete. Workspace facade is next.
+**Status:** Foundation through query service enhancements complete. Workspace facade is next.
 
 ## Naming Convention
 
@@ -125,11 +125,12 @@ Config file: `~/.mp/config.toml`
 | 005 | Fetch Service | ✅ Complete | `005-fetch-service` |
 | 006 | Live Queries | ✅ Complete | `006-live-query-service` |
 | 007 | Discovery Enhancements | ✅ Complete | `007-discovery-enhancements` |
-| 008 | Workspace Facade | ⏳ Next | `008-workspace` |
-| 009 | CLI Application | ⏳ Pending | `009-cli` |
-| 010 | Polish & Release | ⏳ Pending | `010-polish` |
+| 008 | Query Service Enhancements | ✅ Complete | `008-query-service-enhancements` |
+| 009 | Workspace Facade | ⏳ Next | `009-workspace` |
+| 010 | CLI Application | ⏳ Pending | `010-cli` |
+| 011 | Polish & Release | ⏳ Pending | `011-polish` |
 
-**Next up:** Phase 008 (Workspace Facade) - implements `Workspace` class as the unified entry point for both live queries and local storage operations.
+**Next up:** Phase 009 (Workspace Facade) - implements `Workspace` class as the unified entry point for both live queries and local storage operations.
 
 ## What's Implemented
 
@@ -156,6 +157,7 @@ Config file: `~/.mp/config.toml`
 - Discovery APIs (Phase 007): `list_funnels()`, `list_cohorts()`, `get_top_events()`
 - Query APIs: `segmentation()`, `funnel()`, `retention()`, `jql()` (raw responses)
 - Query APIs (Phase 007): `event_counts()`, `property_counts()` (event breakdown)
+- Query APIs (Phase 008): `activity_feed()`, `insights()`, `frequency()`, `segmentation_numeric()`, `segmentation_sum()`, `segmentation_average()`
 
 ### Result Types (`types.py`)
 All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
@@ -173,6 +175,13 @@ All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
 - `TopEvent` — Today's event activity (event, count, percent_change) [Phase 007]
 - `EventCountsResult` — Multi-event time series with lazy `.df` property [Phase 007]
 - `PropertyCountsResult` — Property breakdown time series with lazy `.df` property [Phase 007]
+- `UserEvent` — Single event in a user's activity feed (event, time, properties) [Phase 008]
+- `ActivityFeedResult` — User activity feed query result with events list [Phase 008]
+- `InsightsResult` — Saved Insights report data with time series [Phase 008]
+- `FrequencyResult` — Event frequency distribution (addiction analysis) [Phase 008]
+- `NumericBucketResult` — Numeric property bucketing result [Phase 008]
+- `NumericSumResult` — Numeric property sum aggregation [Phase 008]
+- `NumericAverageResult` — Numeric property average aggregation [Phase 008]
 
 ### Storage Engine (`_internal/storage.py`)
 - `StorageEngine` — DuckDB-based storage with persistent and ephemeral modes
@@ -211,8 +220,15 @@ All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
 - `jql(script, params)` — Execute custom JQL scripts
 - `event_counts(events, from_date, to_date, type, unit)` — Multi-event time series [Phase 007]
 - `property_counts(event, property_name, from_date, to_date, ...)` — Property breakdown time series [Phase 007]
+- `activity_feed(distinct_ids, from_date, to_date)` — Query user event history [Phase 008]
+- `insights(bookmark_id)` — Query saved Insights reports by bookmark ID [Phase 008]
+- `frequency(from_date, to_date, unit, addiction_unit, event, where)` — Analyze event frequency distribution [Phase 008]
+- `segmentation_numeric(event, from_date, to_date, on, unit, where, type)` — Bucket events by numeric property ranges [Phase 008]
+- `segmentation_sum(event, from_date, to_date, on, unit, where)` — Calculate sum of numeric properties over time [Phase 008]
+- `segmentation_average(event, from_date, to_date, on, unit, where)` — Calculate average of numeric properties over time [Phase 008]
 - Returns typed results: `SegmentationResult`, `FunnelResult`, `RetentionResult`, `JQLResult`
 - Phase 007 results: `EventCountsResult`, `PropertyCountsResult` with Literal type constraints
+- Phase 008 results: `ActivityFeedResult`, `InsightsResult`, `FrequencyResult`, `NumericBucketResult`, `NumericSumResult`, `NumericAverageResult`
 - All results support lazy DataFrame conversion via `.df` property
 - No caching (live queries return fresh data)
 - Constructor injection of `MixpanelAPIClient` for testing
@@ -259,9 +275,6 @@ just fmt && just lint
 ```
 
 ## Recent Changes
-- 008-query-service-enhancements: Added Python 3.11+ (type hints required per constitution) + httpx (HTTP client), Pydantic v2 (validation), pandas (DataFrame conversion)
-- 007-discovery-enhancements: Added Python 3.11+ (type hints required per constitution) + httpx (HTTP client), Pydantic v2 (validation), pandas (DataFrame conversion)
-- 006-live-query-service: Added Python 3.11+ (type hints required throughout per constitution) + httpx (HTTP client, already in use), Pydantic v2 (validation), pandas (DataFrame conversion)
-
-## Active Technologies
-- N/A (live queries only, no local storage) (008-query-service-enhancements)
+- 008-query-service-enhancements: Added 6 new LiveQueryService methods (activity_feed, insights, frequency, segmentation_numeric, segmentation_sum, segmentation_average) with 7 new result types and 61 new tests
+- 007-discovery-enhancements: Added funnels, cohorts, top events discovery; event/property counts queries
+- 006-live-query-service: Added segmentation, funnel, retention, JQL queries with typed results

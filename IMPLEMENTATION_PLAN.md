@@ -67,21 +67,30 @@ This document defines the complete implementation roadmap for `mixpanel_data`, o
 │         │                │                                                  │
 │         └────────┬───────┘                                                  │
 │                  ▼                                                          │
+│         ┌──────────────────┐                                                │
+│         │ 008-Query Service│                                                │
+│         │ Enhancements     │                                                │
+│         │ (Activity Feed,  │                                                │
+│         │  Insights, etc.) │                                                │
+│         │       ✅         │                                                │
+│         └────────┬─────────┘                                                │
+│                  │                                                          │
+│                  ▼                                                          │
 │         ┌──────────────┐                                                    │
-│         │ 008-Workspace│                                                    │
+│         │ 009-Workspace│                                                    │
 │         │ (Facade,     │                                                    │
 │         │  Lifecycle)  │                                                    │
 │         └──────┬───────┘                                                    │
 │                │                                                            │
 │                ▼                                                            │
 │         ┌──────────────┐                                                    │
-│         │ 009-CLI      │                                                    │
+│         │ 010-CLI      │                                                    │
 │         │ (Typer App)  │                                                    │
 │         └──────┬───────┘                                                    │
 │                │                                                            │
 │                ▼                                                            │
 │         ┌──────────────────┐                                                │
-│         │  010-Polish      │                                                │
+│         │  011-Polish      │                                                │
 │         │  (SKILL.md,      │                                                │
 │         │   Docs, PyPI)    │                                                │
 │         └──────────────────┘                                                │
@@ -102,9 +111,10 @@ This document defines the complete implementation roadmap for `mixpanel_data`, o
 | 005 | Fetch Service | FetcherService, Events/Profiles Export | ✅ Complete | `005-fetch-service` |
 | 006 | Live Queries | LiveQueryService, Segmentation, Funnels, Retention | ✅ Complete | `006-live-query-service` |
 | 007 | Discovery Enhancements | Funnels, Cohorts, Top Events, Event/Property Counts | ✅ Complete | `007-discovery-enhancements` |
-| 008 | Workspace Facade | Workspace class, Lifecycle Management | ⏳ Next | `008-workspace` |
-| 009 | CLI Application | Typer app, Commands, Formatters | ⏳ Pending | `009-cli` |
-| 010 | Polish & Release | SKILL.md, Documentation, PyPI | ⏳ Pending | `010-polish` |
+| 008 | Query Service Enhancements | Activity Feed, Insights, Frequency, Numeric Aggregations | ✅ Complete | `008-query-service-enhancements` |
+| 009 | Workspace Facade | Workspace class, Lifecycle Management | ⏳ Next | `009-workspace` |
+| 010 | CLI Application | Typer app, Commands, Formatters | ⏳ Pending | `010-cli` |
+| 011 | Polish & Release | SKILL.md, Documentation, PyPI | ⏳ Pending | `011-polish` |
 
 ---
 
@@ -603,11 +613,75 @@ This phase extends the Discovery Service and Live Query Service to provide compl
 
 ---
 
-## Phase 008: Workspace Facade ⏳
+## Phase 008: Query Service Enhancements ✅
+
+**Status:** COMPLETE
+**Branch:** `008-query-service-enhancements`
+**Dependencies:** Phase 002 (API Client), Phase 006 (Live Query Service)
+**Spec:** [specs/008-query-service-enhancements/](specs/008-query-service-enhancements/)
+
+### Overview
+
+This phase extends the Live Query Service with 6 additional Mixpanel Query API endpoints for advanced analytics queries: user activity feeds, saved Insights reports, event frequency analysis, and numeric property aggregations.
+
+### Delivered Components
+
+| Component | Location | Description |
+|-----------|----------|-------------|
+| Result Types | `src/mixpanel_data/types.py` | 7 new types: UserEvent, ActivityFeedResult, InsightsResult, FrequencyResult, NumericBucketResult, NumericSumResult, NumericAverageResult |
+| API Client Methods | `src/mixpanel_data/_internal/api_client.py` | 6 new methods for Query API endpoints |
+| LiveQueryService Methods | `src/mixpanel_data/_internal/services/live_query.py` | 6 new methods for advanced analytics |
+| Unit Tests | `tests/unit/test_*_phase008.py` | 61 new tests covering all new functionality |
+
+### Key Deliverables
+
+**New Result Types:**
+- [x] `UserEvent` — Single event in a user's activity feed (event, time, properties)
+- [x] `ActivityFeedResult` — User activity feed query result with events list
+- [x] `InsightsResult` — Saved Insights report data with time series
+- [x] `FrequencyResult` — Event frequency distribution (addiction analysis)
+- [x] `NumericBucketResult` — Numeric property bucketing result
+- [x] `NumericSumResult` — Numeric property sum aggregation
+- [x] `NumericAverageResult` — Numeric property average aggregation
+
+**New API Client Methods:**
+- [x] `activity_feed()` — GET /api/query/stream/query
+- [x] `insights()` — GET /api/query/insights
+- [x] `frequency()` — GET /api/query/retention/addiction
+- [x] `segmentation_numeric()` — GET /api/query/segmentation/numeric
+- [x] `segmentation_sum()` — GET /api/query/segmentation/sum
+- [x] `segmentation_average()` — GET /api/query/segmentation/average
+
+**New Live Query Service Methods:**
+- [x] `activity_feed()` — Query user event history with chronological events
+- [x] `insights()` — Query saved Insights reports by bookmark ID
+- [x] `frequency()` — Analyze event frequency distribution
+- [x] `segmentation_numeric()` — Bucket events by numeric property ranges
+- [x] `segmentation_sum()` — Calculate daily/hourly sum of numeric properties
+- [x] `segmentation_average()` — Calculate daily/hourly average of numeric properties
+
+**Quality:**
+- [x] All 445 tests pass (61 new Phase 008 tests)
+- [x] mypy --strict passes
+- [x] ruff check passes
+- [x] All result types have `.to_dict()` serialization
+- [x] All result types have lazy `.df` property for DataFrame conversion
+
+### Success Criteria
+
+- [x] All 6 new Live Query methods implemented and passing tests
+- [x] All result types are frozen dataclasses with lazy `.df` and `.to_dict()`
+- [x] Literal types for parameters provide compile-time validation
+- [x] All API errors mapped to appropriate exceptions
+- [x] Documentation strings with examples for all public methods
+
+---
+
+## Phase 009: Workspace Facade ⏳
 
 **Status:** PENDING
-**Branch:** `008-workspace`
-**Dependencies:** Phases 002-007 (all services)
+**Branch:** `009-workspace`
+**Dependencies:** Phases 002-008 (all services)
 
 ### Overview
 
@@ -708,6 +782,7 @@ class Workspace:
 - [ ] Delegate SQL methods to StorageEngine
 - [ ] Delegate live query methods to LiveQueryService (segmentation, funnel, retention, jql)
 - [ ] Delegate enhanced live query methods (event_counts, property_counts)
+- [ ] Delegate advanced analytics methods (activity_feed, insights, frequency, segmentation_numeric, segmentation_sum, segmentation_average)
 - [ ] Implement introspection methods
 - [ ] Implement table management methods
 - [ ] Implement escape hatch properties
@@ -725,11 +800,11 @@ class Workspace:
 
 ---
 
-## Phase 009: CLI Application ⏳
+## Phase 010: CLI Application ⏳
 
 **Status:** PENDING
-**Branch:** `009-cli`
-**Dependencies:** Phase 008 (Workspace)
+**Branch:** `010-cli`
+**Dependencies:** Phase 009 (Workspace)
 
 ### Overview
 
@@ -752,7 +827,7 @@ The CLI is a thin wrapper over the library using Typer. Every command maps direc
 |-------|----------|
 | `mp auth` | `list`, `add`, `remove`, `switch`, `show`, `test` |
 | `mp fetch` | `events`, `profiles` |
-| `mp` (query) | `sql`, `segmentation`, `funnel`, `retention`, `jql`, `event-counts`, `property-counts` |
+| `mp` (query) | `sql`, `segmentation`, `funnel`, `retention`, `jql`, `event-counts`, `property-counts`, `activity-feed`, `insights`, `frequency`, `segmentation-numeric`, `segmentation-sum`, `segmentation-average` |
 | `mp` (inspect) | `events`, `properties`, `values`, `funnels`, `cohorts`, `top-events`, `info`, `tables`, `schema`, `drop` |
 
 ### User Stories
@@ -830,10 +905,10 @@ The CLI is a thin wrapper over the library using Typer. Every command maps direc
 
 ---
 
-## Phase 010: Polish & Release ⏳
+## Phase 011: Polish & Release ⏳
 
 **Status:** PENDING
-**Branch:** `010-polish`
+**Branch:** `011-polish`
 **Dependencies:** All previous phases
 
 ### Overview

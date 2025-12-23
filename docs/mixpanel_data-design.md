@@ -187,6 +187,14 @@ class MixpanelAPIClient:
     # Query APIs (Phase 007 enhancements)
     def event_counts(self, events: list[str], from_date: str, to_date: str, ...) -> dict: ...
     def property_counts(self, event: str, property_name: str, from_date: str, to_date: str, ...) -> dict: ...
+
+    # Query APIs (Phase 008 enhancements)
+    def activity_feed(self, distinct_ids: list[str], ...) -> dict: ...
+    def insights(self, bookmark_id: int) -> dict: ...
+    def frequency(self, from_date: str, to_date: str, unit: str, addiction_unit: str, ...) -> dict: ...
+    def segmentation_numeric(self, event: str, from_date: str, to_date: str, on: str, ...) -> dict: ...
+    def segmentation_sum(self, event: str, from_date: str, to_date: str, on: str, ...) -> dict: ...
+    def segmentation_average(self, event: str, from_date: str, to_date: str, on: str, ...) -> dict: ...
 ```
 
 **Regional Endpoints**:
@@ -341,6 +349,27 @@ class LiveQueryService:
                         unit: Literal["day", "week", "month"] = "day",
                         values: list[str] | None = None,
                         limit: int | None = None) -> PropertyCountsResult: ...
+
+    # Advanced analytics queries (Phase 008 enhancements)
+    def activity_feed(self, distinct_ids: list[str],
+                      from_date: str | None = None,
+                      to_date: str | None = None) -> ActivityFeedResult: ...
+    def insights(self, bookmark_id: int) -> InsightsResult: ...
+    def frequency(self, from_date: str, to_date: str,
+                  unit: Literal["day", "week", "month"] = "day",
+                  addiction_unit: Literal["hour", "day"] = "hour",
+                  event: str | None = None,
+                  where: str | None = None) -> FrequencyResult: ...
+    def segmentation_numeric(self, event: str, from_date: str, to_date: str,
+                             on: str, unit: Literal["hour", "day"] = "day",
+                             where: str | None = None,
+                             type: Literal["general", "unique", "average"] = "general") -> NumericBucketResult: ...
+    def segmentation_sum(self, event: str, from_date: str, to_date: str,
+                         on: str, unit: Literal["hour", "day"] = "day",
+                         where: str | None = None) -> NumericSumResult: ...
+    def segmentation_average(self, event: str, from_date: str, to_date: str,
+                             on: str, unit: Literal["hour", "day"] = "day",
+                             where: str | None = None) -> NumericAverageResult: ...
 ```
 
 ### Workspace (Facade)
@@ -413,6 +442,12 @@ class Workspace:
 | `jql(script, params)` | Execute JQL query |
 | `event_counts(events, from_date, to_date, type, unit)` | Multi-event time series |
 | `property_counts(event, property, from_date, to_date, ...)` | Property breakdown time series |
+| `activity_feed(distinct_ids, from_date, to_date)` | User event history |
+| `insights(bookmark_id)` | Query saved Insights report |
+| `frequency(from_date, to_date, unit, addiction_unit, ...)` | Event frequency distribution |
+| `segmentation_numeric(event, from_date, to_date, on, ...)` | Numeric property bucketing |
+| `segmentation_sum(event, from_date, to_date, on, ...)` | Sum numeric property over time |
+| `segmentation_average(event, from_date, to_date, on, ...)` | Average numeric property over time |
 
 **Introspection**:
 | Method | Description |
@@ -520,6 +555,72 @@ class PropertyCountsResult:
     unit: str
     type: str
     series: dict[str, dict[str, int]]  # {value: {date: count}}
+    df: pd.DataFrame  # Lazy conversion
+
+# Advanced analytics types (Phase 008)
+@dataclass(frozen=True)
+class UserEvent:
+    event: str
+    time: datetime
+    properties: dict[str, Any]
+
+@dataclass(frozen=True)
+class ActivityFeedResult:
+    distinct_ids: list[str]
+    from_date: str | None
+    to_date: str | None
+    events: list[UserEvent]
+    df: pd.DataFrame  # Lazy conversion
+
+@dataclass(frozen=True)
+class InsightsResult:
+    bookmark_id: int
+    computed_at: str
+    from_date: str
+    to_date: str
+    headers: list[str]
+    series: dict[str, dict[str, int]]  # {event: {date: count}}
+    df: pd.DataFrame  # Lazy conversion
+
+@dataclass(frozen=True)
+class FrequencyResult:
+    event: str | None
+    from_date: str
+    to_date: str
+    unit: str
+    addiction_unit: str
+    data: dict[str, list[int]]  # {date: [count_at_1, count_at_2, ...]}
+    df: pd.DataFrame  # Lazy conversion
+
+@dataclass(frozen=True)
+class NumericBucketResult:
+    event: str
+    from_date: str
+    to_date: str
+    property_expr: str
+    unit: str
+    series: dict[str, dict[str, int]]  # {bucket_range: {date: count}}
+    df: pd.DataFrame  # Lazy conversion
+
+@dataclass(frozen=True)
+class NumericSumResult:
+    event: str
+    from_date: str
+    to_date: str
+    property_expr: str
+    unit: str
+    results: dict[str, float]  # {date: sum_value}
+    computed_at: str | None
+    df: pd.DataFrame  # Lazy conversion
+
+@dataclass(frozen=True)
+class NumericAverageResult:
+    event: str
+    from_date: str
+    to_date: str
+    property_expr: str
+    unit: str
+    results: dict[str, float]  # {date: average_value}
     df: pd.DataFrame  # Lazy conversion
 ```
 
@@ -808,6 +909,7 @@ mp sql "SELECT * FROM events" --format csv > events.csv
 2. **Core Functionality**: FetcherService, DiscoveryService, Workspace orchestration, auth module
 3. **Live Queries**: LiveQueryService, segmentation/funnel/retention methods, JQL support
 4. **Discovery Enhancements**: Funnels, cohorts, top events discovery; event/property counts queries
-5. **Workspace Facade**: Unified Workspace class orchestrating all services
-6. **CLI**: Typer application, all command groups, formatters, progress bars
-7. **Polish**: SKILL.md, documentation, integration tests, PyPI release
+5. **Query Service Enhancements**: Advanced analytics queries (activity feed, insights, frequency, numeric aggregations)
+6. **Workspace Facade**: Unified Workspace class orchestrating all services
+7. **CLI**: Typer application, all command groups, formatters, progress bars
+8. **Polish**: SKILL.md, documentation, integration tests, PyPI release
