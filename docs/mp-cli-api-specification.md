@@ -1,7 +1,7 @@
 # mp CLI Specification
 
-> Version: 0.1.0 (Draft)  
-> Status: Design Phase  
+> Version: 0.2.0 (Draft)
+> Status: Design Phase
 > Last Updated: December 2024
 
 ## Overview
@@ -696,6 +696,168 @@ mp values Purchase country --limit 3
 
 ---
 
+### mp funnels
+
+List all saved funnel definitions in the Mixpanel project.
+
+**Syntax**
+```
+mp funnels [options]
+```
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `plain` |
+
+**Examples**
+```bash
+# List funnels as JSON
+mp funnels
+
+# Output:
+# [
+#   {"funnel_id": 123, "name": "Signup to Purchase"},
+#   {"funnel_id": 456, "name": "Onboarding Flow"}
+# ]
+
+# List as table
+mp funnels --format table
+
+# Output:
+#   ID      NAME
+#   123     Signup to Purchase
+#   456     Onboarding Flow
+
+# List as plain (ID: Name per line)
+mp funnels --format plain
+# 123: Signup to Purchase
+# 456: Onboarding Flow
+```
+
+**Notes**
+
+Use this command to discover funnel IDs before running `mp funnel <id>`. Results are cached for the session.
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+
+---
+
+### mp cohorts
+
+List all saved cohort definitions in the Mixpanel project.
+
+**Syntax**
+```
+mp cohorts [options]
+```
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `plain` |
+
+**Examples**
+```bash
+# List cohorts as JSON
+mp cohorts
+
+# Output:
+# [
+#   {"id": 789, "name": "Power Users", "count": 1234, "description": "...", ...},
+#   {"id": 101, "name": "Churned Users", "count": 567, "description": "...", ...}
+# ]
+
+# List as table
+mp cohorts --format table
+
+# Output:
+#   ID      NAME              COUNT     DESCRIPTION
+#   789     Power Users       1234      Users with 10+ purchases
+#   101     Churned Users     567       No activity in 30 days
+
+# List as plain
+mp cohorts --format plain
+# 789: Power Users (1234 users)
+# 101: Churned Users (567 users)
+```
+
+**Notes**
+
+Cohorts can be used as filters in other queries. Results are cached for the session.
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+
+---
+
+### mp top-events
+
+Get the top events in the Mixpanel project by volume.
+
+**Syntax**
+```
+mp top-events [options]
+```
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--type <type>` | `-t` | Count type: `general` (default), `average`, `unique` |
+| `--limit <n>` | `-l` | Maximum number of events to return |
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `plain` |
+
+**Type Options**
+| Type | Description |
+|------|-------------|
+| `general` | Total event count (default) |
+| `average` | Average events per user |
+| `unique` | Unique users who triggered the event |
+
+**Examples**
+```bash
+# Get top events
+mp top-events
+
+# Output:
+# [
+#   {"event": "Page View", "count": 50000, "percent_change": 12.3},
+#   {"event": "Button Click", "count": 25000, "percent_change": -5.2},
+#   ...
+# ]
+
+# Top 5 by unique users
+mp top-events --type unique --limit 5
+
+# Table format
+mp top-events --format table --limit 10
+
+# Output:
+#   EVENT             COUNT       CHANGE
+#   Page View         50,000      +12.3%
+#   Button Click      25,000      -5.2%
+#   Login             15,000      +8.1%
+```
+
+**Notes**
+
+Unlike `mp events` which lists all event names from the schema, `mp top-events` returns real-time usage data ranked by volume. Results are NOT cached because they represent current activity.
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+
+---
+
 ### mp info
 
 Show workspace information.
@@ -1073,6 +1235,181 @@ function main() {
 
 ---
 
+### mp event-counts
+
+Get time-series counts for multiple events in a single query.
+
+**Syntax**
+```
+mp event-counts --events <list> --from <date> --to <date> [options]
+```
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--events <list>` | `-e` | Comma-separated event names (required) |
+| `--from <date>` | | Start date, inclusive (required). Format: YYYY-MM-DD |
+| `--to <date>` | | End date, inclusive (required). Format: YYYY-MM-DD |
+| `--unit <unit>` | `-u` | Time unit: `minute`, `hour`, `day` (default), `week`, `month` |
+| `--type <type>` | `-t` | Count type: `general` (default), `average`, `unique` |
+| `--where <expr>` | `-w` | Filter expression |
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `csv` |
+
+**Type Options**
+| Type | Description |
+|------|-------------|
+| `general` | Total event count (default) |
+| `average` | Average events per user |
+| `unique` | Unique users who triggered the event |
+
+**Examples**
+```bash
+# Compare multiple events over time
+mp event-counts \
+  --events "Login,Purchase,Logout" \
+  --from 2024-01-01 \
+  --to 2024-01-31
+
+# Output:
+# {
+#   "events": ["Login", "Purchase", "Logout"],
+#   "from_date": "2024-01-01",
+#   "to_date": "2024-01-31",
+#   "unit": "day",
+#   "type": "general",
+#   "series": {
+#     "Login": {"2024-01-01": 500, "2024-01-02": 520, ...},
+#     "Purchase": {"2024-01-01": 150, "2024-01-02": 165, ...},
+#     "Logout": {"2024-01-01": 480, "2024-01-02": 510, ...}
+#   }
+# }
+
+# Weekly counts by unique users
+mp event-counts \
+  --events "Signup,Purchase" \
+  --from 2024-01-01 \
+  --to 2024-03-31 \
+  --unit week \
+  --type unique
+
+# Table format
+mp event-counts \
+  --events "Login,Purchase" \
+  --from 2024-01-01 \
+  --to 2024-01-07 \
+  --format table
+
+# Output:
+#   DATE          LOGIN     PURCHASE
+#   2024-01-01    500       150
+#   2024-01-02    520       165
+#   2024-01-03    510       155
+#   ...
+```
+
+**Notes**
+
+This is more efficient than running multiple `mp segmentation` commands when you need to compare trends across several events.
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+| 2 | Invalid date format |
+| 3 | Event not found |
+| 4 | Invalid filter expression |
+
+---
+
+### mp property-counts
+
+Get time-series counts for an event, broken down by property values.
+
+**Syntax**
+```
+mp property-counts --event <event> --property <name> --from <date> --to <date> [options]
+```
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--event <event>` | `-e` | Event name to analyze (required) |
+| `--property <name>` | `-p` | Property to segment by (required) |
+| `--from <date>` | | Start date, inclusive (required). Format: YYYY-MM-DD |
+| `--to <date>` | | End date, inclusive (required). Format: YYYY-MM-DD |
+| `--unit <unit>` | `-u` | Time unit: `minute`, `hour`, `day` (default), `week`, `month` |
+| `--type <type>` | `-t` | Count type: `general` (default), `average`, `unique` |
+| `--where <expr>` | `-w` | Filter expression |
+| `--limit <n>` | `-l` | Maximum property values to return (default: 10) |
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `csv` |
+
+**Examples**
+```bash
+# Purchases by country over time
+mp property-counts \
+  --event Purchase \
+  --property country \
+  --from 2024-01-01 \
+  --to 2024-01-31
+
+# Output:
+# {
+#   "event": "Purchase",
+#   "property_name": "country",
+#   "from_date": "2024-01-01",
+#   "to_date": "2024-01-31",
+#   "unit": "day",
+#   "type": "general",
+#   "series": {
+#     "US": {"2024-01-01": 100, "2024-01-02": 110, ...},
+#     "CA": {"2024-01-01": 50, "2024-01-02": 45, ...},
+#     "UK": {"2024-01-01": 30, "2024-01-02": 35, ...}
+#   }
+# }
+
+# Top 5 plans by unique users, weekly
+mp property-counts \
+  --event Subscription \
+  --property plan \
+  --from 2024-01-01 \
+  --to 2024-03-31 \
+  --unit week \
+  --type unique \
+  --limit 5
+
+# Table format
+mp property-counts \
+  --event Purchase \
+  --property country \
+  --from 2024-01-01 \
+  --to 2024-01-07 \
+  --format table
+
+# Output:
+#   DATE          US        CA        UK        DE        FR
+#   2024-01-01    100       50        30        25        20
+#   2024-01-02    110       45        35        28        22
+#   2024-01-03    105       48        32        24        19
+#   ...
+```
+
+**Notes**
+
+Similar to `mp segmentation --on <property>`, but returns data in a format optimized for multi-value time-series analysis.
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+| 2 | Invalid date format |
+| 3 | Event not found |
+| 4 | Property not found |
+| 5 | Invalid filter expression |
+
+---
+
 ## Environment Variables
 
 The CLI respects these environment variables, which take precedence over the config file.
@@ -1261,6 +1598,7 @@ mp sql "
 | Version | Date | Notes |
 |---------|------|-------|
 | 0.1.0 | December 2024 | Initial CLI specification |
+| 0.2.0 | December 2024 | Discovery enhancements: funnels, cohorts, top-events; event-counts, property-counts |
 
 ---
 

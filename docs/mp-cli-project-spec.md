@@ -2,9 +2,13 @@
 
 > A foundational Python library and CLI for working with Mixpanel data, designed for AI coding agents.
 
-**Version:** 1.0 Draft  
-**Date:** December 2024  
+**Version:** 1.0 Draft
+**Date:** December 2024
 **Author:** Jared Stenquist
+
+> **Note:** This is a high-level project vision document. For authoritative API reference, see:
+> - [mixpanel_data-api-specification.md](mixpanel_data-api-specification.md) — Python API
+> - [mp-cli-api-specification.md](mp-cli-api-specification.md) — CLI command reference
 
 ---
 
@@ -1207,10 +1211,12 @@ This could evolve into a more sophisticated "Lens" experience where agents gener
 
 ### Additional Commands (v2+)
 
-- `mp cohorts` — Cohort management
+- ~~`mp cohorts` — Cohort management~~ (Discovery implemented in v1: `mp cohorts`, `mp funnels`, `mp top-events`)
 - `mp annotations` — Event annotations
 - `mp alerts` — Alert configuration
 - `mp insights` — AI-powered analysis suggestions
+- `mp event-counts` — Multi-event time series comparison (implemented in v1)
+- `mp property-counts` — Property breakdown time series (implemented in v1)
 
 ### MCP Server (v2+)
 

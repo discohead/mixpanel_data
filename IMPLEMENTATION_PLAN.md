@@ -57,21 +57,34 @@ This document defines the complete implementation roadmap for `mixpanel_data`, o
 │                          │                                                  │
 │           ┌──────────────┼──────────────┐                                   │
 │           ▼              ▼              ▼                                   │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐                         │
-│  │ 006-Live     │ │ 007-Workspace│ │              │                         │
-│  │ Queries      │ │ (Facade,     │ │ 008-CLI      │                         │
-│  │ (Seg/Funnel/ │ │  Lifecycle)  │ │ (Typer App)  │                         │
-│  │  Retention)  │ │              │ │              │                         │
-│  │      ✅      │ │              │ │              │                         │
-│  └──────────────┘ └──────────────┘ └──────┬───────┘                         │
-│                          │                │                                 │
-│                          └────────────────┤                                 │
-│                                           ▼                                 │
-│                                  ┌──────────────────┐                       │
-│                                  │  009-Polish      │                       │
-│                                  │  (SKILL.md,      │                       │
-│                                  │   Docs, PyPI)    │                       │
-│                                  └──────────────────┘                       │
+│  ┌──────────────┐ ┌──────────────┐                                         │
+│  │ 006-Live     │ │ 007-Discovery│                                         │
+│  │ Queries      │ │ Enhancements │                                         │
+│  │ (Seg/Funnel/ │ │ (Funnels,    │                                         │
+│  │  Retention)  │ │  Cohorts)    │                                         │
+│  │      ✅      │ │      ✅      │                                         │
+│  └──────┬───────┘ └──────┬───────┘                                         │
+│         │                │                                                  │
+│         └────────┬───────┘                                                  │
+│                  ▼                                                          │
+│         ┌──────────────┐                                                    │
+│         │ 008-Workspace│                                                    │
+│         │ (Facade,     │                                                    │
+│         │  Lifecycle)  │                                                    │
+│         └──────┬───────┘                                                    │
+│                │                                                            │
+│                ▼                                                            │
+│         ┌──────────────┐                                                    │
+│         │ 009-CLI      │                                                    │
+│         │ (Typer App)  │                                                    │
+│         └──────┬───────┘                                                    │
+│                │                                                            │
+│                ▼                                                            │
+│         ┌──────────────────┐                                                │
+│         │  010-Polish      │                                                │
+│         │  (SKILL.md,      │                                                │
+│         │   Docs, PyPI)    │                                                │
+│         └──────────────────┘                                                │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -88,9 +101,10 @@ This document defines the complete implementation roadmap for `mixpanel_data`, o
 | 004 | Discovery Service | DiscoveryService, Event/Property APIs | ✅ Complete | `004-discovery-service` |
 | 005 | Fetch Service | FetcherService, Events/Profiles Export | ✅ Complete | `005-fetch-service` |
 | 006 | Live Queries | LiveQueryService, Segmentation, Funnels, Retention | ✅ Complete | `006-live-query-service` |
-| 007 | Workspace Facade | Workspace class, Lifecycle Management | ⏳ Next | `007-workspace` |
-| 008 | CLI Application | Typer app, Commands, Formatters | ⏳ Pending | `008-cli` |
-| 009 | Polish & Release | SKILL.md, Documentation, PyPI | ⏳ Pending | `009-polish` |
+| 007 | Discovery Enhancements | Funnels, Cohorts, Top Events, Event/Property Counts | ✅ Complete | `007-discovery-enhancements` |
+| 008 | Workspace Facade | Workspace class, Lifecycle Management | ⏳ Next | `008-workspace` |
+| 009 | CLI Application | Typer app, Commands, Formatters | ⏳ Pending | `009-cli` |
+| 010 | Polish & Release | SKILL.md, Documentation, PyPI | ⏳ Pending | `010-polish` |
 
 ---
 
@@ -526,11 +540,74 @@ The `LiveQueryService` executes queries directly against Mixpanel's Query API an
 
 ---
 
-## Phase 007: Workspace Facade ⏳
+## Phase 007: Discovery Enhancements ✅
+
+**Status:** COMPLETE
+**Branch:** `007-discovery-enhancements`
+**Dependencies:** Phase 002 (API Client), Phase 004 (Discovery), Phase 006 (Live Query)
+**Spec:** [specs/007-discovery-enhancements/](specs/007-discovery-enhancements/)
+
+### Overview
+
+This phase extends the Discovery Service and Live Query Service to provide complete coverage of Mixpanel's Query API discovery and event breakdown endpoints. Enables AI agents and users to discover project resources (funnels, cohorts), explore real-time event activity, and analyze multi-event trends and property distributions.
+
+### Delivered Components
+
+| Component | Location | Description |
+|-----------|----------|-------------|
+| Result Types | `src/mixpanel_data/types.py` | 5 new types: FunnelInfo, SavedCohort, TopEvent, EventCountsResult, PropertyCountsResult |
+| API Client Methods | `src/mixpanel_data/_internal/api_client.py` | 5 new methods for discovery and query endpoints |
+| DiscoveryService Methods | `src/mixpanel_data/_internal/services/discovery.py` | 3 new methods: list_funnels, list_cohorts, list_top_events |
+| LiveQueryService Methods | `src/mixpanel_data/_internal/services/live_query.py` | 2 new methods: event_counts, property_counts |
+| Unit Tests | `tests/unit/test_discovery.py`, `tests/unit/test_live_query.py` | Comprehensive test coverage |
+
+### Key Deliverables
+
+**New Result Types:**
+- [x] `FunnelInfo` — Saved funnel reference (funnel_id, name)
+- [x] `SavedCohort` — Saved cohort reference (id, name, count, description, created, is_visible)
+- [x] `TopEvent` — Today's event activity (event, count, percent_change)
+- [x] `EventCountsResult` — Multi-event time series with lazy `.df` property
+- [x] `PropertyCountsResult` — Property breakdown time series with lazy `.df` property
+
+**New API Client Methods:**
+- [x] `list_funnels()` — GET /funnels/list
+- [x] `list_cohorts()` — POST /cohorts/list
+- [x] `get_top_events()` — GET /events/top
+- [x] `event_counts()` — GET /events (multi-event time series)
+- [x] `property_counts()` — GET /events/properties (property breakdown)
+
+**New Discovery Methods (cached except top events):**
+- [x] `list_funnels()` — Returns sorted list[FunnelInfo], cached
+- [x] `list_cohorts()` — Returns sorted list[SavedCohort], cached
+- [x] `list_top_events()` — Returns list[TopEvent], NOT cached (real-time data)
+
+**New Live Query Methods:**
+- [x] `event_counts()` — Returns EventCountsResult with Literal type constraints
+- [x] `property_counts()` — Returns PropertyCountsResult with Literal type constraints
+
+**Quality:**
+- [x] All 387 tests pass
+- [x] mypy --strict passes
+- [x] ruff check passes
+
+### Success Criteria
+
+- [x] All 8 new methods implemented and passing tests
+- [x] Discovery methods return sorted results (alphabetical by name)
+- [x] Cached methods make single API call per session
+- [x] Non-cached methods always hit API
+- [x] All result types have `.to_dict()` serialization
+- [x] Time-series results have lazy `.df` property
+- [x] Literal types for `type` and `unit` parameters provide compile-time validation
+
+---
+
+## Phase 008: Workspace Facade ⏳
 
 **Status:** PENDING
-**Branch:** `007-workspace`
-**Dependencies:** Phases 002-006 (all services)
+**Branch:** `008-workspace`
+**Dependencies:** Phases 002-007 (all services)
 
 ### Overview
 
@@ -568,6 +645,9 @@ class Workspace:
     def events(self) -> list[str]: ...
     def properties(self, event: str) -> list[str]: ...
     def property_values(self, event: str, prop: str, limit: int = 100) -> list[str]: ...
+    def list_funnels(self) -> list[FunnelInfo]: ...
+    def list_cohorts(self) -> list[SavedCohort]: ...
+    def list_top_events(self, type: str = "general", limit: int | None = None) -> list[TopEvent]: ...
 
     # Fetching (delegates to FetcherService)
     def fetch_events(self, name: str = "events", ...) -> FetchResult: ...
@@ -583,6 +663,8 @@ class Workspace:
     def funnel(self, ...) -> FunnelResult: ...
     def retention(self, ...) -> RetentionResult: ...
     def jql(self, script: str, params: dict | None = None) -> JQLResult: ...
+    def event_counts(self, events: list[str], from_date: str, to_date: str, ...) -> EventCountsResult: ...
+    def property_counts(self, event: str, property_name: str, from_date: str, to_date: str, ...) -> PropertyCountsResult: ...
 
     # Introspection
     def info(self) -> WorkspaceInfo: ...
@@ -619,10 +701,12 @@ class Workspace:
 - [ ] Implement credential resolution and service wiring
 - [ ] Implement `ephemeral()` context manager
 - [ ] Implement `open()` for existing databases
-- [ ] Delegate discovery methods to DiscoveryService
+- [ ] Delegate discovery methods to DiscoveryService (events, properties, property_values)
+- [ ] Delegate enhanced discovery methods (list_funnels, list_cohorts, list_top_events)
 - [ ] Delegate fetch methods to FetcherService
 - [ ] Delegate SQL methods to StorageEngine
-- [ ] Delegate live query methods to LiveQueryService
+- [ ] Delegate live query methods to LiveQueryService (segmentation, funnel, retention, jql)
+- [ ] Delegate enhanced live query methods (event_counts, property_counts)
 - [ ] Implement introspection methods
 - [ ] Implement table management methods
 - [ ] Implement escape hatch properties
@@ -640,11 +724,11 @@ class Workspace:
 
 ---
 
-## Phase 008: CLI Application ⏳
+## Phase 009: CLI Application ⏳
 
 **Status:** PENDING
-**Branch:** `008-cli`
-**Dependencies:** Phase 007 (Workspace)
+**Branch:** `009-cli`
+**Dependencies:** Phase 008 (Workspace)
 
 ### Overview
 
@@ -745,10 +829,10 @@ The CLI is a thin wrapper over the library using Typer. Every command maps direc
 
 ---
 
-## Phase 009: Polish & Release ⏳
+## Phase 010: Polish & Release ⏳
 
 **Status:** PENDING
-**Branch:** `009-polish`
+**Branch:** `010-polish`
 **Dependencies:** All previous phases
 
 ### Overview

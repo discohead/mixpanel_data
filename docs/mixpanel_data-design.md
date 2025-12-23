@@ -172,12 +172,21 @@ class MixpanelAPIClient:
     def get_events(self) -> list[str]: ...
     def get_event_properties(self, event: str) -> list[str]: ...
     def get_property_values(self, event: str, prop: str, limit: int) -> list[str]: ...
-    
+
+    # Discovery APIs (Phase 007 enhancements)
+    def list_funnels(self) -> list[dict]: ...
+    def list_cohorts(self) -> list[dict]: ...
+    def get_top_events(self, type: str = "general", limit: int | None = None) -> dict: ...
+
     # Query APIs
     def segmentation(self, ...) -> dict: ...
     def funnel(self, ...) -> dict: ...
     def retention(self, ...) -> dict: ...
     def jql(self, script: str, params: dict | None = None) -> list: ...
+
+    # Query APIs (Phase 007 enhancements)
+    def event_counts(self, events: list[str], from_date: str, to_date: str, ...) -> dict: ...
+    def property_counts(self, event: str, property_name: str, from_date: str, to_date: str, ...) -> dict: ...
 ```
 
 **Regional Endpoints**:
@@ -278,10 +287,20 @@ Metadata table (`_metadata`):
 ```python
 class DiscoveryService:
     def __init__(self, api_client: MixpanelAPIClient): ...
+
+    # Event/property discovery (cached)
     def list_events(self) -> list[str]: ...
     def list_properties(self, event: str) -> list[str]: ...
-    def list_property_values(self, event: str, prop: str, 
+    def list_property_values(self, event: str, prop: str,
                              limit: int = 100) -> list[str]: ...
+
+    # Resource discovery (Phase 007 enhancements)
+    def list_funnels(self) -> list[FunnelInfo]: ...  # Cached
+    def list_cohorts(self) -> list[SavedCohort]: ...  # Cached
+    def list_top_events(self, type: str = "general",
+                        limit: int | None = None) -> list[TopEvent]: ...  # NOT cached
+
+    def clear_cache(self) -> None: ...
 ```
 
 **FetcherService**: Coordinates data fetches from API to storage.
@@ -305,10 +324,23 @@ class FetcherService:
 ```python
 class LiveQueryService:
     def __init__(self, api_client: MixpanelAPIClient): ...
+
+    # Core analytics queries
     def segmentation(self, ...) -> SegmentationResult: ...
     def funnel(self, ...) -> FunnelResult: ...
     def retention(self, ...) -> RetentionResult: ...
     def jql(self, script: str, params: dict | None = None) -> JQLResult: ...
+
+    # Event breakdown queries (Phase 007 enhancements)
+    def event_counts(self, events: list[str], from_date: str, to_date: str,
+                     type: Literal["general", "unique", "average"] = "general",
+                     unit: Literal["day", "week", "month"] = "day") -> EventCountsResult: ...
+    def property_counts(self, event: str, property_name: str,
+                        from_date: str, to_date: str,
+                        type: Literal["general", "unique", "average"] = "general",
+                        unit: Literal["day", "week", "month"] = "day",
+                        values: list[str] | None = None,
+                        limit: int | None = None) -> PropertyCountsResult: ...
 ```
 
 ### Workspace (Facade)
@@ -355,6 +387,9 @@ class Workspace:
 | `events()` | List all event names in project |
 | `properties(event)` | List all properties for an event |
 | `property_values(event, prop, limit=100)` | List sample values for a property |
+| `list_funnels()` | List saved funnels (cached) |
+| `list_cohorts()` | List saved cohorts (cached) |
+| `list_top_events(type, limit)` | List today's top events (not cached) |
 
 **Fetching** (API → local storage):
 | Method | Description |
@@ -376,6 +411,8 @@ class Workspace:
 | `funnel(funnel_id, from_date, to_date, unit, on)` | Run funnel analysis |
 | `retention(born_event, return_event, from_date, to_date, ...)` | Run retention analysis |
 | `jql(script, params)` | Execute JQL query |
+| `event_counts(events, from_date, to_date, type, unit)` | Multi-event time series |
+| `property_counts(event, property, from_date, to_date, ...)` | Property breakdown time series |
 
 **Introspection**:
 | Method | Description |
@@ -442,6 +479,48 @@ class RetentionResult:
 class JQLResult:
     df: pd.DataFrame
     raw: list[Any]
+
+# Discovery enhancement types (Phase 007)
+@dataclass(frozen=True)
+class FunnelInfo:
+    funnel_id: int
+    name: str
+
+@dataclass(frozen=True)
+class SavedCohort:
+    id: int
+    name: str
+    count: int
+    description: str
+    created: str
+    is_visible: bool
+
+@dataclass(frozen=True)
+class TopEvent:
+    event: str
+    count: int
+    percent_change: float
+
+@dataclass(frozen=True)
+class EventCountsResult:
+    events: list[str]
+    from_date: str
+    to_date: str
+    unit: str
+    type: str
+    series: dict[str, dict[str, int]]  # {event: {date: count}}
+    df: pd.DataFrame  # Lazy conversion
+
+@dataclass(frozen=True)
+class PropertyCountsResult:
+    event: str
+    property_name: str
+    from_date: str
+    to_date: str
+    unit: str
+    type: str
+    series: dict[str, dict[str, int]]  # {value: {date: count}}
+    df: pd.DataFrame  # Lazy conversion
 ```
 
 ### Exceptions
@@ -728,5 +807,7 @@ mp sql "SELECT * FROM events" --format csv > events.csv
 1. **Foundation**: ConfigManager, MixpanelAPIClient, StorageEngine, exceptions, result types
 2. **Core Functionality**: FetcherService, DiscoveryService, Workspace orchestration, auth module
 3. **Live Queries**: LiveQueryService, segmentation/funnel/retention methods, JQL support
-4. **CLI**: Typer application, all command groups, formatters, progress bars
-5. **Polish**: SKILL.md, documentation, integration tests, PyPI release
+4. **Discovery Enhancements**: Funnels, cohorts, top events discovery; event/property counts queries
+5. **Workspace Facade**: Unified Workspace class orchestrating all services
+6. **CLI**: Typer application, all command groups, formatters, progress bars
+7. **Polish**: SKILL.md, documentation, integration tests, PyPI release

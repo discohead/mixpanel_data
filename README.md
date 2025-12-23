@@ -2,7 +2,7 @@
 
 A Python library and CLI for working with Mixpanel analytics data, designed for AI coding agents.
 
-**Status:** Foundation through live queries complete — workspace facade next.
+**Status:** Foundation through discovery enhancements complete — workspace facade next.
 
 ## The Problem
 
@@ -16,7 +16,8 @@ Fetch data once, store it locally in DuckDB, query repeatedly with SQL. Data liv
 
 - **Local Data Store** — Fetch events and profiles from Mixpanel, store in DuckDB, query with SQL
 - **Live Queries** — Run Mixpanel reports (segmentation, funnels, retention) directly when fresh data is needed
-- **Data Discovery** — Introspect events, properties, and values before writing queries
+- **Data Discovery** — Introspect events, properties, values, saved funnels, and cohorts before writing queries
+- **Event Analytics** — Query multi-event time series and property breakdowns across date ranges
 - **Python Library** — Import and use programmatically in scripts and notebooks
 - **CLI** — Compose into Unix pipelines, invoke from agents without writing Python
 
@@ -180,9 +181,10 @@ Implementation following the phased roadmap in [IMPLEMENTATION_PLAN.md](IMPLEMEN
 4. ✅ **Discovery Service** — DiscoveryService with caching
 5. ✅ **Fetch Service** — FetcherService for events/profiles ingestion
 6. ✅ **Live Queries** — LiveQueryService for segmentation, funnels, retention, JQL
-7. ⏳ **Workspace** — Facade class, lifecycle management (next)
-8. ⏳ **CLI** — Typer application, all commands
-9. ⏳ **Polish** — SKILL.md, documentation, PyPI release
+7. ✅ **Discovery Enhancements** — Funnels, cohorts, top events; event/property counts
+8. ⏳ **Workspace** — Facade class, lifecycle management (next)
+9. ⏳ **CLI** — Typer application, all commands
+10. ⏳ **Polish** — SKILL.md, documentation, PyPI release
 
 ## License
 

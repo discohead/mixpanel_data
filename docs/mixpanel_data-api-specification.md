@@ -1,7 +1,7 @@
 # mixpanel_data API Specification
 
-> Version: 0.2.0 (Draft)  
-> Status: Design Phase  
+> Version: 0.3.0 (Draft)
+> Status: Design Phase
 > Last Updated: December 2024
 
 ## Overview
@@ -454,6 +454,68 @@ def property_values(
         ws.property_values("Purchase", "country")
         # → ["US", "CA", "UK", "DE", ...]
     """
+
+def funnels(self) -> list[FunnelInfo]:
+    """
+    List all saved funnels in the Mixpanel project.
+
+    Results are cached for the session. Use ws.clear_discovery_cache()
+    to refresh.
+
+    Returns:
+        List of FunnelInfo objects with funnel_id and name
+
+    Example:
+        for funnel in ws.funnels():
+            print(f"{funnel.funnel_id}: {funnel.name}")
+        # → 123: Signup to Purchase
+        # → 456: Onboarding Flow
+    """
+
+def cohorts(self) -> list[SavedCohort]:
+    """
+    List all saved cohorts in the Mixpanel project.
+
+    Results are cached for the session. Use ws.clear_discovery_cache()
+    to refresh.
+
+    Returns:
+        List of SavedCohort objects with cohort metadata
+
+    Example:
+        for cohort in ws.cohorts():
+            print(f"{cohort.id}: {cohort.name} ({cohort.count} users)")
+        # → 789: Power Users (1234 users)
+        # → 101: Churned Users (567 users)
+    """
+
+def top_events(
+    self,
+    type: Literal["general", "average", "unique"] = "general",
+    limit: int | None = None
+) -> list[TopEvent]:
+    """
+    Get the top events in the Mixpanel project by volume.
+
+    Unlike other discovery methods, this is NOT cached because it
+    returns real-time usage data that may change frequently.
+
+    Args:
+        type: Count type for ranking:
+            - "general": Total event count (default)
+            - "average": Average events per user
+            - "unique": Unique users who triggered
+        limit: Maximum number of events to return (None = all)
+
+    Returns:
+        List of TopEvent objects sorted by count descending
+
+    Example:
+        for event in ws.top_events(limit=5):
+            print(f"{event.event}: {event.count} ({event.percent_change:+.1f}%)")
+        # → Page View: 50000 (+12.3%)
+        # → Button Click: 25000 (-5.2%)
+    """
 ```
 
 ---
@@ -757,6 +819,100 @@ def jql(self, script: str, params: dict | None = None) -> JQLResult:
         ''', params={"from_date": "2024-01-01", "to_date": "2024-01-31"})
         df = result.df
     """
+
+def event_counts(
+    self,
+    events: list[str],
+    *,
+    from_date: str,
+    to_date: str,
+    unit: Literal["minute", "hour", "day", "week", "month"] = "day",
+    type: Literal["general", "average", "unique"] = "general",
+    where: str | None = None
+) -> EventCountsResult:
+    """
+    Get time-series counts for multiple events in a single query.
+
+    This is more efficient than calling segmentation() multiple times
+    when you need to compare trends across several events.
+
+    Args:
+        events: List of event names to query
+        from_date: Start date (inclusive), format "YYYY-MM-DD"
+        to_date: End date (inclusive), format "YYYY-MM-DD"
+        unit: Time unit for bucketing ("minute", "hour", "day", "week", "month")
+        type: Count type:
+            - "general": Total event count (default)
+            - "average": Average events per user
+            - "unique": Unique users who triggered
+        where: Optional filter expression
+
+    Returns:
+        EventCountsResult containing time-series data for all events
+
+    Example:
+        result = ws.event_counts(
+            events=["Login", "Purchase", "Logout"],
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            unit="day"
+        )
+        # Access data per event
+        for event, series in result.series.items():
+            print(f"{event}: {sum(series.values())} total")
+
+        # Or use DataFrame for analysis
+        df = result.df  # Columns: date, Login, Purchase, Logout
+    """
+
+def property_counts(
+    self,
+    event: str,
+    property_name: str,
+    *,
+    from_date: str,
+    to_date: str,
+    unit: Literal["minute", "hour", "day", "week", "month"] = "day",
+    type: Literal["general", "average", "unique"] = "general",
+    where: str | None = None,
+    limit: int = 10
+) -> PropertyCountsResult:
+    """
+    Get time-series counts for an event, broken down by property values.
+
+    Similar to segmentation with 'on' parameter, but returns data
+    in a format optimized for multi-value analysis.
+
+    Args:
+        event: Event name to analyze
+        property_name: Property to segment by (e.g., "country", "plan")
+        from_date: Start date (inclusive), format "YYYY-MM-DD"
+        to_date: End date (inclusive), format "YYYY-MM-DD"
+        unit: Time unit for bucketing ("minute", "hour", "day", "week", "month")
+        type: Count type:
+            - "general": Total event count (default)
+            - "average": Average events per user
+            - "unique": Unique users who triggered
+        where: Optional filter expression
+        limit: Maximum number of property values to return
+
+    Returns:
+        PropertyCountsResult containing time-series data per property value
+
+    Example:
+        result = ws.property_counts(
+            event="Purchase",
+            property_name="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31"
+        )
+        # Access data per property value
+        for value, series in result.series.items():
+            print(f"{value}: {sum(series.values())} purchases")
+
+        # Or use DataFrame
+        df = result.df  # Columns: date, US, CA, UK, ...
+    """
 ```
 
 ---
@@ -976,6 +1132,77 @@ Returned by `jql()`.
 class JQLResult:
     df: pd.DataFrame    # Query results as DataFrame
     raw: list[Any]      # Raw API response
+```
+
+### FunnelInfo
+
+Returned by `funnels()`.
+
+```python
+@dataclass(frozen=True)
+class FunnelInfo:
+    funnel_id: int      # Unique funnel identifier
+    name: str           # Funnel display name
+```
+
+### SavedCohort
+
+Returned by `cohorts()`.
+
+```python
+@dataclass(frozen=True)
+class SavedCohort:
+    id: int             # Unique cohort identifier
+    name: str           # Cohort display name
+    count: int          # Number of users in cohort
+    description: str    # Cohort description
+    created: str        # Creation timestamp (ISO format)
+    is_visible: bool    # Whether cohort is visible in UI
+```
+
+### TopEvent
+
+Returned by `top_events()`.
+
+```python
+@dataclass(frozen=True)
+class TopEvent:
+    event: str          # Event name
+    count: int          # Event count (based on type parameter)
+    percent_change: float  # Change from previous period
+```
+
+### EventCountsResult
+
+Returned by `event_counts()`.
+
+```python
+@dataclass(frozen=True)
+class EventCountsResult:
+    events: list[str]                     # Events that were queried
+    from_date: str                        # Query start date
+    to_date: str                          # Query end date
+    unit: str                             # Time unit used
+    type: str                             # Count type used
+    series: dict[str, dict[str, int]]     # {event: {date: count}}
+    df: pd.DataFrame                      # Lazy-converted DataFrame
+```
+
+### PropertyCountsResult
+
+Returned by `property_counts()`.
+
+```python
+@dataclass(frozen=True)
+class PropertyCountsResult:
+    event: str                            # Event that was queried
+    property_name: str                    # Property segmented by
+    from_date: str                        # Query start date
+    to_date: str                          # Query end date
+    unit: str                             # Time unit used
+    type: str                             # Count type used
+    series: dict[str, dict[str, int]]     # {property_value: {date: count}}
+    df: pd.DataFrame                      # Lazy-converted DataFrame
 ```
 
 ### WorkspaceInfo
@@ -1304,6 +1531,7 @@ ws.fetch_events(from_date="2024-01-01", to_date="2024-01-15")
 |---------|------|-------|
 | 0.1.0 | December 2024 | Initial API specification |
 | 0.2.0 | December 2024 | Service account authentication model |
+| 0.3.0 | December 2024 | Discovery enhancements: funnels, cohorts, top events; event/property counts |
 
 ---
 

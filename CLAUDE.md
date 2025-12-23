@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `mixpanel_data` is a Python library and CLI for working with Mixpanel analytics data, designed for AI coding agents. The core insight: agents should fetch data once into a local DuckDB database, then query it repeatedly with SQL—preserving context window for reasoning rather than consuming it with raw API responses.
 
-**Status:** Foundation layer implemented. Comprehensive specifications exist in `docs/`; core infrastructure is complete.
+**Status:** Foundation through discovery enhancements complete. Workspace facade is next.
 
 ## Naming Convention
 
@@ -124,11 +124,12 @@ Config file: `~/.mp/config.toml`
 | 004 | Discovery Service | ✅ Complete | `004-discovery-service` |
 | 005 | Fetch Service | ✅ Complete | `005-fetch-service` |
 | 006 | Live Queries | ✅ Complete | `006-live-query-service` |
-| 007 | Workspace Facade | ⏳ Next | `007-workspace` |
-| 008 | CLI Application | ⏳ Pending | `008-cli` |
-| 009 | Polish & Release | ⏳ Pending | `009-polish` |
+| 007 | Discovery Enhancements | ✅ Complete | `007-discovery-enhancements` |
+| 008 | Workspace Facade | ⏳ Next | `008-workspace` |
+| 009 | CLI Application | ⏳ Pending | `009-cli` |
+| 010 | Polish & Release | ⏳ Pending | `010-polish` |
 
-**Next up:** Phase 007 (Workspace Facade) - implements `Workspace` class as the unified entry point for both live queries and local storage operations.
+**Next up:** Phase 008 (Workspace Facade) - implements `Workspace` class as the unified entry point for both live queries and local storage operations.
 
 ## What's Implemented
 
@@ -152,7 +153,9 @@ Config file: `~/.mp/config.toml`
 - Low-level HTTP methods: `get()`, `post()`
 - Export APIs: `export_events()`, `export_profiles()` (streaming iterators)
 - Discovery APIs: `get_events()`, `get_event_properties()`, `get_property_values()`
+- Discovery APIs (Phase 007): `list_funnels()`, `list_cohorts()`, `get_top_events()`
 - Query APIs: `segmentation()`, `funnel()`, `retention()`, `jql()` (raw responses)
+- Query APIs (Phase 007): `event_counts()`, `property_counts()` (event breakdown)
 
 ### Result Types (`types.py`)
 All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
@@ -165,6 +168,11 @@ All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
 - `TableInfo` — Table summary (name, type, row count, fetched_at)
 - `ColumnInfo` — Column definition (name, type, nullable, primary_key)
 - `TableSchema` — Complete table schema with columns
+- `FunnelInfo` — Saved funnel reference (funnel_id, name) [Phase 007]
+- `SavedCohort` — Saved cohort reference (id, name, count, description, created, is_visible) [Phase 007]
+- `TopEvent` — Today's event activity (event, count, percent_change) [Phase 007]
+- `EventCountsResult` — Multi-event time series with lazy `.df` property [Phase 007]
+- `PropertyCountsResult` — Property breakdown time series with lazy `.df` property [Phase 007]
 
 ### Storage Engine (`_internal/storage.py`)
 - `StorageEngine` — DuckDB-based storage with persistent and ephemeral modes
@@ -180,6 +188,9 @@ All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
 - `list_events()` — List all event names (sorted alphabetically, cached)
 - `list_properties(event)` — List properties for an event (sorted, cached per event)
 - `list_property_values(property, event, limit)` — Sample values for a property (cached)
+- `list_funnels()` — List saved funnels (sorted by name, cached) [Phase 007]
+- `list_cohorts()` — List saved cohorts (sorted by name, cached) [Phase 007]
+- `list_top_events(type, limit)` — Today's top events (NOT cached, real-time) [Phase 007]
 - `clear_cache()` — Clear all cached discovery results
 - Constructor injection of `MixpanelAPIClient` for testing
 
@@ -198,7 +209,10 @@ All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
 - `funnel(funnel_id, from_date, to_date, unit, on)` — Step-by-step funnel conversion analysis
 - `retention(born_event, return_event, from_date, to_date, ...)` — Cohort-based retention analysis
 - `jql(script, params)` — Execute custom JQL scripts
+- `event_counts(events, from_date, to_date, type, unit)` — Multi-event time series [Phase 007]
+- `property_counts(event, property_name, from_date, to_date, ...)` — Property breakdown time series [Phase 007]
 - Returns typed results: `SegmentationResult`, `FunnelResult`, `RetentionResult`, `JQLResult`
+- Phase 007 results: `EventCountsResult`, `PropertyCountsResult` with Literal type constraints
 - All results support lazy DataFrame conversion via `.df` property
 - No caching (live queries return fresh data)
 - Constructor injection of `MixpanelAPIClient` for testing
