@@ -98,13 +98,11 @@ class TestFetchQueryWorkflow:
         db_path = temp_dir / "test_workflow.db"
         storage = StorageEngine(path=db_path)
 
-        try:
-            ws = Workspace(
-                _config_manager=mock_config_manager,
-                _api_client=mock_api_client,
-                _storage=storage,
-            )
-
+        with Workspace(
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+            _storage=storage,
+        ) as ws:
             # Fetch events
             result = ws.fetch_events(
                 "events",
@@ -126,9 +124,6 @@ class TestFetchQueryWorkflow:
             # Scalar query
             count = ws.sql_scalar("SELECT COUNT(*) FROM events")
             assert count == 2
-
-        finally:
-            ws.close()
 
     def test_data_persistence_across_sessions(
         self,
@@ -317,12 +312,11 @@ class TestTableManagementIntegration:
         storage.create_events_table("table1", iter(events), metadata)
         storage.create_events_table("table2", iter([]), metadata)
 
-        ws = Workspace(
+        with Workspace(
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
             _storage=storage,
-        )
-        try:
+        ) as ws:
             # List tables
             tables = ws.tables()
             assert len(tables) == 2
@@ -347,9 +341,6 @@ class TestTableManagementIntegration:
             ws.drop_all()
             tables = ws.tables()
             assert len(tables) == 0
-
-        finally:
-            ws.close()
 
 
 # =============================================================================
@@ -387,12 +378,11 @@ class TestWorkspaceInfoIntegration:
             ('test', 'events', CURRENT_TIMESTAMP, NULL, NULL, 0)"""
         )
 
-        ws = Workspace(
+        with Workspace(
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
             _storage=storage,
-        )
-        try:
+        ) as ws:
             info = ws.info()
 
             assert isinstance(info, WorkspaceInfo)
@@ -401,5 +391,3 @@ class TestWorkspaceInfoIntegration:
             assert info.region == "us"
             assert "test" in info.tables
             assert info.size_mb > 0
-        finally:
-            ws.close()

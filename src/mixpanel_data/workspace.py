@@ -496,6 +496,7 @@ class Workspace:
         """
         # Create progress callback if requested
         progress_callback = None
+        pbar = None
         if progress:
             try:
                 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -514,7 +515,7 @@ class Workspace:
                 progress_callback = callback
             except ImportError:
                 # Rich not available, skip progress bar
-                progress_callback = None
+                pass
 
         try:
             result = self._fetcher_service.fetch_events(
@@ -526,7 +527,7 @@ class Workspace:
                 progress_callback=progress_callback,
             )
         finally:
-            if progress and "pbar" in dir():
+            if pbar is not None:
                 pbar.stop()
 
         return result
@@ -554,6 +555,7 @@ class Workspace:
         """
         # Create progress callback if requested
         progress_callback = None
+        pbar = None
         if progress:
             try:
                 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -572,7 +574,7 @@ class Workspace:
                 progress_callback = callback
             except ImportError:
                 # Rich not available, skip progress bar
-                progress_callback = None
+                pass
 
         try:
             result = self._fetcher_service.fetch_profiles(
@@ -581,7 +583,7 @@ class Workspace:
                 progress_callback=progress_callback,
             )
         finally:
-            if progress and "pbar" in dir():
+            if pbar is not None:
                 pbar.stop()
 
         return result

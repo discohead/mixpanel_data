@@ -122,14 +122,11 @@ class TestCredentialResolution:
         monkeypatch.setenv("MP_PROJECT_ID", "99999")
         monkeypatch.setenv("MP_REGION", "eu")
 
-        ws = Workspace(_storage=mock_storage)
-        try:
+        with Workspace(_storage=mock_storage) as ws:
             assert ws._credentials is not None
             assert ws._credentials.username == "env_user"
             assert ws._credentials.project_id == "99999"
             assert ws._credentials.region == "eu"
-        finally:
-            ws.close()
 
     def test_named_account_credential_resolution(
         self,
@@ -148,18 +145,15 @@ class TestCredentialResolution:
             region="us",
         )
 
-        ws = Workspace(
+        with Workspace(
             account="test_account",
             _config_manager=config_manager,
             _storage=mock_storage,
-        )
-        try:
+        ) as ws:
             assert ws._credentials is not None
             assert ws._credentials.username == "named_user"
             assert ws._credentials.project_id == "11111"
             assert ws._account_name == "test_account"
-        finally:
-            ws.close()
 
     def test_default_account_credential_resolution(
         self,
@@ -178,16 +172,13 @@ class TestCredentialResolution:
             region="in",
         )
 
-        ws = Workspace(
+        with Workspace(
             _config_manager=config_manager,
             _storage=mock_storage,
-        )
-        try:
+        ) as ws:
             assert ws._credentials is not None
             assert ws._credentials.username == "default_user"
             assert ws._credentials.region == "in"
-        finally:
-            ws.close()
 
     def test_config_error_when_no_credentials(
         self,
