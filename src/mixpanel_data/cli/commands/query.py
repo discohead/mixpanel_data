@@ -24,6 +24,7 @@ from typing import Annotated
 import typer
 
 from mixpanel_data.cli.utils import (
+    ExitCode,
     err_console,
     get_workspace,
     handle_errors,
@@ -66,7 +67,7 @@ def query_sql(
     if file is not None:
         if not file.exists():
             err_console.print(f"[red]Error:[/red] File not found: {file}")
-            raise typer.Exit(3)
+            raise typer.Exit(ExitCode.NOT_FOUND)
         sql_query = file.read_text()
     else:
         sql_query = query  # type: ignore[assignment]
@@ -257,7 +258,7 @@ def query_jql(
     if file is not None:
         if not file.exists():
             err_console.print(f"[red]Error:[/red] File not found: {file}")
-            raise typer.Exit(3)
+            raise typer.Exit(ExitCode.NOT_FOUND)
         jql_script = file.read_text()
     elif script is not None:
         jql_script = script
