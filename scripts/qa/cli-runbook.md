@@ -32,7 +32,7 @@ uv run mp inspect --help
 ## 2. Auth
 ```bash
 uv run mp auth list
-uv run mp --format table auth list
+uv run mp auth list --format table
 uv run mp auth show sinkapp-prod
 uv run mp auth test sinkapp-prod
 ```
@@ -81,11 +81,11 @@ uv run mp -a sinkapp-prod query segmentation-average --event "Added Entity" --on
 
 ## 7. Output Formats
 ```bash
-uv run mp -a sinkapp-prod --format json inspect events | head -10
-uv run mp -a sinkapp-prod --format table auth list
-uv run mp -a sinkapp-prod --format csv auth list
-uv run mp -a sinkapp-prod --format plain inspect events | head -5
-uv run mp -a sinkapp-prod --format jsonl inspect events | head -5
+uv run mp -a sinkapp-prod inspect events --format json | head -10
+uv run mp -a sinkapp-prod auth list --format table
+uv run mp -a sinkapp-prod auth list --format csv
+uv run mp -a sinkapp-prod inspect events --format plain | head -5
+uv run mp -a sinkapp-prod inspect events --format jsonl | head -5
 ```
 
 ## 8. Errors
