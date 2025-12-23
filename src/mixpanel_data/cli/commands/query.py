@@ -492,8 +492,8 @@ def query_segmentation_numeric(
     ],
     type_: Annotated[
         str,
-        typer.Option("--type", "-t", help="Bucket type: linear, log."),
-    ] = "linear",
+        typer.Option("--type", "-t", help="Count type: general, unique, average."),
+    ] = "general",
     unit: Annotated[
         str,
         typer.Option("--unit", "-u", help="Time unit: day, week, month."),
