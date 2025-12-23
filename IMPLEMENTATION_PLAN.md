@@ -645,9 +645,10 @@ class Workspace:
     def events(self) -> list[str]: ...
     def properties(self, event: str) -> list[str]: ...
     def property_values(self, event: str, prop: str, limit: int = 100) -> list[str]: ...
-    def list_funnels(self) -> list[FunnelInfo]: ...
-    def list_cohorts(self) -> list[SavedCohort]: ...
-    def list_top_events(self, type: str = "general", limit: int | None = None) -> list[TopEvent]: ...
+    def funnels(self) -> list[FunnelInfo]: ...
+    def cohorts(self) -> list[SavedCohort]: ...
+    def top_events(self, type: Literal["general", "average", "unique"] = "general",
+                   limit: int | None = None) -> list[TopEvent]: ...
 
     # Fetching (delegates to FetcherService)
     def fetch_events(self, name: str = "events", ...) -> FetchResult: ...
@@ -702,7 +703,7 @@ class Workspace:
 - [ ] Implement `ephemeral()` context manager
 - [ ] Implement `open()` for existing databases
 - [ ] Delegate discovery methods to DiscoveryService (events, properties, property_values)
-- [ ] Delegate enhanced discovery methods (list_funnels, list_cohorts, list_top_events)
+- [ ] Delegate enhanced discovery methods (funnels, cohorts, top_events)
 - [ ] Delegate fetch methods to FetcherService
 - [ ] Delegate SQL methods to StorageEngine
 - [ ] Delegate live query methods to LiveQueryService (segmentation, funnel, retention, jql)
@@ -751,8 +752,8 @@ The CLI is a thin wrapper over the library using Typer. Every command maps direc
 |-------|----------|
 | `mp auth` | `list`, `add`, `remove`, `switch`, `show`, `test` |
 | `mp fetch` | `events`, `profiles` |
-| `mp` (query) | `sql`, `segmentation`, `funnel`, `retention`, `jql` |
-| `mp` (inspect) | `events`, `properties`, `values`, `info`, `tables`, `schema`, `drop` |
+| `mp` (query) | `sql`, `segmentation`, `funnel`, `retention`, `jql`, `event-counts`, `property-counts` |
+| `mp` (inspect) | `events`, `properties`, `values`, `funnels`, `cohorts`, `top-events`, `info`, `tables`, `schema`, `drop` |
 
 ### User Stories
 

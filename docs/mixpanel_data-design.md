@@ -297,7 +297,7 @@ class DiscoveryService:
     # Resource discovery (Phase 007 enhancements)
     def list_funnels(self) -> list[FunnelInfo]: ...  # Cached
     def list_cohorts(self) -> list[SavedCohort]: ...  # Cached
-    def list_top_events(self, type: str = "general",
+    def list_top_events(self, type: Literal["general", "average", "unique"] = "general",
                         limit: int | None = None) -> list[TopEvent]: ...  # NOT cached
 
     def clear_cache(self) -> None: ...
@@ -387,9 +387,9 @@ class Workspace:
 | `events()` | List all event names in project |
 | `properties(event)` | List all properties for an event |
 | `property_values(event, prop, limit=100)` | List sample values for a property |
-| `list_funnels()` | List saved funnels (cached) |
-| `list_cohorts()` | List saved cohorts (cached) |
-| `list_top_events(type, limit)` | List today's top events (not cached) |
+| `funnels()` | List saved funnels (cached) |
+| `cohorts()` | List saved cohorts (cached) |
+| `top_events(type, limit)` | List today's top events (not cached) |
 
 **Fetching** (API → local storage):
 | Method | Description |
