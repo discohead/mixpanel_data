@@ -9,11 +9,14 @@ import pytest
 from mixpanel_data.exceptions import (
     AccountExistsError,
     AccountNotFoundError,
+    APIError,
     AuthenticationError,
     ConfigError,
+    JQLSyntaxError,
     MixpanelDataError,
     QueryError,
     RateLimitError,
+    ServerError,
     TableExistsError,
     TableNotFoundError,
 )
@@ -145,11 +148,17 @@ class TestOperationExceptions:
         assert "retry_after" not in exc.details
 
     def test_query_error(self) -> None:
-        """QueryError should have QUERY_FAILED code."""
-        exc = QueryError("Invalid SQL syntax", details={"query": "SELECT * FROM"})
+        """QueryError should have QUERY_FAILED code and inherit from APIError."""
+        exc = QueryError(
+            "Invalid SQL syntax",
+            status_code=400,
+            response_body={"error": "syntax error"},
+            request_params={"query": "SELECT * FROM"},
+        )
 
         assert exc.code == "QUERY_FAILED"
-        assert exc.details["query"] == "SELECT * FROM"
+        assert exc.status_code == 400
+        assert exc.request_params == {"query": "SELECT * FROM"}
 
 
 class TestStorageExceptions:
@@ -187,6 +196,7 @@ class TestExceptionHierarchy:
             AuthenticationError("test"),
             RateLimitError("test"),
             QueryError("test"),
+            JQLSyntaxError(raw_error="test"),
             TableExistsError("test"),
             TableNotFoundError("test"),
         ]
@@ -243,3 +253,324 @@ class TestExceptionHierarchy:
             assert (
                 exc.code == expected_code
             ), f"{exc_class.__name__} should have code {expected_code}, got {exc.code}"
+
+
+class TestJQLSyntaxError:
+    """Tests for JQL syntax error exception."""
+
+    # Sample error from Mixpanel API
+    SAMPLE_RAW_ERROR = (
+        "UserVisiblePreconditionFailedError: Uncaught exception TypeError: "
+        "Events(...).groupBy(...).limit is not a function\n"
+        "  .limit(10);\n"
+        "   ^\n"
+        "\n"
+        "Stack trace:\n"
+        "TypeError: Events(...).groupBy(...).limit is not a function\n"
+        "    at main (<anonymous>:7:4)\n"
+    )
+
+    SAMPLE_SCRIPT = """function main() {
+  return Events({from_date: "2024-01-01", to_date: "2024-01-31"})
+    .groupBy(["name"], mixpanel.reducer.count())
+    .limit(10);
+}"""
+
+    def test_basic_creation(self) -> None:
+        """JQLSyntaxError should parse error details from raw error."""
+        exc = JQLSyntaxError(raw_error=self.SAMPLE_RAW_ERROR)
+
+        assert exc.code == "JQL_SYNTAX_ERROR"
+        assert isinstance(exc, QueryError)
+        assert isinstance(exc, MixpanelDataError)
+
+    def test_extracts_error_type(self) -> None:
+        """Should extract JavaScript error type."""
+        exc = JQLSyntaxError(raw_error=self.SAMPLE_RAW_ERROR)
+
+        assert exc.error_type == "TypeError"
+
+    def test_extracts_error_message(self) -> None:
+        """Should extract error message."""
+        exc = JQLSyntaxError(raw_error=self.SAMPLE_RAW_ERROR)
+
+        assert "limit is not a function" in exc.error_message
+
+    def test_extracts_line_info(self) -> None:
+        """Should extract code snippet with caret."""
+        exc = JQLSyntaxError(raw_error=self.SAMPLE_RAW_ERROR)
+
+        assert exc.line_info is not None
+        assert ".limit(10);" in exc.line_info
+        assert "^" in exc.line_info
+
+    def test_extracts_stack_trace(self) -> None:
+        """Should extract stack trace."""
+        exc = JQLSyntaxError(raw_error=self.SAMPLE_RAW_ERROR)
+
+        assert exc.stack_trace is not None
+        assert "at main" in exc.stack_trace
+        assert "<anonymous>:7:4" in exc.stack_trace
+
+    def test_includes_script(self) -> None:
+        """Should include original script when provided."""
+        exc = JQLSyntaxError(
+            raw_error=self.SAMPLE_RAW_ERROR,
+            script=self.SAMPLE_SCRIPT,
+        )
+
+        assert exc.script == self.SAMPLE_SCRIPT
+
+    def test_includes_request_path(self) -> None:
+        """Should include request path when provided."""
+        exc = JQLSyntaxError(
+            raw_error=self.SAMPLE_RAW_ERROR,
+            request_path="/api/query/jql?project_id=12345",
+        )
+
+        assert exc.details["request_path"] == "/api/query/jql?project_id=12345"
+
+    def test_raw_error_preserved(self) -> None:
+        """Should preserve complete raw error string."""
+        exc = JQLSyntaxError(raw_error=self.SAMPLE_RAW_ERROR)
+
+        assert exc.raw_error == self.SAMPLE_RAW_ERROR
+
+    def test_message_includes_error_type_and_message(self) -> None:
+        """String representation should include error type and message."""
+        exc = JQLSyntaxError(raw_error=self.SAMPLE_RAW_ERROR)
+
+        message = str(exc)
+        assert "JQL" in message
+        assert "TypeError" in message
+
+    def test_to_dict_includes_all_fields(self) -> None:
+        """to_dict should include all parsed fields."""
+        exc = JQLSyntaxError(
+            raw_error=self.SAMPLE_RAW_ERROR,
+            script=self.SAMPLE_SCRIPT,
+            request_path="/api/query/jql",
+        )
+
+        result = exc.to_dict()
+
+        assert result["code"] == "JQL_SYNTAX_ERROR"
+        assert result["details"]["error_type"] == "TypeError"
+        assert result["details"]["script"] == self.SAMPLE_SCRIPT
+        assert result["details"]["request_path"] == "/api/query/jql"
+        assert result["details"]["raw_error"] == self.SAMPLE_RAW_ERROR
+
+        # Verify JSON serializable
+        json_str = json.dumps(result)
+        assert "TypeError" in json_str
+
+    def test_handles_simple_error(self) -> None:
+        """Should handle simple error without stack trace."""
+        simple_error = "SyntaxError: Unexpected token }"
+
+        exc = JQLSyntaxError(raw_error=simple_error)
+
+        assert exc.error_type == "SyntaxError"
+        assert "Unexpected token" in exc.error_message
+
+    def test_handles_unknown_error_format(self) -> None:
+        """Should gracefully handle unknown error format."""
+        unknown_error = "Something went wrong"
+
+        exc = JQLSyntaxError(raw_error=unknown_error)
+
+        assert exc.error_type == "Error"  # Default
+        assert exc.error_message == "Something went wrong"
+        assert exc.raw_error == unknown_error
+
+    def test_inherits_from_query_error(self) -> None:
+        """JQLSyntaxError should be catchable as QueryError."""
+        exc = JQLSyntaxError(raw_error="Test error")
+
+        # Should be catchable with QueryError
+        with pytest.raises(QueryError):
+            raise exc
+
+        # Should be catchable with MixpanelDataError
+        with pytest.raises(MixpanelDataError):
+            raise JQLSyntaxError(raw_error="Test error")
+
+
+class TestAPIError:
+    """Tests for APIError base class."""
+
+    def test_basic_creation(self) -> None:
+        """APIError should capture HTTP context."""
+        exc = APIError(
+            "Test error",
+            status_code=500,
+            response_body={"error": "Internal error"},
+            request_method="GET",
+            request_url="https://api.example.com/test",
+            request_params={"param1": "value1"},
+        )
+
+        assert exc.status_code == 500
+        assert exc.response_body == {"error": "Internal error"}
+        assert exc.request_method == "GET"
+        assert exc.request_url == "https://api.example.com/test"
+        assert exc.request_params == {"param1": "value1"}
+        assert exc.code == "API_ERROR"
+
+    def test_inherits_from_base(self) -> None:
+        """APIError should inherit from MixpanelDataError."""
+        exc = APIError("Test", status_code=400)
+        assert isinstance(exc, MixpanelDataError)
+
+    def test_to_dict_includes_http_context(self) -> None:
+        """to_dict should include all HTTP context."""
+        exc = APIError(
+            "Test error",
+            status_code=400,
+            response_body="Bad request",
+            request_method="POST",
+            request_url="https://api.example.com/query",
+            request_params={"project_id": "123"},
+            request_body={"data": "test"},
+        )
+
+        result = exc.to_dict()
+
+        assert result["details"]["status_code"] == 400
+        assert result["details"]["response_body"] == "Bad request"
+        assert result["details"]["request_method"] == "POST"
+        assert result["details"]["request_url"] == "https://api.example.com/query"
+        assert result["details"]["request_params"] == {"project_id": "123"}
+        assert result["details"]["request_body"] == {"data": "test"}
+
+        # Verify JSON serializable
+        json_str = json.dumps(result)
+        assert "400" in json_str
+
+    def test_optional_fields(self) -> None:
+        """Optional fields should not appear in details if not provided."""
+        exc = APIError("Test", status_code=500)
+
+        assert exc.response_body is None
+        assert exc.request_method is None
+        assert "response_body" not in exc.details
+        assert "request_method" not in exc.details
+
+    def test_catchable_as_base(self) -> None:
+        """APIError should be catchable as MixpanelDataError."""
+        with pytest.raises(MixpanelDataError):
+            raise APIError("Test", status_code=500)
+
+
+class TestServerError:
+    """Tests for ServerError (5xx errors)."""
+
+    def test_basic_creation(self) -> None:
+        """ServerError should have SERVER_ERROR code."""
+        exc = ServerError("Internal server error", status_code=500)
+
+        assert exc.code == "SERVER_ERROR"
+        assert exc.status_code == 500
+        assert isinstance(exc, APIError)
+        assert isinstance(exc, MixpanelDataError)
+
+    def test_with_full_context(self) -> None:
+        """ServerError should include request/response context."""
+        exc = ServerError(
+            "Server error: unit and interval both specified",
+            status_code=500,
+            response_body={"error": "unit and interval both specified"},
+            request_method="GET",
+            request_url="https://mixpanel.com/api/query/retention",
+            request_params={"unit": "day", "interval": 7},
+        )
+
+        assert "unit and interval" in str(exc)
+        assert exc.response_body == {"error": "unit and interval both specified"}
+        assert exc.request_params == {"unit": "day", "interval": 7}
+
+    def test_to_dict_serializable(self) -> None:
+        """ServerError to_dict should be JSON serializable."""
+        exc = ServerError(
+            "Test",
+            status_code=503,
+            response_body={"retry_after": 60},
+        )
+
+        result = exc.to_dict()
+        json_str = json.dumps(result)
+        assert "503" in json_str
+        assert "SERVER_ERROR" in json_str
+
+
+class TestAPIErrorHierarchy:
+    """Tests for API error inheritance."""
+
+    def test_authentication_error_inherits_from_api_error(self) -> None:
+        """AuthenticationError should inherit from APIError."""
+        exc = AuthenticationError(
+            "Invalid credentials",
+            status_code=401,
+            request_url="https://api.example.com",
+        )
+
+        assert isinstance(exc, APIError)
+        assert exc.status_code == 401
+        assert exc.request_url == "https://api.example.com"
+
+    def test_rate_limit_error_inherits_from_api_error(self) -> None:
+        """RateLimitError should inherit from APIError."""
+        exc = RateLimitError(
+            "Too many requests",
+            retry_after=60,
+            status_code=429,
+            request_method="GET",
+            request_url="https://api.example.com/query",
+        )
+
+        assert isinstance(exc, APIError)
+        assert exc.status_code == 429
+        assert exc.retry_after == 60
+        assert exc.request_method == "GET"
+
+    def test_query_error_inherits_from_api_error(self) -> None:
+        """QueryError should inherit from APIError."""
+        exc = QueryError(
+            "Invalid query",
+            status_code=400,
+            response_body={"error": "syntax error"},
+            request_params={"event": "signup"},
+        )
+
+        assert isinstance(exc, APIError)
+        assert exc.status_code == 400
+        assert exc.response_body == {"error": "syntax error"}
+
+    def test_jql_syntax_error_inherits_from_api_error(self) -> None:
+        """JQLSyntaxError should inherit from APIError via QueryError."""
+        exc = JQLSyntaxError(raw_error="TypeError: x is not defined")
+
+        assert isinstance(exc, QueryError)
+        assert isinstance(exc, APIError)
+        assert exc.status_code == 412
+
+    def test_server_error_inherits_from_api_error(self) -> None:
+        """ServerError should inherit from APIError."""
+        exc = ServerError("Internal error", status_code=500)
+
+        assert isinstance(exc, APIError)
+        assert exc.status_code == 500
+
+    def test_catch_all_api_errors(self) -> None:
+        """All API errors should be catchable with APIError."""
+        errors = [
+            AuthenticationError("test"),
+            RateLimitError("test"),
+            QueryError("test"),
+            ServerError("test", status_code=500),
+            JQLSyntaxError(raw_error="test"),
+        ]
+
+        for error in errors:
+            with pytest.raises(APIError):
+                raise error

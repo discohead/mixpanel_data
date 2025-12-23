@@ -25,9 +25,11 @@ import httpx
 from mixpanel_data._internal.config import Credentials
 from mixpanel_data.exceptions import (
     AuthenticationError,
+    JQLSyntaxError,
     MixpanelDataError,
     QueryError,
     RateLimitError,
+    ServerError,
 )
 
 if TYPE_CHECKING:
@@ -160,11 +162,28 @@ class MixpanelAPIClient:
         """Exit context manager, closing client."""
         self.close()
 
-    def _handle_response(self, response: httpx.Response) -> Any:
-        """Handle API response, raising appropriate exceptions.
+    def _handle_response(
+        self,
+        response: httpx.Response,
+        *,
+        request_method: str | None = None,
+        request_url: str | None = None,
+        request_params: dict[str, Any] | None = None,
+        request_body: dict[str, Any] | None = None,
+        script: str | None = None,
+    ) -> Any:
+        """Handle API response, raising appropriate exceptions with full context.
+
+        All exceptions include request/response context for debugging and
+        autonomous recovery by AI agents.
 
         Args:
             response: The HTTP response to handle.
+            request_method: HTTP method used (GET, POST).
+            request_url: Full request URL.
+            request_params: Query parameters sent.
+            request_body: Request body sent (for POST).
+            script: Optional JQL script for error context (used for 412 errors).
 
         Returns:
             Parsed JSON response.
@@ -172,26 +191,79 @@ class MixpanelAPIClient:
         Raises:
             AuthenticationError: On 401 response.
             QueryError: On 400 response.
-            MixpanelDataError: On 5xx response.
+            JQLSyntaxError: On 412 response (JQL script errors).
+            ServerError: On 5xx response.
         """
+        # Parse response body for error details
+        response_body: str | dict[str, Any] | None = None
+        try:
+            response_body = response.json()
+        except json.JSONDecodeError:
+            response_body = response.text[:500] if response.text else None
+
         if response.status_code == 401:
             raise AuthenticationError(
-                "Invalid credentials. Check username, secret, and project_id."
+                "Invalid credentials. Check username, secret, and project_id.",
+                status_code=response.status_code,
+                response_body=response_body,
+                request_method=request_method,
+                request_url=request_url,
+                request_params=request_params,
             )
         if response.status_code == 400:
-            try:
-                body = response.json()
-                error_msg = body.get("error", "Unknown error")
-            except json.JSONDecodeError:
-                error_msg = response.text[:200] if response.text else "Unknown error"
-            raise QueryError(error_msg)
+            error_msg = "Unknown error"
+            if isinstance(response_body, dict):
+                error_msg = response_body.get("error", "Unknown error")
+            elif isinstance(response_body, str):
+                error_msg = response_body[:200]
+            raise QueryError(
+                error_msg,
+                status_code=response.status_code,
+                response_body=response_body,
+                request_method=request_method,
+                request_url=request_url,
+                request_params=request_params,
+                request_body=request_body,
+            )
+        if response.status_code == 412:
+            # JQL script errors return 412 Precondition Failed
+            if isinstance(response_body, dict):
+                raw_error = response_body.get("error", "Unknown JQL error")
+                request_path = response_body.get("request")
+                raise JQLSyntaxError(
+                    raw_error=raw_error,
+                    script=script,
+                    request_path=request_path,
+                )
+            else:
+                raise QueryError(
+                    f"JQL failed: {response_body[:200] if response_body else 'Unknown error'}",
+                    status_code=response.status_code,
+                    response_body=response_body,
+                    request_method=request_method,
+                    request_url=request_url,
+                    request_body=request_body,
+                )
         if response.status_code >= 500:
-            raise MixpanelDataError(
-                f"Server error: {response.status_code}",
-                code="SERVER_ERROR",
-                details={"status_code": response.status_code},
+            # Extract error message from response body if available
+            error_msg = f"Server error: {response.status_code}"
+            if isinstance(response_body, dict) and "error" in response_body:
+                error_msg = f"Server error: {response_body['error']}"
+            elif isinstance(response_body, str) and response_body:
+                error_msg = f"Server error: {response_body[:200]}"
+
+            raise ServerError(
+                error_msg,
+                status_code=response.status_code,
+                response_body=response_body,
+                request_method=request_method,
+                request_url=request_url,
+                request_params=request_params,
+                request_body=request_body,
             )
         response.raise_for_status()
+        if response_body is not None and isinstance(response_body, dict | list):
+            return response_body
         return response.json()
 
     def _calculate_backoff(self, attempt: int) -> float:
@@ -218,6 +290,7 @@ class MixpanelAPIClient:
         data: dict[str, Any] | None = None,
         form_data: dict[str, Any] | None = None,
         timeout: float | None = None,
+        script: str | None = None,
     ) -> Any:
         """Make an authenticated request with retry on rate limit.
 
@@ -228,6 +301,7 @@ class MixpanelAPIClient:
             data: Request body as JSON (for POST).
             form_data: Request body as form-encoded (for POST).
             timeout: Override default timeout.
+            script: Optional JQL script for error context.
 
         Returns:
             Parsed JSON response.
@@ -236,6 +310,8 @@ class MixpanelAPIClient:
             AuthenticationError: Invalid credentials.
             RateLimitError: Rate limit exceeded after max retries.
             QueryError: Invalid parameters.
+            JQLSyntaxError: JQL script syntax/runtime error.
+            ServerError: Server-side errors (5xx).
         """
         client = self._ensure_client()
 
@@ -245,6 +321,9 @@ class MixpanelAPIClient:
         params["project_id"] = self._credentials.project_id
 
         headers = {"Authorization": self._get_auth_header()}
+
+        # Capture request body for error context
+        request_body = data or form_data
 
         for attempt in range(self._max_retries + 1):
             try:
@@ -261,9 +340,22 @@ class MixpanelAPIClient:
                 if response.status_code == 429:
                     if attempt >= self._max_retries:
                         retry_after = self._parse_retry_after(response)
+                        # Parse response body for error details
+                        response_body: str | dict[str, Any] | None = None
+                        try:
+                            response_body = response.json()
+                        except json.JSONDecodeError:
+                            response_body = (
+                                response.text[:500] if response.text else None
+                            )
                         raise RateLimitError(
                             "Rate limit exceeded after max retries",
                             retry_after=retry_after,
+                            status_code=response.status_code,
+                            response_body=response_body,
+                            request_method=method,
+                            request_url=url,
+                            request_params=params,
                         )
                     # Calculate wait time
                     retry_after = self._parse_retry_after(response)
@@ -280,18 +372,35 @@ class MixpanelAPIClient:
                     time.sleep(wait_time)
                     continue
 
-                return self._handle_response(response)
+                return self._handle_response(
+                    response,
+                    request_method=method,
+                    request_url=url,
+                    request_params=params,
+                    request_body=request_body,
+                    script=script,
+                )
 
             except httpx.HTTPError as e:
                 # Network/connection errors
                 raise MixpanelDataError(
                     f"HTTP error: {e}",
                     code="HTTP_ERROR",
-                    details={"error": str(e)},
+                    details={
+                        "error": str(e),
+                        "request_method": method,
+                        "request_url": url,
+                        "request_params": params,
+                    },
                 ) from e
 
         # Should not reach here, but satisfy type checker
-        raise RateLimitError("Rate limit exceeded after max retries")
+        raise RateLimitError(
+            "Rate limit exceeded after max retries",
+            request_method=method,
+            request_url=url,
+            request_params=params,
+        )
 
     def _parse_retry_after(self, response: httpx.Response) -> int | None:
         """Parse Retry-After header if present.
@@ -375,6 +484,10 @@ class MixpanelAPIClient:
                             raise RateLimitError(
                                 "Rate limit exceeded after max retries",
                                 retry_after=retry_after,
+                                status_code=response.status_code,
+                                request_method="GET",
+                                request_url=url,
+                                request_params=params,
                             )
                         retry_after = self._parse_retry_after(response)
                         if retry_after is not None:
@@ -386,17 +499,32 @@ class MixpanelAPIClient:
 
                     if response.status_code == 401:
                         raise AuthenticationError(
-                            "Invalid credentials. Check username, secret, and project_id."
+                            "Invalid credentials. Check username, secret, and project_id.",
+                            status_code=response.status_code,
+                            request_method="GET",
+                            request_url=url,
+                            request_params=params,
                         )
                     if response.status_code == 400:
                         # Need to read body for error
                         body = response.read()
+                        response_body: str | dict[str, Any] | None = None
+                        error_msg = "Unknown error"
                         try:
-                            error_data = json.loads(body)
-                            error_msg = error_data.get("error", "Unknown error")
+                            response_body = json.loads(body)
+                            if isinstance(response_body, dict):
+                                error_msg = response_body.get("error", "Unknown error")
                         except json.JSONDecodeError:
+                            response_body = body.decode()[:500] if body else None
                             error_msg = body.decode()[:200] if body else "Unknown error"
-                        raise QueryError(error_msg)
+                        raise QueryError(
+                            error_msg,
+                            status_code=response.status_code,
+                            response_body=response_body,
+                            request_method="GET",
+                            request_url=url,
+                            request_params=params,
+                        )
 
                     response.raise_for_status()
 
@@ -695,10 +823,14 @@ class MixpanelAPIClient:
             "from_date": from_date,
             "to_date": to_date,
             "retention_type": retention_type,
-            "interval": interval,
             "interval_count": interval_count,
-            "unit": unit,
         }
+        # Mixpanel API doesn't allow both 'unit' and 'interval' together.
+        # Use 'interval' for custom intervals, 'unit' for standard periods.
+        if interval != 1:
+            params["interval"] = interval
+        else:
+            params["unit"] = unit
         if born_where:
             params["born_where"] = born_where
         if where:
@@ -723,7 +855,7 @@ class MixpanelAPIClient:
 
         Raises:
             AuthenticationError: Invalid credentials.
-            QueryError: Script execution error.
+            JQLSyntaxError: Script syntax or runtime error.
             RateLimitError: Rate limit exceeded.
         """
         url = self._build_url("query", "/jql")
@@ -731,7 +863,8 @@ class MixpanelAPIClient:
         form: dict[str, Any] = {"script": script}
         if params:
             form["params"] = json.dumps(params)
-        response = self._request("POST", url, form_data=form)
+        # Pass script for error context in case of JQL syntax errors
+        response = self._request("POST", url, form_data=form, script=script)
         if isinstance(response, list):
             return response
         return []

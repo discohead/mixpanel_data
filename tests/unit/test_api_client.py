@@ -735,6 +735,112 @@ class TestFunnelAndRetention:
         assert captured_params["born_event"] == "Signup"
         assert captured_params["event"] == "Purchase"
 
+    def test_retention_default_interval_sends_unit_only(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Regression: with default interval=1, should send 'unit' but NOT 'interval'.
+
+        Bug: Mixpanel API rejects requests with both 'unit' and 'interval' set together,
+        returning "Validate failed: unit and interval both set".
+        Fix: Only send 'interval' when != 1, otherwise send 'unit'.
+        """
+        captured_params: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            for key, value in request.url.params.items():
+                captured_params[key] = value
+            return httpx.Response(200, json={})
+
+        with create_mock_client(test_credentials, handler) as client:
+            # Default interval is 1
+            client.retention(
+                "Signup",
+                "Purchase",
+                "2024-01-01",
+                "2024-01-31",
+                unit="day",
+                interval=1,  # Default value
+            )
+
+        # Should send 'unit' for standard periods
+        assert "unit" in captured_params
+        assert captured_params["unit"] == "day"
+        # Should NOT send 'interval' when it's the default value of 1
+        assert "interval" not in captured_params
+
+    def test_retention_custom_interval_sends_interval_only(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Regression: with custom interval!=1, should send 'interval' but NOT 'unit'.
+
+        Bug: Mixpanel API rejects requests with both 'unit' and 'interval' set together,
+        returning "Validate failed: unit and interval both set".
+        Fix: Only send 'interval' when != 1, otherwise send 'unit'.
+        """
+        captured_params: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            for key, value in request.url.params.items():
+                captured_params[key] = value
+            return httpx.Response(200, json={})
+
+        with create_mock_client(test_credentials, handler) as client:
+            # Custom interval of 7 days
+            client.retention(
+                "Signup",
+                "Purchase",
+                "2024-01-01",
+                "2024-01-31",
+                unit="day",
+                interval=7,  # Custom value
+            )
+
+        # Should send 'interval' for custom intervals
+        assert "interval" in captured_params
+        assert captured_params["interval"] == "7"
+        # Should NOT send 'unit' when using custom interval
+        assert "unit" not in captured_params
+
+    def test_retention_unit_and_interval_mutually_exclusive(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Regression: 'unit' and 'interval' params must never be sent together.
+
+        Bug: Mixpanel API rejects requests with both 'unit' and 'interval' set together,
+        returning "Validate failed: unit and interval both set".
+        This test verifies that regardless of input, only one is sent.
+        """
+        captured_params: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            for key, value in request.url.params.items():
+                captured_params[key] = value
+            return httpx.Response(200, json={})
+
+        # Test with various interval values
+        for interval in [1, 2, 7, 14, 30]:
+            captured_params.clear()
+            with create_mock_client(test_credentials, handler) as client:
+                client.retention(
+                    "Signup",
+                    "Purchase",
+                    "2024-01-01",
+                    "2024-01-31",
+                    unit="day",
+                    interval=interval,
+                )
+
+            # Only one of 'unit' or 'interval' should be present, never both
+            has_unit = "unit" in captured_params
+            has_interval = "interval" in captured_params
+            assert not (
+                has_unit and has_interval
+            ), f"Both 'unit' and 'interval' sent for interval={interval}"
+            # At least one should be present
+            assert (
+                has_unit or has_interval
+            ), f"Neither 'unit' nor 'interval' sent for interval={interval}"
+
 
 # =============================================================================
 # User Story 8: JQL
@@ -807,6 +913,99 @@ class TestErrorHandling:
             client.get_events()
 
         assert "Invalid query" in str(exc_info.value)
+
+    def test_jql_syntax_error_on_412(self, test_credentials: Credentials) -> None:
+        """Should raise JQLSyntaxError on 412 with parsed error details."""
+        from mixpanel_data.exceptions import JQLSyntaxError
+
+        raw_error = (
+            "UserVisiblePreconditionFailedError: Uncaught exception TypeError: "
+            "Events(...).groupBy(...).limit is not a function\n"
+            "  .limit(10);\n"
+            "   ^\n"
+            "\n"
+            "Stack trace:\n"
+            "TypeError: Events(...).groupBy(...).limit is not a function\n"
+            "    at main (<anonymous>:7:4)\n"
+        )
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                412,
+                json={
+                    "request": "/api/query/jql?project_id=12345",
+                    "error": raw_error,
+                },
+            )
+
+        script = "function main() { return Events({}).groupBy().limit(10); }"
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(JQLSyntaxError) as exc_info,
+        ):
+            client.jql(script)
+
+        exc = exc_info.value
+        assert exc.error_type == "TypeError"
+        assert "limit is not a function" in exc.error_message
+        assert exc.script == script
+        assert exc.raw_error == raw_error
+        assert exc.code == "JQL_SYNTAX_ERROR"
+
+    def test_jql_syntax_error_includes_line_info(
+        self, test_credentials: Credentials
+    ) -> None:
+        """JQLSyntaxError should include code snippet with caret."""
+        from mixpanel_data.exceptions import JQLSyntaxError
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                412,
+                json={
+                    "error": "TypeError: bad\n  .badMethod();\n   ^\n",
+                },
+            )
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(JQLSyntaxError) as exc_info,
+        ):
+            client.jql("test script")
+
+        assert exc_info.value.line_info is not None
+        assert ".badMethod();" in exc_info.value.line_info
+        assert "^" in exc_info.value.line_info
+
+    def test_jql_syntax_error_catchable_as_query_error(
+        self, test_credentials: Credentials
+    ) -> None:
+        """JQLSyntaxError should be catchable as QueryError for backwards compat."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(412, json={"error": "SyntaxError: test"})
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(QueryError),  # Should catch JQLSyntaxError
+        ):
+            client.jql("bad script")
+
+    def test_412_without_json_falls_back_to_query_error(
+        self, test_credentials: Credentials
+    ) -> None:
+        """412 without valid JSON should raise QueryError."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(412, text="Not JSON")
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(QueryError) as exc_info,
+        ):
+            client.jql("test")
+
+        assert "JQL failed" in str(exc_info.value)
 
 
 # =============================================================================

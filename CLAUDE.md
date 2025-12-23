@@ -70,7 +70,7 @@ src/mixpanel_data/
 │       ├── __init__.py      # ✅ Services package
 │       ├── discovery.py     # ✅ DiscoveryService
 │       ├── fetcher.py       # ✅ FetcherService
-│       └── live_query.py    # ⏳ LiveQueryService
+│       └── live_query.py    # ✅ LiveQueryService
 └── cli/
     ├── main.py              # ⏳ Typer app entry point
     └── commands/            # ⏳ auth, fetch, query, inspect commands
@@ -123,12 +123,12 @@ Config file: `~/.mp/config.toml`
 | 003 | Storage Engine | ✅ Complete | `003-storage-engine` |
 | 004 | Discovery Service | ✅ Complete | `004-discovery-service` |
 | 005 | Fetch Service | ✅ Complete | `005-fetch-service` |
-| 006 | Live Queries | ⏳ Next | `006-live-queries` |
-| 007 | Workspace Facade | ⏳ Pending | `007-workspace` |
+| 006 | Live Queries | ✅ Complete | `006-live-query-service` |
+| 007 | Workspace Facade | ⏳ Next | `007-workspace` |
 | 008 | CLI Application | ⏳ Pending | `008-cli` |
 | 009 | Polish & Release | ⏳ Pending | `009-polish` |
 
-**Next up:** Phase 006 (Live Queries) - implements `LiveQueryService` for segmentation, funnels, retention, and JQL queries.
+**Next up:** Phase 007 (Workspace Facade) - implements `Workspace` class as the unified entry point for both live queries and local storage operations.
 
 ## What's Implemented
 
@@ -192,8 +192,19 @@ All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
 - Returns `FetchResult` with table name, row count, duration, and metadata
 - Constructor injection of `MixpanelAPIClient` and `StorageEngine` for testing
 
+### Live Query Service (`_internal/services/live_query.py`)
+- `LiveQueryService` — Executes live analytics queries against Mixpanel Query API
+- `segmentation(event, from_date, to_date, on, unit, where)` — Time-series event counts with optional property segmentation
+- `funnel(funnel_id, from_date, to_date, unit, on)` — Step-by-step funnel conversion analysis
+- `retention(born_event, return_event, from_date, to_date, ...)` — Cohort-based retention analysis
+- `jql(script, params)` — Execute custom JQL scripts
+- Returns typed results: `SegmentationResult`, `FunnelResult`, `RetentionResult`, `JQLResult`
+- All results support lazy DataFrame conversion via `.df` property
+- No caching (live queries return fresh data)
+- Constructor injection of `MixpanelAPIClient` for testing
+
 ### Tests
-- Unit tests for exceptions, config, types, storage, discovery, fetcher
+- Unit tests for exceptions, config, types, storage, discovery, fetcher, live_query
 - Integration tests for config file CRUD, foundation layer, storage engine
 - Requires Python 3.11+ (use devcontainer or pyenv)
 
@@ -234,12 +245,10 @@ just fmt && just lint
 ```
 
 ## Recent Changes
+- 006-live-query-service: Added Python 3.11+ (type hints required throughout per constitution) + httpx (HTTP client, already in use), Pydantic v2 (validation), pandas (DataFrame conversion)
 - 005-fetch-service: Implemented FetcherService for fetching events/profiles from Mixpanel API to DuckDB storage
 - Added `just` command runner with justfile for common development tasks
-- 004-discovery-service: Added DiscoveryService with session-scoped caching
 
 ## Active Technologies
-- Python 3.11+ with full type hints throughout (per constitution)
-- httpx for HTTP client (API communication)
-- DuckDB for embedded analytical database (local storage)
-- Pydantic v2 for validation and configuration
+- Python 3.11+ (type hints required throughout per constitution) + httpx (HTTP client, already in use), Pydantic v2 (validation), pandas (DataFrame conversion) (006-live-query-service)
+- N/A (live queries only, no local storage) (006-live-query-service)

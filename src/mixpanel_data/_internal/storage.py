@@ -697,7 +697,8 @@ class StorageEngine:
         except duckdb.Error as e:
             raise QueryError(
                 f"Query execution failed: {e}",
-                details={"query": sql, "error": str(e)},
+                status_code=0,  # Not an HTTP error
+                response_body={"query": sql, "error": str(e)},
             ) from e
 
     def execute_df(self, sql: str) -> pd.DataFrame:
@@ -746,7 +747,8 @@ class StorageEngine:
         except duckdb.Error as e:
             raise QueryError(
                 f"Query execution failed: {e}",
-                details={"query": sql, "error": str(e)},
+                status_code=0,  # Not an HTTP error
+                response_body={"query": sql, "error": str(e)},
             ) from e
 
     def execute_scalar(self, sql: str) -> Any:
@@ -787,7 +789,8 @@ class StorageEngine:
         except duckdb.Error as e:
             raise QueryError(
                 f"Query execution failed: {e}",
-                details={"query": sql, "error": str(e)},
+                status_code=0,  # Not an HTTP error
+                response_body={"query": sql, "error": str(e)},
             ) from e
 
     def execute_rows(self, sql: str) -> list[tuple[Any, ...]]:
@@ -827,7 +830,8 @@ class StorageEngine:
         except duckdb.Error as e:
             raise QueryError(
                 f"Query execution failed: {e}",
-                details={"query": sql, "error": str(e)},
+                status_code=0,  # Not an HTTP error
+                response_body={"query": sql, "error": str(e)},
             ) from e
 
     def list_tables(self) -> list[TableInfo]:

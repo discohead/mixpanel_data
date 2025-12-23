@@ -62,6 +62,7 @@ This document defines the complete implementation roadmap for `mixpanel_data`, o
 │  │ Queries      │ │ (Facade,     │ │ 008-CLI      │                         │
 │  │ (Seg/Funnel/ │ │  Lifecycle)  │ │ (Typer App)  │                         │
 │  │  Retention)  │ │              │ │              │                         │
+│  │      ✅      │ │              │ │              │                         │
 │  └──────────────┘ └──────────────┘ └──────┬───────┘                         │
 │                          │                │                                 │
 │                          └────────────────┤                                 │
@@ -86,8 +87,8 @@ This document defines the complete implementation roadmap for `mixpanel_data`, o
 | 003 | Storage Engine | StorageEngine, DuckDB, Schema Management | ✅ Complete | `003-storage-engine` |
 | 004 | Discovery Service | DiscoveryService, Event/Property APIs | ✅ Complete | `004-discovery-service` |
 | 005 | Fetch Service | FetcherService, Events/Profiles Export | ✅ Complete | `005-fetch-service` |
-| 006 | Live Queries | LiveQueryService, Segmentation, Funnels, Retention | ⏳ Next | `006-live-queries` |
-| 007 | Workspace Facade | Workspace class, Lifecycle Management | ⏳ Pending | `007-workspace` |
+| 006 | Live Queries | LiveQueryService, Segmentation, Funnels, Retention | ✅ Complete | `006-live-query-service` |
+| 007 | Workspace Facade | Workspace class, Lifecycle Management | ⏳ Next | `007-workspace` |
 | 008 | CLI Application | Typer app, Commands, Formatters | ⏳ Pending | `008-cli` |
 | 009 | Polish & Release | SKILL.md, Documentation, PyPI | ⏳ Pending | `009-polish` |
 
@@ -483,100 +484,45 @@ The `FetcherService` coordinates data fetches from the Mixpanel Export API into 
 
 ---
 
-## Phase 006: Live Query Service ⏳
+## Phase 006: Live Query Service ✅
 
-**Status:** PENDING
-**Branch:** `006-live-queries`
+**Status:** COMPLETE
+**Branch:** `006-live-query-service`
 **Dependencies:** Phase 002 (API Client)
+**Spec:** [specs/006-live-query-service/](specs/006-live-query-service/)
 
 ### Overview
 
 The `LiveQueryService` executes queries directly against Mixpanel's Query API and transforms results into structured types. No local storage involved.
 
-### Components to Build
+### Delivered Components
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| LiveQueryService | `src/mixpanel_data/_internal/services/live_query.py` | Query execution |
+| LiveQueryService | `src/mixpanel_data/_internal/services/live_query.py` | Query execution with result transformation |
+| Unit Tests | `tests/unit/test_live_query.py` | 23 tests with mocked API client |
 
-### Design Reference
+### Key Deliverables
 
-```python
-class LiveQueryService:
-    def __init__(self, api_client: MixpanelAPIClient): ...
-
-    def segmentation(
-        self,
-        event: str,
-        from_date: str,
-        to_date: str,
-        on: str | None = None,
-        unit: str = "day",
-        where: str | None = None
-    ) -> SegmentationResult: ...
-
-    def funnel(
-        self,
-        funnel_id: int,
-        from_date: str,
-        to_date: str,
-        unit: str = "day",
-        on: str | None = None
-    ) -> FunnelResult: ...
-
-    def retention(
-        self,
-        born_event: str,
-        return_event: str,
-        from_date: str,
-        to_date: str,
-        born_where: str | None = None,
-        return_where: str | None = None,
-        interval: int = 1,
-        interval_count: int = 10,
-        unit: str = "day"
-    ) -> RetentionResult: ...
-
-    def jql(self, script: str, params: dict | None = None) -> JQLResult: ...
-```
-
-### User Stories
-
-1. **Run segmentation queries** (P1)
-   - Event counts over time
-   - Segment by property
-   - Return structured result with DataFrame
-
-2. **Run funnel analysis** (P1)
-   - Analyze saved funnels
-   - Get step-by-step conversion
-
-3. **Run retention analysis** (P2)
-   - Cohort-based retention
-   - Multiple time units
-
-4. **Run custom JQL queries** (P3)
-   - Execute arbitrary JQL
-   - Return raw + DataFrame
-
-### Tasks (Estimated: 25-30)
-
-- [ ] Create `LiveQueryService` class
-- [ ] Implement `segmentation()` with API call and result transformation
-- [ ] Transform segmentation response → `SegmentationResult`
-- [ ] Implement `funnel()` with API call and result transformation
-- [ ] Transform funnel response → `FunnelResult`
-- [ ] Implement `retention()` with all parameters
-- [ ] Transform retention response → `RetentionResult`
-- [ ] Implement `jql()` with script execution
-- [ ] Transform JQL response → `JQLResult`
-- [ ] Unit tests with mocked API responses
+- [x] Create `LiveQueryService` class with API client injection
+- [x] Implement `segmentation()` with API call and result transformation
+- [x] Transform segmentation response → `SegmentationResult` with calculated total
+- [x] Implement `funnel()` with API call and result transformation
+- [x] Transform funnel response → `FunnelResult` with aggregated steps across dates
+- [x] Implement `retention()` with all parameters (born_where, return_where, interval, interval_count, unit)
+- [x] Transform retention response → `RetentionResult` with cohorts sorted by date
+- [x] Implement `jql()` with script execution and params support
+- [x] Transform JQL response → `JQLResult`
+- [x] Unit tests with mocked API responses (23 tests)
+- [x] mypy --strict passes
+- [x] ruff check passes
 
 ### Success Criteria
 
-- [ ] All result types have accurate data
-- [ ] DataFrames have expected columns and types
-- [ ] API errors wrapped in appropriate exceptions
+- [x] All result types have accurate data
+- [x] DataFrames have expected columns and types (via lazy `.df` property)
+- [x] API errors wrapped in appropriate exceptions
+- [x] No caching (live queries return fresh data per design decision)
 
 ---
 

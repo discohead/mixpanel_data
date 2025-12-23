@@ -8,11 +8,14 @@ then query it repeatedly with SQL.
 from mixpanel_data.exceptions import (
     AccountExistsError,
     AccountNotFoundError,
+    APIError,
     AuthenticationError,
     ConfigError,
+    JQLSyntaxError,
     MixpanelDataError,
     QueryError,
     RateLimitError,
+    ServerError,
     TableExistsError,
     TableNotFoundError,
 )
@@ -31,12 +34,15 @@ __version__ = "0.1.0"
 __all__ = [
     # Exceptions
     "MixpanelDataError",
+    "APIError",
     "ConfigError",
     "AccountNotFoundError",
     "AccountExistsError",
     "AuthenticationError",
     "RateLimitError",
     "QueryError",
+    "JQLSyntaxError",
+    "ServerError",
     "TableExistsError",
     "TableNotFoundError",
     # Result types
