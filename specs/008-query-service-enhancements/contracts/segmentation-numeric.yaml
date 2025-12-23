@@ -1,0 +1,187 @@
+# Segmentation Numeric API Contract
+# Mixpanel Query API: GET /api/query/segmentation/numeric
+
+endpoint:
+  path: /api/query/segmentation/numeric
+  method: GET
+  base_url: https://mixpanel.com/api/query
+
+parameters:
+  required:
+    event:
+      type: string
+      description: Event name to analyze
+      example: "Purchase"
+
+    from_date:
+      type: string
+      format: date
+      description: Start date (YYYY-MM-DD)
+      example: "2024-01-01"
+
+    to_date:
+      type: string
+      format: date
+      description: End date (YYYY-MM-DD)
+      example: "2024-01-31"
+
+    "on":
+      type: string
+      description: Numeric property expression to bucket
+      example: 'properties["amount"]'
+
+  optional:
+    unit:
+      type: string
+      enum: ["hour", "day"]
+      default: "day"
+      description: Time aggregation unit
+
+    where:
+      type: string
+      description: Filter expression
+      example: 'properties["country"] == "US"'
+
+    type:
+      type: string
+      enum: ["general", "unique", "average"]
+      default: "general"
+      description: Counting method
+
+response:
+  success:
+    status: 200
+    content_type: application/json
+    schema:
+      data:
+        type: object
+        properties:
+          series:
+            type: array
+            items:
+              type: string
+            description: List of dates in response
+
+          values:
+            type: object
+            additionalProperties:
+              type: object
+              additionalProperties:
+                type: integer
+            description: |
+              Bucket ranges with time-series counts.
+              Keys are formatted range strings.
+            example:
+              "2,000 - 2,100":
+                "2024-01-01": 5
+                "2024-01-02": 12
+              "2,100 - 2,200":
+                "2024-01-01": 8
+                "2024-01-02": 15
+
+      legend_size:
+        type: integer
+        description: Number of buckets returned
+
+  errors:
+    - status: 401
+      description: Invalid credentials
+      exception: AuthenticationError
+
+    - status: 400
+      description: Invalid parameters or non-numeric property
+      exception: QueryError
+
+    - status: 429
+      description: Rate limit exceeded
+      exception: RateLimitError
+
+# Library Method Contract
+
+library_method:
+  module: mixpanel_data._internal.services.live_query
+  class: LiveQueryService
+  method: segmentation_numeric
+
+  signature: |
+    def segmentation_numeric(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        on: str,
+        *,
+        unit: Literal["hour", "day"] = "day",
+        where: str | None = None,
+        type: Literal["general", "unique", "average"] = "general",
+    ) -> NumericBucketResult
+
+  parameters:
+    - name: event
+      type: str
+      required: true
+      description: Event name
+
+    - name: from_date
+      type: str
+      required: true
+      description: Start date (YYYY-MM-DD)
+
+    - name: to_date
+      type: str
+      required: true
+      description: End date (YYYY-MM-DD)
+
+    - name: "on"
+      type: str
+      required: true
+      description: Numeric property expression to bucket
+
+    - name: unit
+      type: Literal["hour", "day"]
+      required: false
+      default: "day"
+      description: Time aggregation unit
+
+    - name: where
+      type: str | None
+      required: false
+      default: null
+      description: Filter expression
+
+    - name: type
+      type: Literal["general", "unique", "average"]
+      required: false
+      default: "general"
+      description: Counting method
+
+  returns:
+    type: NumericBucketResult
+    description: Bucketed time-series with lazy DataFrame conversion
+
+  raises:
+    - AuthenticationError
+    - QueryError
+    - RateLimitError
+
+api_client_method:
+  module: mixpanel_data._internal.api_client
+  class: MixpanelAPIClient
+  method: segmentation_numeric
+
+  signature: |
+    def segmentation_numeric(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        on: str,
+        *,
+        unit: str = "day",
+        where: str | None = None,
+        type: str = "general",
+    ) -> dict[str, Any]
+
+  notes:
+    - Bucket ranges determined automatically by API
+    - Range keys are formatted strings (e.g., "2,000 - 2,100")

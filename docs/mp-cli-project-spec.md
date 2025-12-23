@@ -1212,11 +1212,16 @@ This could evolve into a more sophisticated "Lens" experience where agents gener
 ### Additional Commands (v2+)
 
 - ~~`mp cohorts` — Cohort management~~ (Discovery implemented in v1: `mp cohorts`, `mp funnels`, `mp top-events`)
+- ~~`mp event-counts` — Multi-event time series comparison~~ (implemented in v1)
+- ~~`mp property-counts` — Property breakdown time series~~ (implemented in v1)
+- ~~`mp activity-feed` — User event history~~ (implemented in v1)
+- ~~`mp insights` — Query saved Insights reports~~ (implemented in v1)
+- ~~`mp frequency` — Event frequency distribution analysis~~ (implemented in v1)
+- ~~`mp segmentation-numeric` — Numeric property bucketing~~ (implemented in v1)
+- ~~`mp segmentation-sum` — Sum numeric properties over time~~ (implemented in v1)
+- ~~`mp segmentation-average` — Average numeric properties over time~~ (implemented in v1)
 - `mp annotations` — Event annotations
 - `mp alerts` — Alert configuration
-- `mp insights` — AI-powered analysis suggestions
-- `mp event-counts` — Multi-event time series comparison (implemented in v1)
-- `mp property-counts` — Property breakdown time series (implemented in v1)
 
 ### MCP Server (v2+)
 

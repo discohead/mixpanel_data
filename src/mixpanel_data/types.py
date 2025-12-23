@@ -608,6 +608,427 @@ class PropertyCountsResult:
         }
 
 
+# Phase 008: Query Service Enhancement Types
+
+
+@dataclass(frozen=True)
+class UserEvent:
+    """Single event in a user's activity feed.
+
+    Represents one event from a user's event history with timestamp
+    and all associated properties.
+    """
+
+    event: str
+    """Event name."""
+
+    time: datetime
+    """Event timestamp (UTC)."""
+
+    properties: dict[str, Any] = field(default_factory=dict)
+    """All event properties including system properties."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output."""
+        return {
+            "event": self.event,
+            "time": self.time.isoformat(),
+            "properties": self.properties,
+        }
+
+
+@dataclass(frozen=True)
+class ActivityFeedResult:
+    """Collection of user events from activity feed query.
+
+    Contains chronological event history for one or more users
+    with lazy DataFrame conversion support.
+    """
+
+    distinct_ids: list[str]
+    """Queried user identifiers."""
+
+    from_date: str | None
+    """Start date filter (YYYY-MM-DD), None if not specified."""
+
+    to_date: str | None
+    """End date filter (YYYY-MM-DD), None if not specified."""
+
+    events: list[UserEvent] = field(default_factory=list)
+    """Event history (chronological order)."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with columns: event, time, distinct_id, + properties.
+
+        Flattens event properties into individual columns.
+        Conversion is lazy - computed on first access and cached.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = []
+        for user_event in self.events:
+            row: dict[str, Any] = {
+                "event": user_event.event,
+                "time": user_event.time,
+                "distinct_id": user_event.properties.get("$distinct_id", ""),
+            }
+            # Flatten properties (excluding $distinct_id to avoid duplication)
+            for key, value in user_event.properties.items():
+                if key != "$distinct_id":
+                    row[key] = value
+            rows.append(row)
+
+        result_df = (
+            pd.DataFrame(rows)
+            if rows
+            else pd.DataFrame(columns=["event", "time", "distinct_id"])
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output."""
+        return {
+            "distinct_ids": self.distinct_ids,
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "event_count": len(self.events),
+            "events": [e.to_dict() for e in self.events],
+        }
+
+
+@dataclass(frozen=True)
+class InsightsResult:
+    """Data from a saved Insights report.
+
+    Contains time-series data from a pre-configured Insights report
+    with lazy DataFrame conversion support.
+    """
+
+    bookmark_id: int
+    """Saved report identifier."""
+
+    computed_at: str
+    """When report was computed (ISO format)."""
+
+    from_date: str
+    """Report start date."""
+
+    to_date: str
+    """Report end date."""
+
+    headers: list[str] = field(default_factory=list)
+    """Report column headers."""
+
+    series: dict[str, dict[str, int]] = field(default_factory=dict)
+    """Time-series data: {event_name: {date: count}}."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with columns: date, event, count.
+
+        Conversion is lazy - computed on first access and cached.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = []
+        for event_name, date_counts in self.series.items():
+            for date_str, count in date_counts.items():
+                rows.append(
+                    {
+                        "date": date_str,
+                        "event": event_name,
+                        "count": count,
+                    }
+                )
+
+        result_df = (
+            pd.DataFrame(rows)
+            if rows
+            else pd.DataFrame(columns=["date", "event", "count"])
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output."""
+        return {
+            "bookmark_id": self.bookmark_id,
+            "computed_at": self.computed_at,
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "headers": self.headers,
+            "series": self.series,
+        }
+
+
+@dataclass(frozen=True)
+class FrequencyResult:
+    """Event frequency distribution (addiction analysis).
+
+    Contains frequency arrays showing how many users performed events
+    in N time periods, with lazy DataFrame conversion support.
+    """
+
+    event: str | None
+    """Filtered event name (None = all events)."""
+
+    from_date: str
+    """Query start date (YYYY-MM-DD)."""
+
+    to_date: str
+    """Query end date (YYYY-MM-DD)."""
+
+    unit: Literal["day", "week", "month"]
+    """Overall time period."""
+
+    addiction_unit: Literal["hour", "day"]
+    """Measurement granularity."""
+
+    data: dict[str, list[int]] = field(default_factory=dict)
+    """Frequency arrays: {date: [count_1, count_2, ...]}."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with columns: date, period_1, period_2, ...
+
+        Each period_N column shows users active in at least N time periods.
+        Conversion is lazy - computed on first access and cached.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = []
+        for date_str, counts in self.data.items():
+            row: dict[str, Any] = {"date": date_str}
+            for i, count in enumerate(counts, start=1):
+                row[f"period_{i}"] = count
+            rows.append(row)
+
+        result_df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["date"])
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output."""
+        return {
+            "event": self.event,
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "unit": self.unit,
+            "addiction_unit": self.addiction_unit,
+            "data": self.data,
+        }
+
+
+@dataclass(frozen=True)
+class NumericBucketResult:
+    """Events segmented into numeric property ranges.
+
+    Contains time-series data bucketed by automatically determined
+    numeric ranges, with lazy DataFrame conversion support.
+    """
+
+    event: str
+    """Queried event name."""
+
+    from_date: str
+    """Query start date (YYYY-MM-DD)."""
+
+    to_date: str
+    """Query end date (YYYY-MM-DD)."""
+
+    property_expr: str
+    """The 'on' expression used for bucketing."""
+
+    unit: Literal["hour", "day"]
+    """Time aggregation unit."""
+
+    series: dict[str, dict[str, int]] = field(default_factory=dict)
+    """Bucket data: {range_string: {date: count}}."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with columns: date, bucket, count.
+
+        Conversion is lazy - computed on first access and cached.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = []
+        for bucket, date_counts in self.series.items():
+            for date_str, count in date_counts.items():
+                rows.append(
+                    {
+                        "date": date_str,
+                        "bucket": bucket,
+                        "count": count,
+                    }
+                )
+
+        result_df = (
+            pd.DataFrame(rows)
+            if rows
+            else pd.DataFrame(columns=["date", "bucket", "count"])
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output."""
+        return {
+            "event": self.event,
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "property_expr": self.property_expr,
+            "unit": self.unit,
+            "series": self.series,
+        }
+
+
+@dataclass(frozen=True)
+class NumericSumResult:
+    """Sum of numeric property values per time unit.
+
+    Contains daily or hourly sum totals for a numeric property
+    with lazy DataFrame conversion support.
+    """
+
+    event: str
+    """Queried event name."""
+
+    from_date: str
+    """Query start date (YYYY-MM-DD)."""
+
+    to_date: str
+    """Query end date (YYYY-MM-DD)."""
+
+    property_expr: str
+    """The 'on' expression summed."""
+
+    unit: Literal["hour", "day"]
+    """Time aggregation unit."""
+
+    results: dict[str, float] = field(default_factory=dict)
+    """Sum values: {date: sum}."""
+
+    computed_at: str | None = None
+    """Computation timestamp (if provided by API)."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with columns: date, sum.
+
+        Conversion is lazy - computed on first access and cached.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = [
+            {"date": date_str, "sum": value} for date_str, value in self.results.items()
+        ]
+
+        result_df = (
+            pd.DataFrame(rows) if rows else pd.DataFrame(columns=["date", "sum"])
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output."""
+        result: dict[str, Any] = {
+            "event": self.event,
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "property_expr": self.property_expr,
+            "unit": self.unit,
+            "results": self.results,
+        }
+        if self.computed_at is not None:
+            result["computed_at"] = self.computed_at
+        return result
+
+
+@dataclass(frozen=True)
+class NumericAverageResult:
+    """Average of numeric property values per time unit.
+
+    Contains daily or hourly average values for a numeric property
+    with lazy DataFrame conversion support.
+    """
+
+    event: str
+    """Queried event name."""
+
+    from_date: str
+    """Query start date (YYYY-MM-DD)."""
+
+    to_date: str
+    """Query end date (YYYY-MM-DD)."""
+
+    property_expr: str
+    """The 'on' expression averaged."""
+
+    unit: Literal["hour", "day"]
+    """Time aggregation unit."""
+
+    results: dict[str, float] = field(default_factory=dict)
+    """Average values: {date: average}."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with columns: date, average.
+
+        Conversion is lazy - computed on first access and cached.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = [
+            {"date": date_str, "average": value}
+            for date_str, value in self.results.items()
+        ]
+
+        result_df = (
+            pd.DataFrame(rows) if rows else pd.DataFrame(columns=["date", "average"])
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output."""
+        return {
+            "event": self.event,
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "property_expr": self.property_expr,
+            "unit": self.unit,
+            "results": self.results,
+        }
+
+
 # Storage Types
 
 

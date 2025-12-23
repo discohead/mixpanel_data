@@ -913,6 +913,209 @@ def property_counts(
         # Or use DataFrame
         df = result.df  # Columns: date, US, CA, UK, ...
     """
+
+def activity_feed(
+    self,
+    distinct_ids: list[str],
+    *,
+    from_date: str | None = None,
+    to_date: str | None = None
+) -> ActivityFeedResult:
+    """
+    Get the activity feed (event history) for specific users.
+
+    Args:
+        distinct_ids: List of user distinct_ids to query
+        from_date: Optional start date, format "YYYY-MM-DD"
+        to_date: Optional end date, format "YYYY-MM-DD"
+
+    Returns:
+        ActivityFeedResult containing chronological list of user events
+
+    Example:
+        result = ws.activity_feed(
+            distinct_ids=["user_123", "user_456"],
+            from_date="2024-01-01",
+            to_date="2024-01-31"
+        )
+        for event in result.events:
+            print(f"{event.time}: {event.event}")
+        df = result.df  # Full events as DataFrame
+    """
+
+def insights(self, bookmark_id: int) -> InsightsResult:
+    """
+    Query a saved Insights report by bookmark ID.
+
+    Use this to access pre-configured team reports programmatically.
+    The bookmark ID can be found in the URL of a saved Insights report.
+
+    Args:
+        bookmark_id: ID of the saved Insights report
+
+    Returns:
+        InsightsResult containing the report data and time series
+
+    Example:
+        result = ws.insights(bookmark_id=12345)
+        print(f"Report computed at: {result.computed_at}")
+        df = result.df  # Time series data as DataFrame
+    """
+
+def frequency(
+    self,
+    *,
+    from_date: str,
+    to_date: str,
+    unit: Literal["day", "week", "month"] = "day",
+    addiction_unit: Literal["hour", "day"] = "hour",
+    event: str | None = None,
+    where: str | None = None
+) -> FrequencyResult:
+    """
+    Analyze how frequently users perform an event within a time period.
+
+    This is useful for understanding user engagement depth and
+    identifying power users vs casual users.
+
+    Args:
+        from_date: Start date (inclusive), format "YYYY-MM-DD"
+        to_date: End date (inclusive), format "YYYY-MM-DD"
+        unit: Overall time period ("day", "week", "month")
+        addiction_unit: Granularity for frequency count ("hour", "day")
+        event: Optional specific event to analyze
+        where: Optional filter expression
+
+    Returns:
+        FrequencyResult containing frequency distribution data
+
+    Example:
+        result = ws.frequency(
+            from_date="2024-01-01",
+            to_date="2024-01-07",
+            unit="day",
+            addiction_unit="hour"
+        )
+        # Each date maps to array of user counts by frequency
+        # Index N = users who did event in N+1 time periods
+        for date, counts in result.data.items():
+            print(f"{date}: {counts[0]} users active in 1+ hours")
+    """
+
+def segmentation_numeric(
+    self,
+    event: str,
+    *,
+    from_date: str,
+    to_date: str,
+    on: str,
+    unit: Literal["hour", "day"] = "day",
+    where: str | None = None,
+    type: Literal["general", "unique", "average"] = "general"
+) -> NumericBucketResult:
+    """
+    Segment events by a numeric property, automatically bucketing into ranges.
+
+    Use this to analyze distributions of numeric values like purchase
+    amounts, session durations, or other continuous metrics.
+
+    Args:
+        event: Event name to analyze
+        from_date: Start date (inclusive), format "YYYY-MM-DD"
+        to_date: End date (inclusive), format "YYYY-MM-DD"
+        on: Numeric property expression (e.g., 'properties["amount"]')
+        unit: Time unit ("hour", "day")
+        where: Optional filter expression
+        type: Count type ("general", "unique", "average")
+
+    Returns:
+        NumericBucketResult with time series per numeric bucket
+
+    Example:
+        result = ws.segmentation_numeric(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            on='properties["amount"]'
+        )
+        # Series keyed by bucket ranges like "0 - 50", "50 - 100"
+        for bucket, series in result.series.items():
+            print(f"{bucket}: {sum(series.values())} events")
+    """
+
+def segmentation_sum(
+    self,
+    event: str,
+    *,
+    from_date: str,
+    to_date: str,
+    on: str,
+    unit: Literal["hour", "day"] = "day",
+    where: str | None = None
+) -> NumericSumResult:
+    """
+    Sum a numeric property's values for events per time unit.
+
+    Use this for revenue totals, quantity sums, or other additive metrics.
+
+    Args:
+        event: Event name to analyze
+        from_date: Start date (inclusive), format "YYYY-MM-DD"
+        to_date: End date (inclusive), format "YYYY-MM-DD"
+        on: Numeric property expression (e.g., 'properties["amount"]')
+        unit: Time unit ("hour", "day")
+        where: Optional filter expression
+
+    Returns:
+        NumericSumResult with sum values per time unit
+
+    Example:
+        result = ws.segmentation_sum(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            on='properties["amount"]'
+        )
+        for date, total in result.results.items():
+            print(f"{date}: ${total:,.2f}")
+    """
+
+def segmentation_average(
+    self,
+    event: str,
+    *,
+    from_date: str,
+    to_date: str,
+    on: str,
+    unit: Literal["hour", "day"] = "day",
+    where: str | None = None
+) -> NumericAverageResult:
+    """
+    Average a numeric property's values for events per time unit.
+
+    Use this for average order value, average session duration, etc.
+
+    Args:
+        event: Event name to analyze
+        from_date: Start date (inclusive), format "YYYY-MM-DD"
+        to_date: End date (inclusive), format "YYYY-MM-DD"
+        on: Numeric property expression (e.g., 'properties["amount"]')
+        unit: Time unit ("hour", "day")
+        where: Optional filter expression
+
+    Returns:
+        NumericAverageResult with average values per time unit
+
+    Example:
+        result = ws.segmentation_average(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            on='properties["amount"]'
+        )
+        for date, avg in result.results.items():
+            print(f"{date}: ${avg:.2f} avg order value")
+    """
 ```
 
 ---
@@ -1203,6 +1406,113 @@ class PropertyCountsResult:
     type: str                             # Count type used
     series: dict[str, dict[str, int]]     # {property_value: {date: count}}
     df: pd.DataFrame                      # Lazy-converted DataFrame
+```
+
+### UserEvent
+
+Returned as items in `ActivityFeedResult.events`.
+
+```python
+@dataclass(frozen=True)
+class UserEvent:
+    event: str              # Event name
+    time: datetime          # When the event occurred
+    properties: dict        # Event properties
+```
+
+### ActivityFeedResult
+
+Returned by `activity_feed()`.
+
+```python
+@dataclass(frozen=True)
+class ActivityFeedResult:
+    distinct_ids: list[str]     # User IDs that were queried
+    from_date: str | None       # Query start date
+    to_date: str | None         # Query end date
+    events: list[UserEvent]     # Chronological list of events
+    df: pd.DataFrame            # Lazy-converted DataFrame
+```
+
+### InsightsResult
+
+Returned by `insights()`.
+
+```python
+@dataclass(frozen=True)
+class InsightsResult:
+    bookmark_id: int                      # Insights report ID
+    computed_at: str                      # When the report was computed
+    from_date: str                        # Report start date
+    to_date: str                          # Report end date
+    headers: list[str]                    # Column headers
+    series: dict[str, dict[str, int]]     # {event: {date: count}}
+    df: pd.DataFrame                      # Lazy-converted DataFrame
+```
+
+### FrequencyResult
+
+Returned by `frequency()`.
+
+```python
+@dataclass(frozen=True)
+class FrequencyResult:
+    event: str | None               # Event analyzed (None = all events)
+    from_date: str                  # Query start date
+    to_date: str                    # Query end date
+    unit: str                       # Overall time period
+    addiction_unit: str             # Frequency granularity
+    data: dict[str, list[int]]      # {date: [count_at_1, count_at_2, ...]}
+    df: pd.DataFrame                # Lazy-converted DataFrame
+```
+
+### NumericBucketResult
+
+Returned by `segmentation_numeric()`.
+
+```python
+@dataclass(frozen=True)
+class NumericBucketResult:
+    event: str                            # Event analyzed
+    from_date: str                        # Query start date
+    to_date: str                          # Query end date
+    property_expr: str                    # Numeric property expression
+    unit: str                             # Time unit
+    series: dict[str, dict[str, int]]     # {bucket_range: {date: count}}
+    df: pd.DataFrame                      # Lazy-converted DataFrame
+```
+
+### NumericSumResult
+
+Returned by `segmentation_sum()`.
+
+```python
+@dataclass(frozen=True)
+class NumericSumResult:
+    event: str                    # Event analyzed
+    from_date: str                # Query start date
+    to_date: str                  # Query end date
+    property_expr: str            # Numeric property expression
+    unit: str                     # Time unit
+    results: dict[str, float]     # {date: sum_value}
+    computed_at: str | None       # When computed
+    df: pd.DataFrame              # Lazy-converted DataFrame
+```
+
+### NumericAverageResult
+
+Returned by `segmentation_average()`.
+
+```python
+@dataclass(frozen=True)
+class NumericAverageResult:
+    event: str                    # Event analyzed
+    from_date: str                # Query start date
+    to_date: str                  # Query end date
+    property_expr: str            # Numeric property expression
+    unit: str                     # Time unit
+    results: dict[str, float]     # {date: average_value}
+    df: pd.DataFrame              # Lazy-converted DataFrame
 ```
 
 ### WorkspaceInfo
@@ -1532,6 +1842,7 @@ ws.fetch_events(from_date="2024-01-01", to_date="2024-01-15")
 | 0.1.0 | December 2024 | Initial API specification |
 | 0.2.0 | December 2024 | Service account authentication model |
 | 0.3.0 | December 2024 | Discovery enhancements: funnels, cohorts, top events; event/property counts |
+| 0.4.0 | December 2024 | Query service enhancements: activity_feed, insights, frequency, segmentation_numeric, segmentation_sum, segmentation_average |
 
 ---
 

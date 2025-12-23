@@ -32,9 +32,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Install uv (fast Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-# Install Claude Code and GitHub Copilot CLI globally
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} @github/copilot
-
 # Set up command history persistence and Claude config directory
 ARG USERNAME=vscode
 RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
@@ -48,6 +45,20 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
     # Alias claude to always skip permissions in devcontainer
     && echo "alias claude='claude --dangerously-skip-permissions'" >> /home/${USERNAME}/.bashrc \
     && echo "alias claude='claude --dangerously-skip-permissions'" >> /home/${USERNAME}/.zshrc
+
+# Install Claude Code and GitHub Copilot CLI to user-owned npm prefix (enables auto-updates)
+RUN mkdir -p /home/${USERNAME}/.npm-global \
+    && chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/.npm-global \
+    && echo "export NPM_CONFIG_PREFIX=/home/${USERNAME}/.npm-global" >> /home/${USERNAME}/.bashrc \
+    && echo "export NPM_CONFIG_PREFIX=/home/${USERNAME}/.npm-global" >> /home/${USERNAME}/.zshrc \
+    && echo "export PATH=/home/${USERNAME}/.npm-global/bin:\$PATH" >> /home/${USERNAME}/.bashrc \
+    && echo "export PATH=/home/${USERNAME}/.npm-global/bin:\$PATH" >> /home/${USERNAME}/.zshrc
+
+USER ${USERNAME}
+ENV NPM_CONFIG_PREFIX=/home/vscode/.npm-global
+ENV PATH=/home/vscode/.npm-global/bin:${PATH}
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} @github/copilot
+USER root
 
 # Configure uv for the vscode user
 ENV UV_COMPILE_BYTECODE=1

@@ -1,0 +1,169 @@
+# Frequency (Addiction) API Contract
+# Mixpanel Query API: GET /api/query/retention/addiction
+
+endpoint:
+  path: /api/query/retention/addiction
+  method: GET
+  base_url: https://mixpanel.com/api/query
+
+parameters:
+  required:
+    from_date:
+      type: string
+      format: date
+      description: Start date (YYYY-MM-DD)
+      example: "2024-01-01"
+
+    to_date:
+      type: string
+      format: date
+      description: End date (YYYY-MM-DD)
+      example: "2024-01-31"
+
+    unit:
+      type: string
+      enum: ["day", "week", "month"]
+      description: Overall time period
+
+    addiction_unit:
+      type: string
+      enum: ["hour", "day"]
+      description: Measurement granularity
+
+  optional:
+    event:
+      type: string
+      description: Event name to analyze (omit for all events)
+      example: "Purchase"
+
+    where:
+      type: string
+      description: Filter expression
+      example: 'properties["country"] == "US"'
+
+    on:
+      type: string
+      description: Property to segment by
+      example: 'properties["plan"]'
+
+    limit:
+      type: integer
+      description: Maximum segmentation values
+      example: 10
+
+response:
+  success:
+    status: 200
+    content_type: application/json
+    schema:
+      data:
+        type: object
+        additionalProperties:
+          type: array
+          items:
+            type: integer
+        description: |
+          Frequency distribution by date.
+          Array index N = users active in N+1 time periods.
+        example:
+          "2024-01-01": [305, 107, 60, 41, 32, 20, 12, 7, 4, 3]
+          "2024-01-02": [495, 204, 117, 77, 53, 36, 26, 20, 12, 7]
+
+  errors:
+    - status: 401
+      description: Invalid credentials
+      exception: AuthenticationError
+
+    - status: 400
+      description: Invalid parameters
+      exception: QueryError
+
+    - status: 429
+      description: Rate limit exceeded
+      exception: RateLimitError
+
+# Library Method Contract
+
+library_method:
+  module: mixpanel_data._internal.services.live_query
+  class: LiveQueryService
+  method: frequency
+
+  signature: |
+    def frequency(
+        self,
+        from_date: str,
+        to_date: str,
+        *,
+        unit: Literal["day", "week", "month"] = "day",
+        addiction_unit: Literal["hour", "day"] = "hour",
+        event: str | None = None,
+        where: str | None = None,
+    ) -> FrequencyResult
+
+  parameters:
+    - name: from_date
+      type: str
+      required: true
+      description: Start date (YYYY-MM-DD)
+
+    - name: to_date
+      type: str
+      required: true
+      description: End date (YYYY-MM-DD)
+
+    - name: unit
+      type: Literal["day", "week", "month"]
+      required: false
+      default: "day"
+      description: Overall time period
+
+    - name: addiction_unit
+      type: Literal["hour", "day"]
+      required: false
+      default: "hour"
+      description: Measurement granularity
+
+    - name: event
+      type: str | None
+      required: false
+      default: null
+      description: Event to analyze (None = all)
+
+    - name: where
+      type: str | None
+      required: false
+      default: null
+      description: Filter expression
+
+  returns:
+    type: FrequencyResult
+    description: Frequency distribution arrays with lazy DataFrame conversion
+
+  raises:
+    - AuthenticationError
+    - QueryError
+    - RateLimitError
+
+api_client_method:
+  module: mixpanel_data._internal.api_client
+  class: MixpanelAPIClient
+  method: frequency
+
+  signature: |
+    def frequency(
+        self,
+        from_date: str,
+        to_date: str,
+        unit: str,
+        addiction_unit: str,
+        *,
+        event: str | None = None,
+        where: str | None = None,
+        on: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]
+
+  notes:
+    - Returns raw API response with 'data' key
+    - Array interpretation: index N = users in N+1 periods

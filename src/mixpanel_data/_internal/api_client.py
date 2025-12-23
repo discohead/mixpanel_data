@@ -1024,3 +1024,238 @@ class MixpanelAPIClient:
         if isinstance(response, list):
             return response
         return []
+
+    # =========================================================================
+    # Phase 008: Query Service Enhancements
+    # =========================================================================
+
+    def activity_feed(
+        self,
+        distinct_ids: list[str],
+        *,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]:
+        """Query activity feed for specific users.
+
+        Args:
+            distinct_ids: List of user identifiers to query.
+            from_date: Optional start date (YYYY-MM-DD).
+            to_date: Optional end date (YYYY-MM-DD).
+
+        Returns:
+            Raw API response with events under results.events.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid parameters.
+            RateLimitError: Rate limit exceeded.
+        """
+        url = self._build_url("query", "/stream/query")
+        params: dict[str, Any] = {
+            "distinct_ids": json.dumps(distinct_ids),
+        }
+        if from_date:
+            params["from_date"] = from_date
+        if to_date:
+            params["to_date"] = to_date
+        result: dict[str, Any] = self._request("GET", url, params=params)
+        return result
+
+    def insights(
+        self,
+        bookmark_id: int,
+    ) -> dict[str, Any]:
+        """Query a saved Insights report.
+
+        Args:
+            bookmark_id: Saved report identifier (from Mixpanel URL).
+
+        Returns:
+            Raw API response with time-series data and metadata.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid bookmark_id or report not found.
+            RateLimitError: Rate limit exceeded.
+        """
+        url = self._build_url("query", "/insights")
+        params: dict[str, Any] = {"bookmark_id": bookmark_id}
+        result: dict[str, Any] = self._request("GET", url, params=params)
+        return result
+
+    def frequency(
+        self,
+        from_date: str,
+        to_date: str,
+        unit: str,
+        addiction_unit: str,
+        *,
+        event: str | None = None,
+        where: str | None = None,
+        on: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Query event frequency distribution (addiction analysis).
+
+        Args:
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            unit: Overall time period ("day", "week", "month").
+            addiction_unit: Measurement granularity ("hour", "day").
+            event: Optional event name to filter.
+            where: Optional filter expression.
+            on: Optional property to segment by.
+            limit: Optional maximum segmentation values.
+
+        Returns:
+            Raw API response with frequency arrays in data key.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid parameters.
+            RateLimitError: Rate limit exceeded.
+        """
+        url = self._build_url("query", "/retention/addiction")
+        params: dict[str, Any] = {
+            "from_date": from_date,
+            "to_date": to_date,
+            "unit": unit,
+            "addiction_unit": addiction_unit,
+        }
+        if event:
+            params["event"] = event
+        if where:
+            params["where"] = where
+        if on:
+            params["on"] = on
+        if limit is not None:
+            params["limit"] = limit
+        result: dict[str, Any] = self._request("GET", url, params=params)
+        return result
+
+    def segmentation_numeric(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        on: str,
+        *,
+        unit: str = "day",
+        where: str | None = None,
+        type: str = "general",
+    ) -> dict[str, Any]:
+        """Query events bucketed by numeric property ranges.
+
+        Args:
+            event: Event name to analyze.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            on: Numeric property expression to bucket.
+            unit: Time aggregation unit ("hour", "day").
+            where: Optional filter expression.
+            type: Counting method ("general", "unique", "average").
+
+        Returns:
+            Raw API response with bucketed time-series in data.values.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid parameters or non-numeric property.
+            RateLimitError: Rate limit exceeded.
+        """
+        url = self._build_url("query", "/segmentation/numeric")
+        params: dict[str, Any] = {
+            "event": event,
+            "from_date": from_date,
+            "to_date": to_date,
+            "on": on,
+            "unit": unit,
+            "type": type,
+        }
+        if where:
+            params["where"] = where
+        result: dict[str, Any] = self._request("GET", url, params=params)
+        return result
+
+    def segmentation_sum(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        on: str,
+        *,
+        unit: str = "day",
+        where: str | None = None,
+    ) -> dict[str, Any]:
+        """Query sum of numeric property values.
+
+        Args:
+            event: Event name to analyze.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            on: Numeric property expression to sum.
+            unit: Time aggregation unit ("hour", "day").
+            where: Optional filter expression.
+
+        Returns:
+            Raw API response with sum values in results key.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid parameters or non-numeric property.
+            RateLimitError: Rate limit exceeded.
+        """
+        url = self._build_url("query", "/segmentation/sum")
+        params: dict[str, Any] = {
+            "event": event,
+            "from_date": from_date,
+            "to_date": to_date,
+            "on": on,
+            "unit": unit,
+        }
+        if where:
+            params["where"] = where
+        result: dict[str, Any] = self._request("GET", url, params=params)
+        return result
+
+    def segmentation_average(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        on: str,
+        *,
+        unit: str = "day",
+        where: str | None = None,
+    ) -> dict[str, Any]:
+        """Query average of numeric property values.
+
+        Args:
+            event: Event name to analyze.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            on: Numeric property expression to average.
+            unit: Time aggregation unit ("hour", "day").
+            where: Optional filter expression.
+
+        Returns:
+            Raw API response with average values in results key.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid parameters or non-numeric property.
+            RateLimitError: Rate limit exceeded.
+        """
+        url = self._build_url("query", "/segmentation/average")
+        params: dict[str, Any] = {
+            "event": event,
+            "from_date": from_date,
+            "to_date": to_date,
+            "on": on,
+            "unit": unit,
+        }
+        if where:
+            params["where"] = where
+        result: dict[str, Any] = self._request("GET", url, params=params)
+        return result

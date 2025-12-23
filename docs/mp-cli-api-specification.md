@@ -1410,6 +1410,431 @@ Similar to `mp segmentation --on <property>`, but returns data in a format optim
 
 ---
 
+### mp activity-feed
+
+Get the activity feed (event history) for specific users.
+
+**Syntax**
+```
+mp activity-feed --users <list> [options]
+```
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--users <list>` | `-u` | Comma-separated distinct_ids (required) |
+| `--from <date>` | | Start date (optional). Format: YYYY-MM-DD |
+| `--to <date>` | | End date (optional). Format: YYYY-MM-DD |
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `csv` |
+
+**Examples**
+```bash
+# Get activity for a single user
+mp activity-feed --users user_123
+
+# Get activity for multiple users with date range
+mp activity-feed \
+  --users "user_123,user_456" \
+  --from 2024-01-01 \
+  --to 2024-01-31
+
+# Output:
+# {
+#   "distinct_ids": ["user_123", "user_456"],
+#   "from_date": "2024-01-01",
+#   "to_date": "2024-01-31",
+#   "events": [
+#     {"event": "Login", "time": "2024-01-15T10:30:00Z", "distinct_id": "user_123", ...},
+#     {"event": "Purchase", "time": "2024-01-15T10:35:00Z", "distinct_id": "user_123", ...}
+#   ]
+# }
+
+# Table format
+mp activity-feed --users user_123 --format table
+
+# Output:
+#   TIME                  EVENT         DISTINCT_ID
+#   2024-01-15 10:30:00   Login         user_123
+#   2024-01-15 10:35:00   Purchase      user_123
+```
+
+**Notes**
+
+Use this command to view a user's complete activity history, debug user-specific issues, or build user timelines for customer success.
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+| 2 | Invalid date format |
+
+---
+
+### mp insights
+
+Query a saved Insights report by bookmark ID.
+
+**Syntax**
+```
+mp insights <bookmark_id> [options]
+```
+
+**Arguments**
+| Argument | Description |
+|----------|-------------|
+| `bookmark_id` | ID of the saved Insights report (from Mixpanel URL) |
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `csv` |
+
+**Examples**
+```bash
+# Query a saved Insights report
+mp insights 12345
+
+# Output:
+# {
+#   "bookmark_id": 12345,
+#   "computed_at": "2024-01-15T12:00:00Z",
+#   "from_date": "2024-01-01",
+#   "to_date": "2024-01-14",
+#   "headers": ["$event"],
+#   "series": {
+#     "Login": {"2024-01-01": 500, "2024-01-02": 520, ...},
+#     "Purchase": {"2024-01-01": 150, "2024-01-02": 165, ...}
+#   }
+# }
+
+# Table format
+mp insights 12345 --format table
+```
+
+**Notes**
+
+Use this command to access pre-configured team reports programmatically. The bookmark ID can be found in the URL of a saved Insights report in the Mixpanel UI.
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+| 2 | Bookmark not found |
+
+---
+
+### mp frequency
+
+Analyze how frequently users perform an event within a time period.
+
+**Syntax**
+```
+mp frequency --from <date> --to <date> [options]
+```
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--from <date>` | | Start date, inclusive (required). Format: YYYY-MM-DD |
+| `--to <date>` | | End date, inclusive (required). Format: YYYY-MM-DD |
+| `--unit <unit>` | `-u` | Overall period: `day` (default), `week`, `month` |
+| `--addiction-unit <unit>` | `-a` | Granularity: `hour` (default), `day` |
+| `--event <event>` | `-e` | Event name to analyze (optional) |
+| `--where <expr>` | `-w` | Filter expression (optional) |
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `csv` |
+
+**Examples**
+```bash
+# Analyze daily event frequency by hour
+mp frequency \
+  --from 2024-01-01 \
+  --to 2024-01-07 \
+  --unit day \
+  --addiction-unit hour
+
+# Output:
+# {
+#   "event": null,
+#   "from_date": "2024-01-01",
+#   "to_date": "2024-01-07",
+#   "unit": "day",
+#   "addiction_unit": "hour",
+#   "data": {
+#     "2024-01-01": [305, 107, 60, 41, 32, 20, 12, 7, 4, 3, ...],
+#     "2024-01-02": [495, 204, 117, 77, 53, 36, 26, 20, 12, 7, ...]
+#   }
+# }
+
+# Frequency for specific event
+mp frequency \
+  --from 2024-01-01 \
+  --to 2024-01-31 \
+  --event Purchase \
+  --unit week \
+  --addiction-unit day
+```
+
+**Interpretation**
+
+Each date maps to an array of user counts:
+- Index N shows users who performed the event in at least N+1 time periods
+- Example: On 2024-01-01, 305 users did the event in at least 1 hour, 107 users did it in at least 2 hours
+
+**Use Cases**
+- Measure user engagement depth
+- Identify power users vs casual users
+- Understand usage patterns (daily active vs occasional)
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+| 2 | Invalid date format |
+| 3 | Invalid unit specified |
+| 4 | Invalid filter expression |
+
+---
+
+### mp segmentation-numeric
+
+Segment events by a numeric property, automatically placing values into ranges/buckets.
+
+**Syntax**
+```
+mp segmentation-numeric --event <event> --on <property> --from <date> --to <date> [options]
+```
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--event <event>` | `-e` | Event name to analyze (required) |
+| `--on <property>` | `-o` | Numeric property expression to bucket (required) |
+| `--from <date>` | | Start date, inclusive (required). Format: YYYY-MM-DD |
+| `--to <date>` | | End date, inclusive (required). Format: YYYY-MM-DD |
+| `--unit <unit>` | `-u` | Time unit: `hour`, `day` (default) |
+| `--type <type>` | `-t` | Count type: `general` (default), `unique`, `average` |
+| `--where <expr>` | `-w` | Filter expression (optional) |
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `csv` |
+
+**Examples**
+```bash
+# Bucket purchases by amount
+mp segmentation-numeric \
+  --event Purchase \
+  --on 'properties["amount"]' \
+  --from 2024-01-01 \
+  --to 2024-01-31
+
+# Output:
+# {
+#   "event": "Purchase",
+#   "from_date": "2024-01-01",
+#   "to_date": "2024-01-31",
+#   "property_expr": "properties[\"amount\"]",
+#   "unit": "day",
+#   "series": {
+#     "0 - 50": {"2024-01-01": 100, "2024-01-02": 110, ...},
+#     "50 - 100": {"2024-01-01": 75, "2024-01-02": 80, ...},
+#     "100 - 200": {"2024-01-01": 45, "2024-01-02": 50, ...}
+#   }
+# }
+
+# Bucket by session duration
+mp segmentation-numeric \
+  --event "Session End" \
+  --on 'properties["duration_seconds"]' \
+  --from 2024-01-01 \
+  --to 2024-01-07 \
+  --type unique
+```
+
+**Use Cases**
+- Analyze purchase amount distributions
+- Segment users by session duration ranges
+- Understand numeric property distributions
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+| 2 | Invalid date format |
+| 3 | Event not found |
+| 4 | Invalid property expression |
+| 5 | Invalid filter expression |
+
+---
+
+### mp segmentation-sum
+
+Sum a numeric property's values for events per time unit.
+
+**Syntax**
+```
+mp segmentation-sum --event <event> --on <property> --from <date> --to <date> [options]
+```
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--event <event>` | `-e` | Event name to analyze (required) |
+| `--on <property>` | `-o` | Numeric expression to sum (required) |
+| `--from <date>` | | Start date, inclusive (required). Format: YYYY-MM-DD |
+| `--to <date>` | | End date, inclusive (required). Format: YYYY-MM-DD |
+| `--unit <unit>` | `-u` | Time unit: `hour`, `day` (default) |
+| `--where <expr>` | `-w` | Filter expression (optional) |
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `csv` |
+
+**Examples**
+```bash
+# Calculate daily revenue totals
+mp segmentation-sum \
+  --event Purchase \
+  --on 'properties["amount"]' \
+  --from 2024-01-01 \
+  --to 2024-01-31
+
+# Output:
+# {
+#   "event": "Purchase",
+#   "from_date": "2024-01-01",
+#   "to_date": "2024-01-31",
+#   "property_expr": "properties[\"amount\"]",
+#   "unit": "day",
+#   "results": {
+#     "2024-01-01": 15234.50,
+#     "2024-01-02": 18456.75,
+#     "2024-01-03": 12890.25,
+#     ...
+#   },
+#   "computed_at": "2024-01-31T12:00:00Z"
+# }
+
+# Sum items purchased per day
+mp segmentation-sum \
+  --event Purchase \
+  --on 'properties["quantity"]' \
+  --from 2024-01-01 \
+  --to 2024-01-07
+
+# Table format
+mp segmentation-sum \
+  --event Purchase \
+  --on 'properties["amount"]' \
+  --from 2024-01-01 \
+  --to 2024-01-07 \
+  --format table
+
+# Output:
+#   DATE          SUM
+#   2024-01-01    15,234.50
+#   2024-01-02    18,456.75
+#   2024-01-03    12,890.25
+```
+
+**Use Cases**
+- Calculate daily revenue totals
+- Sum items purchased per day
+- Aggregate numeric metrics over time
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+| 2 | Invalid date format |
+| 3 | Event not found |
+| 4 | Invalid property expression |
+| 5 | Invalid filter expression |
+
+---
+
+### mp segmentation-average
+
+Average a numeric property's values for events per time unit.
+
+**Syntax**
+```
+mp segmentation-average --event <event> --on <property> --from <date> --to <date> [options]
+```
+
+**Options**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--event <event>` | `-e` | Event name to analyze (required) |
+| `--on <property>` | `-o` | Numeric expression to average (required) |
+| `--from <date>` | | Start date, inclusive (required). Format: YYYY-MM-DD |
+| `--to <date>` | | End date, inclusive (required). Format: YYYY-MM-DD |
+| `--unit <unit>` | `-u` | Time unit: `hour`, `day` (default) |
+| `--where <expr>` | `-w` | Filter expression (optional) |
+| `--format <format>` | `-f` | Output format: `json` (default), `table`, `csv` |
+
+**Examples**
+```bash
+# Calculate average order value per day
+mp segmentation-average \
+  --event Purchase \
+  --on 'properties["amount"]' \
+  --from 2024-01-01 \
+  --to 2024-01-31
+
+# Output:
+# {
+#   "event": "Purchase",
+#   "from_date": "2024-01-01",
+#   "to_date": "2024-01-31",
+#   "property_expr": "properties[\"amount\"]",
+#   "unit": "day",
+#   "results": {
+#     "2024-01-01": 85.45,
+#     "2024-01-02": 92.30,
+#     "2024-01-03": 78.15,
+#     ...
+#   }
+# }
+
+# Track average session duration trends
+mp segmentation-average \
+  --event "Session End" \
+  --on 'properties["duration_seconds"]' \
+  --from 2024-01-01 \
+  --to 2024-01-07
+
+# Table format
+mp segmentation-average \
+  --event Purchase \
+  --on 'properties["amount"]' \
+  --from 2024-01-01 \
+  --to 2024-01-07 \
+  --format table
+
+# Output:
+#   DATE          AVERAGE
+#   2024-01-01    85.45
+#   2024-01-02    92.30
+#   2024-01-03    78.15
+```
+
+**Use Cases**
+- Calculate average order value per day
+- Track average session duration trends
+- Analyze average engagement metrics
+
+**Exit Codes**
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Authentication error |
+| 2 | Invalid date format |
+| 3 | Event not found |
+| 4 | Invalid property expression |
+| 5 | Invalid filter expression |
+
+---
+
 ## Environment Variables
 
 The CLI respects these environment variables, which take precedence over the config file.
@@ -1599,6 +2024,7 @@ mp sql "
 |---------|------|-------|
 | 0.1.0 | December 2024 | Initial CLI specification |
 | 0.2.0 | December 2024 | Discovery enhancements: funnels, cohorts, top-events; event-counts, property-counts |
+| 0.3.0 | December 2024 | Query service enhancements: activity-feed, insights, frequency, segmentation-numeric, segmentation-sum, segmentation-average |
 
 ---
 

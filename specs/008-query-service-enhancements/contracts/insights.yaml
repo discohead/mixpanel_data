@@ -1,0 +1,110 @@
+# Insights API Contract
+# Mixpanel Query API: GET /api/query/insights
+
+endpoint:
+  path: /api/query/insights
+  method: GET
+  base_url: https://mixpanel.com/api/query
+
+parameters:
+  required:
+    bookmark_id:
+      type: integer
+      description: ID of the saved Insights report (from Mixpanel URL)
+      example: 12345678
+
+response:
+  success:
+    status: 200
+    content_type: application/json
+    schema:
+      computed_at:
+        type: string
+        format: iso8601
+        description: When report was computed
+        example: "2020-09-21T16:35:41.252314+00:00"
+
+      date_range:
+        type: object
+        properties:
+          from_date:
+            type: string
+            format: iso8601
+          to_date:
+            type: string
+            format: iso8601
+
+      headers:
+        type: array
+        items:
+          type: string
+        description: Report column headers
+        example: ["$event"]
+
+      series:
+        type: object
+        additionalProperties:
+          type: object
+          additionalProperties:
+            type: integer
+        description: Time-series data by event name
+        example:
+          "Logged in":
+            "2020-08-31T00:00:00-07:00": 9852
+            "2020-09-07T00:00:00-07:00": 4325
+
+  errors:
+    - status: 401
+      description: Invalid credentials
+      exception: AuthenticationError
+
+    - status: 400
+      description: Invalid bookmark_id or report not found
+      exception: QueryError
+
+    - status: 429
+      description: Rate limit exceeded
+      exception: RateLimitError
+
+# Library Method Contract
+
+library_method:
+  module: mixpanel_data._internal.services.live_query
+  class: LiveQueryService
+  method: insights
+
+  signature: |
+    def insights(
+        self,
+        bookmark_id: int,
+    ) -> InsightsResult
+
+  parameters:
+    - name: bookmark_id
+      type: int
+      required: true
+      description: Saved Insights report ID
+
+  returns:
+    type: InsightsResult
+    description: Saved report data with time-series and metadata
+
+  raises:
+    - AuthenticationError
+    - QueryError
+    - RateLimitError
+
+api_client_method:
+  module: mixpanel_data._internal.api_client
+  class: MixpanelAPIClient
+  method: insights
+
+  signature: |
+    def insights(
+        self,
+        bookmark_id: int,
+    ) -> dict[str, Any]
+
+  notes:
+    - Simple single-parameter endpoint
+    - Returns raw API response dictionary

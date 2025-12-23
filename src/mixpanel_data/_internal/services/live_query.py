@@ -9,17 +9,25 @@ analytics data changes frequently and queries should return fresh data.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from mixpanel_data.types import (
+    ActivityFeedResult,
     CohortInfo,
     EventCountsResult,
+    FrequencyResult,
     FunnelResult,
     FunnelStep,
+    InsightsResult,
     JQLResult,
+    NumericAverageResult,
+    NumericBucketResult,
+    NumericSumResult,
     PropertyCountsResult,
     RetentionResult,
     SegmentationResult,
+    UserEvent,
 )
 
 if TYPE_CHECKING:
@@ -524,3 +532,510 @@ class LiveQueryService:
             type=type,
             series=raw.get("data", {}).get("values", {}),
         )
+
+    # =========================================================================
+    # Phase 008: Query Service Enhancements
+    # =========================================================================
+
+    def activity_feed(
+        self,
+        distinct_ids: list[str],
+        *,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> ActivityFeedResult:
+        """Query activity feed for specific users.
+
+        Retrieves chronological event history for one or more users,
+        returning a typed result with lazy DataFrame conversion.
+
+        Args:
+            distinct_ids: User identifiers to query.
+            from_date: Optional start date (YYYY-MM-DD).
+            to_date: Optional end date (YYYY-MM-DD).
+
+        Returns:
+            ActivityFeedResult with user events and lazy DataFrame.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid parameters.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            >>> result = live_query.activity_feed(
+            ...     distinct_ids=["user_123", "user_456"],
+            ...     from_date="2024-01-01",
+            ...     to_date="2024-01-31",
+            ... )
+            >>> print(f"Found {len(result.events)} events")
+            >>> print(result.df.head())
+        """
+        raw = self._api_client.activity_feed(
+            distinct_ids=distinct_ids,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        return _transform_activity_feed(raw, distinct_ids, from_date, to_date)
+
+    def insights(
+        self,
+        bookmark_id: int,
+    ) -> InsightsResult:
+        """Query a saved Insights report.
+
+        Retrieves data from a pre-configured Insights report by its
+        bookmark ID, returning a typed result with lazy DataFrame conversion.
+
+        Args:
+            bookmark_id: Saved report identifier (from Mixpanel URL).
+
+        Returns:
+            InsightsResult with time-series data and metadata.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid bookmark_id or report not found.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            >>> result = live_query.insights(bookmark_id=12345678)
+            >>> print(f"Report computed at: {result.computed_at}")
+            >>> print(result.df.pivot(index='date', columns='event', values='count'))
+        """
+        raw = self._api_client.insights(bookmark_id=bookmark_id)
+        return _transform_insights(raw, bookmark_id)
+
+    def frequency(
+        self,
+        from_date: str,
+        to_date: str,
+        *,
+        unit: Literal["day", "week", "month"] = "day",
+        addiction_unit: Literal["hour", "day"] = "hour",
+        event: str | None = None,
+        where: str | None = None,
+    ) -> FrequencyResult:
+        """Query event frequency distribution (addiction analysis).
+
+        Analyzes how frequently users perform events, returning arrays
+        showing the number of users active in N time periods.
+
+        Args:
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            unit: Overall time period. Default: "day".
+            addiction_unit: Measurement granularity. Default: "hour".
+            event: Optional event name to filter (None = all events).
+            where: Optional filter expression.
+
+        Returns:
+            FrequencyResult with frequency arrays and lazy DataFrame.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid parameters.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            >>> result = live_query.frequency(
+            ...     from_date="2024-01-01",
+            ...     to_date="2024-01-07",
+            ...     event="App Open",
+            ... )
+            >>> # counts[0] = users active 1+ hours, counts[1] = 2+ hours, etc.
+            >>> for date, counts in result.data.items():
+            ...     print(f"{date}: {counts[:3]}")
+        """
+        raw = self._api_client.frequency(
+            from_date=from_date,
+            to_date=to_date,
+            unit=unit,
+            addiction_unit=addiction_unit,
+            event=event,
+            where=where,
+        )
+        return _transform_frequency(
+            raw, event, from_date, to_date, unit, addiction_unit
+        )
+
+    def segmentation_numeric(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        on: str,
+        *,
+        unit: Literal["hour", "day"] = "day",
+        where: str | None = None,
+        type: Literal["general", "unique", "average"] = "general",
+    ) -> NumericBucketResult:
+        """Query events bucketed by numeric property ranges.
+
+        Segments events into automatically determined numeric ranges,
+        returning time-series data for each bucket.
+
+        Args:
+            event: Event name to analyze.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            on: Numeric property expression to bucket.
+            unit: Time aggregation unit. Default: "day".
+            where: Optional filter expression.
+            type: Counting method. Default: "general".
+
+        Returns:
+            NumericBucketResult with bucketed time-series and lazy DataFrame.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid parameters or non-numeric property.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            >>> result = live_query.segmentation_numeric(
+            ...     event="Purchase",
+            ...     from_date="2024-01-01",
+            ...     to_date="2024-01-31",
+            ...     on='properties["amount"]',
+            ... )
+            >>> for bucket, series in result.series.items():
+            ...     print(f"{bucket}: {sum(series.values())} events")
+        """
+        raw = self._api_client.segmentation_numeric(
+            event=event,
+            from_date=from_date,
+            to_date=to_date,
+            on=on,
+            unit=unit,
+            where=where,
+            type=type,
+        )
+        return _transform_numeric_bucket(raw, event, from_date, to_date, on, unit)
+
+    def segmentation_sum(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        on: str,
+        *,
+        unit: Literal["hour", "day"] = "day",
+        where: str | None = None,
+    ) -> NumericSumResult:
+        """Query sum of numeric property values.
+
+        Calculates daily or hourly sum totals for a numeric property,
+        returning time-series data with lazy DataFrame conversion.
+
+        Args:
+            event: Event name to analyze.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            on: Numeric property expression to sum.
+            unit: Time aggregation unit. Default: "day".
+            where: Optional filter expression.
+
+        Returns:
+            NumericSumResult with sum values and lazy DataFrame.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid parameters or non-numeric property.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            >>> result = live_query.segmentation_sum(
+            ...     event="Purchase",
+            ...     from_date="2024-01-01",
+            ...     to_date="2024-01-31",
+            ...     on='properties["amount"]',
+            ... )
+            >>> total = sum(result.results.values())
+            >>> print(f"Total revenue: ${total:,.2f}")
+        """
+        raw = self._api_client.segmentation_sum(
+            event=event,
+            from_date=from_date,
+            to_date=to_date,
+            on=on,
+            unit=unit,
+            where=where,
+        )
+        return _transform_numeric_sum(raw, event, from_date, to_date, on, unit)
+
+    def segmentation_average(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        on: str,
+        *,
+        unit: Literal["hour", "day"] = "day",
+        where: str | None = None,
+    ) -> NumericAverageResult:
+        """Query average of numeric property values.
+
+        Calculates daily or hourly average values for a numeric property,
+        returning time-series data with lazy DataFrame conversion.
+
+        Args:
+            event: Event name to analyze.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            on: Numeric property expression to average.
+            unit: Time aggregation unit. Default: "day".
+            where: Optional filter expression.
+
+        Returns:
+            NumericAverageResult with average values and lazy DataFrame.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid parameters or non-numeric property.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            >>> result = live_query.segmentation_average(
+            ...     event="Purchase",
+            ...     from_date="2024-01-01",
+            ...     to_date="2024-01-31",
+            ...     on='properties["amount"]',
+            ... )
+            >>> avg = sum(result.results.values()) / len(result.results)
+            >>> print(f"Average order value: ${avg:.2f}")
+        """
+        raw = self._api_client.segmentation_average(
+            event=event,
+            from_date=from_date,
+            to_date=to_date,
+            on=on,
+            unit=unit,
+            where=where,
+        )
+        return _transform_numeric_average(raw, event, from_date, to_date, on, unit)
+
+
+# =============================================================================
+# Phase 008: Transformation Functions
+# =============================================================================
+
+
+def _transform_activity_feed(
+    raw: dict[str, Any],
+    distinct_ids: list[str],
+    from_date: str | None,
+    to_date: str | None,
+) -> ActivityFeedResult:
+    """Transform raw activity feed API response into ActivityFeedResult.
+
+    Converts Unix timestamps to datetime objects and builds UserEvent list.
+
+    Args:
+        raw: Raw API response dictionary.
+        distinct_ids: Queried user identifiers.
+        from_date: Query start date.
+        to_date: Query end date.
+
+    Returns:
+        Typed ActivityFeedResult with chronological events.
+    """
+    results = raw.get("results", {})
+    raw_events = results.get("events", [])
+
+    events: list[UserEvent] = []
+    for event_data in raw_events:
+        event_name = event_data.get("event", "")
+        props = event_data.get("properties", {})
+
+        # Convert Unix timestamp to datetime
+        # Mixpanel events should always have a time field (server-side if not client-side).
+        # Missing timestamps indicate API format changes or data corruption.
+        timestamp = props.get("time")
+        if timestamp is None:
+            raise ValueError(
+                f"Event missing required 'time' field: {event_data.get('event', 'unknown')}"
+            )
+        event_time = datetime.fromtimestamp(timestamp, tz=UTC)
+
+        events.append(
+            UserEvent(
+                event=event_name,
+                time=event_time,
+                properties=props,
+            )
+        )
+
+    return ActivityFeedResult(
+        distinct_ids=distinct_ids,
+        from_date=from_date,
+        to_date=to_date,
+        events=events,
+    )
+
+
+def _transform_insights(
+    raw: dict[str, Any],
+    bookmark_id: int,
+) -> InsightsResult:
+    """Transform raw insights API response into InsightsResult.
+
+    Extracts date range and time-series data from the response.
+
+    Args:
+        raw: Raw API response dictionary.
+        bookmark_id: Saved report identifier.
+
+    Returns:
+        Typed InsightsResult with metadata and time-series.
+    """
+    computed_at = raw.get("computed_at", "")
+    date_range = raw.get("date_range", {})
+    from_date = date_range.get("from_date", "")
+    to_date = date_range.get("to_date", "")
+    headers = raw.get("headers", [])
+    series = raw.get("series", {})
+
+    return InsightsResult(
+        bookmark_id=bookmark_id,
+        computed_at=computed_at,
+        from_date=from_date,
+        to_date=to_date,
+        headers=headers,
+        series=series,
+    )
+
+
+def _transform_frequency(
+    raw: dict[str, Any],
+    event: str | None,
+    from_date: str,
+    to_date: str,
+    unit: str,
+    addiction_unit: str,
+) -> FrequencyResult:
+    """Transform raw frequency API response into FrequencyResult.
+
+    Args:
+        raw: Raw API response dictionary.
+        event: Filtered event name.
+        from_date: Query start date.
+        to_date: Query end date.
+        unit: Overall time period.
+        addiction_unit: Measurement granularity.
+
+    Returns:
+        Typed FrequencyResult with frequency arrays.
+    """
+    data = raw.get("data", {})
+
+    return FrequencyResult(
+        event=event,
+        from_date=from_date,
+        to_date=to_date,
+        unit=unit,  # type: ignore[arg-type]
+        addiction_unit=addiction_unit,  # type: ignore[arg-type]
+        data=data,
+    )
+
+
+def _transform_numeric_bucket(
+    raw: dict[str, Any],
+    event: str,
+    from_date: str,
+    to_date: str,
+    on: str,
+    unit: str,
+) -> NumericBucketResult:
+    """Transform raw numeric segmentation API response into NumericBucketResult.
+
+    Args:
+        raw: Raw API response dictionary.
+        event: Event name queried.
+        from_date: Query start date.
+        to_date: Query end date.
+        on: Property expression used for bucketing.
+        unit: Time aggregation unit.
+
+    Returns:
+        Typed NumericBucketResult with bucketed time-series.
+    """
+    data = raw.get("data", {})
+    values = data.get("values", {})
+
+    return NumericBucketResult(
+        event=event,
+        from_date=from_date,
+        to_date=to_date,
+        property_expr=on,
+        unit=unit,  # type: ignore[arg-type]
+        series=values,
+    )
+
+
+def _transform_numeric_sum(
+    raw: dict[str, Any],
+    event: str,
+    from_date: str,
+    to_date: str,
+    on: str,
+    unit: str,
+) -> NumericSumResult:
+    """Transform raw sum API response into NumericSumResult.
+
+    Args:
+        raw: Raw API response dictionary.
+        event: Event name queried.
+        from_date: Query start date.
+        to_date: Query end date.
+        on: Property expression summed.
+        unit: Time aggregation unit.
+
+    Returns:
+        Typed NumericSumResult with sum values.
+    """
+    results = raw.get("results", {})
+    computed_at = raw.get("computed_at")
+
+    return NumericSumResult(
+        event=event,
+        from_date=from_date,
+        to_date=to_date,
+        property_expr=on,
+        unit=unit,  # type: ignore[arg-type]
+        results=results,
+        computed_at=computed_at,
+    )
+
+
+def _transform_numeric_average(
+    raw: dict[str, Any],
+    event: str,
+    from_date: str,
+    to_date: str,
+    on: str,
+    unit: str,
+) -> NumericAverageResult:
+    """Transform raw average API response into NumericAverageResult.
+
+    Args:
+        raw: Raw API response dictionary.
+        event: Event name queried.
+        from_date: Query start date.
+        to_date: Query end date.
+        on: Property expression averaged.
+        unit: Time aggregation unit.
+
+    Returns:
+        Typed NumericAverageResult with average values.
+    """
+    results = raw.get("results", {})
+
+    return NumericAverageResult(
+        event=event,
+        from_date=from_date,
+        to_date=to_date,
+        property_expr=on,
+        unit=unit,  # type: ignore[arg-type]
+        results=results,
+    )
