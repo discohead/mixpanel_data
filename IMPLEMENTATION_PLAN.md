@@ -79,7 +79,7 @@ This document defines the complete implementation roadmap for `mixpanel_data`, o
 │         ┌──────────────┐                                                    │
 │         │ 009-Workspace│                                                    │
 │         │ (Facade,     │                                                    │
-│         │  Lifecycle)  │                                                    │
+│         │  Lifecycle)  │ ✅                                                  │
 │         └──────┬───────┘                                                    │
 │                │                                                            │
 │                ▼                                                            │
@@ -112,8 +112,8 @@ This document defines the complete implementation roadmap for `mixpanel_data`, o
 | 006 | Live Queries | LiveQueryService, Segmentation, Funnels, Retention | ✅ Complete | `006-live-query-service` |
 | 007 | Discovery Enhancements | Funnels, Cohorts, Top Events, Event/Property Counts | ✅ Complete | `007-discovery-enhancements` |
 | 008 | Query Service Enhancements | Activity Feed, Insights, Frequency, Numeric Aggregations | ✅ Complete | `008-query-service-enhancements` |
-| 009 | Workspace Facade | Workspace class, Lifecycle Management | ⏳ Next | `009-workspace` |
-| 010 | CLI Application | Typer app, Commands, Formatters | ⏳ Pending | `010-cli` |
+| 009 | Workspace Facade | Workspace class, Lifecycle Management | ✅ Complete | `009-workspace` |
+| 010 | CLI Application | Typer app, Commands, Formatters | ⏳ Next | `010-cli` |
 | 011 | Polish & Release | SKILL.md, Documentation, PyPI | ⏳ Pending | `011-polish` |
 
 ---
@@ -677,9 +677,9 @@ This phase extends the Live Query Service with 6 additional Mixpanel Query API e
 
 ---
 
-## Phase 009: Workspace Facade ⏳
+## Phase 009: Workspace Facade ✅
 
-**Status:** PENDING
+**Status:** COMPLETE
 **Branch:** `009-workspace`
 **Dependencies:** Phases 002-008 (all services)
 
@@ -687,11 +687,32 @@ This phase extends the Live Query Service with 6 additional Mixpanel Query API e
 
 The `Workspace` class is the primary entry point—a facade that orchestrates all services and provides the unified public API.
 
-### Components to Build
+### Delivered Components
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| Workspace | `src/mixpanel_data/workspace.py` | Facade class |
+| Workspace | `src/mixpanel_data/workspace.py` | Facade class with 40+ public methods |
+| WorkspaceInfo | `src/mixpanel_data/types.py` | Workspace metadata type |
+| Unit Tests | `tests/unit/test_workspace.py` | 45 unit tests with mocked services |
+| Integration Tests | `tests/integration/test_workspace_integration.py` | 6 integration tests with real DuckDB |
+
+### Key Deliverables
+
+- [x] Workspace facade class with dependency injection for all services
+- [x] Three construction modes: `__init__()`, `ephemeral()`, `open()`
+- [x] Discovery methods (7): events, properties, property_values, funnels, cohorts, top_events, clear_discovery_cache
+- [x] Fetching methods (2): fetch_events, fetch_profiles with Rich progress bars
+- [x] Local query methods (3): sql, sql_scalar, sql_rows
+- [x] Live query methods (12): segmentation, funnel, retention, jql, event_counts, property_counts, activity_feed, insights, frequency, segmentation_numeric, segmentation_sum, segmentation_average
+- [x] Introspection methods (3): info, tables, schema
+- [x] Table management methods (2): drop, drop_all
+- [x] Escape hatches (2): connection, api properties
+- [x] Context manager support with proper cleanup
+- [x] Credential resolution: env vars → named account → default account
+- [x] Query-only mode via `Workspace.open(path)` without credentials
+- [x] 51 tests (45 unit + 6 integration)
+- [x] mypy --strict passes
+- [x] ruff check passes
 
 ### Design Reference
 
@@ -791,82 +812,82 @@ class Workspace:
 ### Tasks (Estimated: 40-45)
 
 **Core Infrastructure:**
-- [ ] Create `Workspace` class with dependency injection
-- [ ] Implement credential resolution (env → named account → default account)
-- [ ] Implement service wiring (create API client, storage engine, services)
-- [ ] Implement `ephemeral()` classmethod as context manager
-- [ ] Implement `open()` classmethod for existing databases
-- [ ] Implement context manager protocol (`__enter__`, `__exit__`)
-- [ ] Implement `close()` method for resource cleanup
+- [x] Create `Workspace` class with dependency injection
+- [x] Implement credential resolution (env → named account → default account)
+- [x] Implement service wiring (create API client, storage engine, services)
+- [x] Implement `ephemeral()` classmethod as context manager
+- [x] Implement `open()` classmethod for existing databases
+- [x] Implement context manager protocol (`__enter__`, `__exit__`)
+- [x] Implement `close()` method for resource cleanup
 
 **Discovery Methods (7 methods):**
-- [ ] Delegate `events()` → DiscoveryService.list_events()
-- [ ] Delegate `properties()` → DiscoveryService.list_properties()
-- [ ] Delegate `property_values()` → DiscoveryService.list_property_values()
-- [ ] Delegate `funnels()` → DiscoveryService.list_funnels()
-- [ ] Delegate `cohorts()` → DiscoveryService.list_cohorts()
-- [ ] Delegate `top_events()` → DiscoveryService.list_top_events()
-- [ ] Delegate `clear_discovery_cache()` → DiscoveryService.clear_cache()
+- [x] Delegate `events()` → DiscoveryService.list_events()
+- [x] Delegate `properties()` → DiscoveryService.list_properties()
+- [x] Delegate `property_values()` → DiscoveryService.list_property_values()
+- [x] Delegate `funnels()` → DiscoveryService.list_funnels()
+- [x] Delegate `cohorts()` → DiscoveryService.list_cohorts()
+- [x] Delegate `top_events()` → DiscoveryService.list_top_events()
+- [x] Delegate `clear_discovery_cache()` → DiscoveryService.clear_cache()
 
 **Fetching Methods (2 methods):**
-- [ ] Delegate `fetch_events()` → FetcherService with progress bar wrapper
-- [ ] Delegate `fetch_profiles()` → FetcherService with progress bar wrapper
-- [ ] Implement progress bar callback using Rich
+- [x] Delegate `fetch_events()` → FetcherService with progress bar wrapper
+- [x] Delegate `fetch_profiles()` → FetcherService with progress bar wrapper
+- [x] Implement progress bar callback using Rich
 
 **Local Query Methods (3 methods):**
-- [ ] Delegate `sql()` → StorageEngine.execute_df()
-- [ ] Delegate `sql_scalar()` → StorageEngine.execute_scalar()
-- [ ] Delegate `sql_rows()` → StorageEngine.execute_rows()
+- [x] Delegate `sql()` → StorageEngine.execute_df()
+- [x] Delegate `sql_scalar()` → StorageEngine.execute_scalar()
+- [x] Delegate `sql_rows()` → StorageEngine.execute_rows()
 
 **Live Query Methods (12 methods):**
-- [ ] Delegate `segmentation()` → LiveQueryService
-- [ ] Delegate `funnel()` → LiveQueryService
-- [ ] Delegate `retention()` → LiveQueryService
-- [ ] Delegate `jql()` → LiveQueryService
-- [ ] Delegate `event_counts()` → LiveQueryService
-- [ ] Delegate `property_counts()` → LiveQueryService
-- [ ] Delegate `activity_feed()` → LiveQueryService
-- [ ] Delegate `insights()` → LiveQueryService
-- [ ] Delegate `frequency()` → LiveQueryService
-- [ ] Delegate `segmentation_numeric()` → LiveQueryService
-- [ ] Delegate `segmentation_sum()` → LiveQueryService
-- [ ] Delegate `segmentation_average()` → LiveQueryService
+- [x] Delegate `segmentation()` → LiveQueryService
+- [x] Delegate `funnel()` → LiveQueryService
+- [x] Delegate `retention()` → LiveQueryService
+- [x] Delegate `jql()` → LiveQueryService
+- [x] Delegate `event_counts()` → LiveQueryService
+- [x] Delegate `property_counts()` → LiveQueryService
+- [x] Delegate `activity_feed()` → LiveQueryService
+- [x] Delegate `insights()` → LiveQueryService
+- [x] Delegate `frequency()` → LiveQueryService
+- [x] Delegate `segmentation_numeric()` → LiveQueryService
+- [x] Delegate `segmentation_sum()` → LiveQueryService
+- [x] Delegate `segmentation_average()` → LiveQueryService
 
 **Introspection Methods (3 methods):**
-- [ ] Implement `info()` → returns WorkspaceInfo
-- [ ] Delegate `tables()` → StorageEngine.list_tables()
-- [ ] Delegate `schema()` → StorageEngine.get_schema()
+- [x] Implement `info()` → returns WorkspaceInfo
+- [x] Delegate `tables()` → StorageEngine.list_tables()
+- [x] Delegate `schema()` → StorageEngine.get_schema()
 
 **Table Management Methods (2 methods):**
-- [ ] Delegate `drop()` → StorageEngine.drop_table()
-- [ ] Implement `drop_all()` with optional type filter
+- [x] Delegate `drop()` → StorageEngine.drop_table()
+- [x] Implement `drop_all()` with optional type filter
 
 **Escape Hatches (2 properties):**
-- [ ] Implement `connection` property → StorageEngine.connection
-- [ ] Implement `api` property → MixpanelAPIClient
+- [x] Implement `connection` property → StorageEngine.connection
+- [x] Implement `api` property → MixpanelAPIClient
 
 **Package Integration:**
-- [ ] Update `__init__.py` with Workspace and WorkspaceInfo exports
-- [ ] Add re-exports for all result types used by Workspace
+- [x] Update `__init__.py` with Workspace and WorkspaceInfo exports
+- [x] Add re-exports for all result types used by Workspace
 
 **Testing:**
-- [ ] Unit tests for credential resolution
-- [ ] Unit tests for service delegation (mocked services)
-- [ ] Integration tests with real DuckDB
-- [ ] End-to-end workflow tests
-- [ ] Ephemeral workspace cleanup tests
+- [x] Unit tests for credential resolution
+- [x] Unit tests for service delegation (mocked services)
+- [x] Integration tests with real DuckDB
+- [x] End-to-end workflow tests
+- [x] Ephemeral workspace cleanup tests
 
 ### Success Criteria
 
-- [ ] Single Workspace object provides all functionality (30+ methods)
-- [ ] Credentials resolved once at construction, immutable thereafter
-- [ ] Context manager support for all workspace types
-- [ ] Ephemeral workspaces always cleaned up (even on exception)
-- [ ] All methods documented with docstrings and examples
-- [ ] Integration tests cover full fetch → query → cleanup workflows
-- [ ] mypy --strict passes
-- [ ] ruff check passes
-- [ ] 90%+ test coverage
+- [x] Single Workspace object provides all functionality (30+ methods)
+- [x] Credentials resolved once at construction, immutable thereafter
+- [x] Context manager support for all workspace types
+- [x] Ephemeral workspaces always cleaned up (even on exception)
+- [x] All methods documented with docstrings and examples
+- [x] Integration tests cover full fetch → query → cleanup workflows
+- [x] mypy --strict passes
+- [x] ruff check passes
+- [x] 90%+ test coverage
 
 ---
 
