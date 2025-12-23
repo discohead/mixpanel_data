@@ -9,7 +9,7 @@ analytics data changes frequently and queries should return fresh data.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from mixpanel_data.types import (
     CohortInfo,
@@ -412,8 +412,8 @@ class LiveQueryService:
         from_date: str,
         to_date: str,
         *,
-        type: str = "general",
-        unit: str = "day",
+        type: Literal["general", "unique", "average"] = "general",
+        unit: Literal["day", "week", "month"] = "day",
     ) -> EventCountsResult:
         """Query aggregate counts for multiple events over time.
 
@@ -455,8 +455,8 @@ class LiveQueryService:
             events=events,
             from_date=from_date,
             to_date=to_date,
-            unit=unit,  # type: ignore[arg-type]
-            type=type,  # type: ignore[arg-type]
+            unit=unit,
+            type=type,
             series=raw.get("data", {}).get("values", {}),
         )
 
@@ -467,8 +467,8 @@ class LiveQueryService:
         from_date: str,
         to_date: str,
         *,
-        type: str = "general",
-        unit: str = "day",
+        type: Literal["general", "unique", "average"] = "general",
+        unit: Literal["day", "week", "month"] = "day",
         values: list[str] | None = None,
         limit: int | None = None,
     ) -> PropertyCountsResult:
@@ -520,7 +520,7 @@ class LiveQueryService:
             property_name=property_name,
             from_date=from_date,
             to_date=to_date,
-            unit=unit,  # type: ignore[arg-type]
-            type=type,  # type: ignore[arg-type]
+            unit=unit,
+            type=type,
             series=raw.get("data", {}).get("values", {}),
         )
