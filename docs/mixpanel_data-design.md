@@ -389,12 +389,97 @@ class Workspace:
         _api_client: MixpanelAPIClient | None = None,
         _storage: StorageEngine | None = None,
     ): ...
-    
+
     @classmethod
     def ephemeral(cls, account: str | None = None, ...) -> ContextManager[Workspace]: ...
-    
+
     @classmethod
     def open(cls, path: str | Path) -> Workspace: ...
+
+    # Context manager protocol
+    def __enter__(self) -> Workspace: ...
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
+    def close(self) -> None: ...
+
+    # Discovery (delegates to DiscoveryService)
+    def events(self) -> list[str]: ...
+    def properties(self, event: str) -> list[str]: ...
+    def property_values(self, property_name: str, *, event: str | None = None,
+                        limit: int = 100) -> list[str]: ...
+    def funnels(self) -> list[FunnelInfo]: ...
+    def cohorts(self) -> list[SavedCohort]: ...
+    def top_events(self, *, type: Literal["general", "average", "unique"] = "general",
+                   limit: int | None = None) -> list[TopEvent]: ...
+    def clear_discovery_cache(self) -> None: ...
+
+    # Fetching (delegates to FetcherService)
+    def fetch_events(self, name: str = "events", *, from_date: str, to_date: str,
+                     events: list[str] | None = None, where: str | None = None,
+                     progress: bool = True) -> FetchResult: ...
+    def fetch_profiles(self, name: str = "profiles", *, where: str | None = None,
+                       progress: bool = True) -> FetchResult: ...
+
+    # Local Queries (delegates to StorageEngine)
+    def sql(self, query: str) -> pd.DataFrame: ...
+    def sql_scalar(self, query: str) -> Any: ...
+    def sql_rows(self, query: str) -> list[tuple]: ...
+
+    # Live Queries (delegates to LiveQueryService)
+    def segmentation(self, event: str, *, from_date: str, to_date: str,
+                     on: str | None = None,
+                     unit: Literal["day", "week", "month"] = "day",
+                     where: str | None = None) -> SegmentationResult: ...
+    def funnel(self, funnel_id: int, *, from_date: str, to_date: str,
+               unit: str | None = None, on: str | None = None) -> FunnelResult: ...
+    def retention(self, *, born_event: str, return_event: str, from_date: str,
+                  to_date: str, born_where: str | None = None,
+                  return_where: str | None = None, interval: int = 1,
+                  interval_count: int = 10,
+                  unit: Literal["day", "week", "month"] = "day") -> RetentionResult: ...
+    def jql(self, script: str, params: dict | None = None) -> JQLResult: ...
+    def event_counts(self, events: list[str], *, from_date: str, to_date: str,
+                     type: Literal["general", "unique", "average"] = "general",
+                     unit: Literal["day", "week", "month"] = "day") -> EventCountsResult: ...
+    def property_counts(self, event: str, property_name: str, *, from_date: str,
+                        to_date: str,
+                        type: Literal["general", "unique", "average"] = "general",
+                        unit: Literal["day", "week", "month"] = "day",
+                        values: list[str] | None = None,
+                        limit: int | None = None) -> PropertyCountsResult: ...
+    def activity_feed(self, distinct_ids: list[str], *, from_date: str | None = None,
+                      to_date: str | None = None) -> ActivityFeedResult: ...
+    def insights(self, bookmark_id: int) -> InsightsResult: ...
+    def frequency(self, *, from_date: str, to_date: str,
+                  unit: Literal["day", "week", "month"] = "day",
+                  addiction_unit: Literal["hour", "day"] = "hour",
+                  event: str | None = None,
+                  where: str | None = None) -> FrequencyResult: ...
+    def segmentation_numeric(self, event: str, *, from_date: str, to_date: str,
+                             on: str, unit: Literal["hour", "day"] = "day",
+                             where: str | None = None,
+                             type: Literal["general", "unique", "average"] = "general"
+                             ) -> NumericBucketResult: ...
+    def segmentation_sum(self, event: str, *, from_date: str, to_date: str,
+                         on: str, unit: Literal["hour", "day"] = "day",
+                         where: str | None = None) -> NumericSumResult: ...
+    def segmentation_average(self, event: str, *, from_date: str, to_date: str,
+                             on: str, unit: Literal["hour", "day"] = "day",
+                             where: str | None = None) -> NumericAverageResult: ...
+
+    # Introspection
+    def info(self) -> WorkspaceInfo: ...
+    def tables(self) -> list[TableInfo]: ...
+    def schema(self, table: str) -> TableSchema: ...
+
+    # Table Management
+    def drop(self, *names: str) -> None: ...
+    def drop_all(self, type: Literal["events", "profiles"] | None = None) -> None: ...
+
+    # Escape Hatches
+    @property
+    def connection(self) -> duckdb.DuckDBPyConnection: ...
+    @property
+    def api(self) -> MixpanelAPIClient: ...
 ```
 
 ---
@@ -415,10 +500,11 @@ class Workspace:
 |--------|-------------|
 | `events()` | List all event names in project |
 | `properties(event)` | List all properties for an event |
-| `property_values(event, prop, limit=100)` | List sample values for a property |
+| `property_values(prop, event=None, limit=100)` | List sample values for a property |
 | `funnels()` | List saved funnels (cached) |
 | `cohorts()` | List saved cohorts (cached) |
 | `top_events(type, limit)` | List today's top events (not cached) |
+| `clear_discovery_cache()` | Clear cached discovery data |
 
 **Fetching** (API → local storage):
 | Method | Description |
@@ -467,6 +553,13 @@ class Workspace:
 |----------|-------------|
 | `connection` | Direct DuckDB connection access |
 | `api` | Direct Mixpanel API client access |
+
+**Lifecycle**:
+| Method | Description |
+|--------|-------------|
+| `close()` | Close database connection and release resources |
+| `__enter__()` | Context manager entry (returns self) |
+| `__exit__()` | Context manager exit (calls close) |
 
 ### Result Types
 
@@ -622,6 +715,17 @@ class NumericAverageResult:
     unit: str
     results: dict[str, float]  # {date: average_value}
     df: pd.DataFrame  # Lazy conversion
+
+# Workspace types
+@dataclass(frozen=True)
+class WorkspaceInfo:
+    path: Path | None           # Database file path (None for ephemeral)
+    project_id: str             # Mixpanel project ID
+    region: str                 # Data residency region (us, eu, in)
+    account: str | None         # Named account used (None if from env)
+    tables: list[str]           # Table names in the database
+    size_mb: float              # Database file size in MB
+    created_at: datetime | None # When database was created
 ```
 
 ### Exceptions

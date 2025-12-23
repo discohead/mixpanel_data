@@ -810,6 +810,8 @@ mp db reset
 
 ## Library Public API
 
+The library uses a **Workspace facade pattern** that provides a single entry point for all operations. The `Workspace` class orchestrates credentials, API client, storage, and services.
+
 ```python
 # mixpanel_data/__init__.py
 
@@ -818,170 +820,170 @@ mixpanel_data - Python library and CLI for working with Mixpanel data.
 
 Usage as library:
     import mixpanel_data as mp
-    
-    mp.login(token="...")
-    mp.fetch_events(from_date="2024-01-01")
-    df = mp.query_df("SELECT * FROM events")
+
+    with mp.Workspace(path="./analytics.db") as ws:
+        # Fetch data to local storage
+        ws.fetch_events("signups", from_date="2024-01-01", to_date="2024-01-31")
+
+        # Query locally with SQL
+        df = ws.query_df("SELECT event, COUNT(*) FROM signups GROUP BY 1")
+
+        # Or use live Mixpanel queries
+        result = ws.segmentation(event="Sign Up", from_date="2024-01-01")
 
 Usage as CLI:
-    mp events fetch --from 2024-01-01
-    mp query "SELECT * FROM events"
+    mp fetch events --from 2024-01-01 --name signups
+    mp query "SELECT * FROM signups"
 """
 
-# Auth
-from mixpanel_data.client.auth import (
-    login,
-    logout,
-    get_current_project,
-    switch_project,
+# Public API
+from mixpanel_data.workspace import Workspace, ephemeral
+
+# Auth utilities
+from mixpanel_data.auth import (
+    ConfigManager,
+    Credentials,
+    resolve_credentials,
 )
 
-# Data fetching
-from mixpanel_data.client.export import fetch_events
-from mixpanel_data.client.engage import fetch_users
-
-# Live reports
-from mixpanel_data.client.query import (
-    segmentation,
-    funnel,
-    retention,
-    frequency,
-    get_events,
-    get_properties,
-    get_property_values,
+# Exceptions
+from mixpanel_data.exceptions import (
+    MixpanelDataError,
+    ConfigError,
+    AccountNotFoundError,
+    AccountExistsError,
+    AuthenticationError,
+    RateLimitError,
+    QueryError,
+    TableExistsError,
+    TableNotFoundError,
 )
 
-# Database
-from mixpanel_data.db.query import query, query_df
-from mixpanel_data.db.connection import connect, get_connection
-from mixpanel_data.db import get_tables, get_schema, get_stats
+# Result types (all frozen dataclasses with .df property)
+from mixpanel_data.types import (
+    # Fetch results
+    FetchResult,
+    TableMetadata,
+
+    # Live query results
+    SegmentationResult,
+    FunnelResult,
+    FunnelStep,
+    RetentionResult,
+    CohortInfo,
+    JQLResult,
+    EventCountsResult,
+    PropertyCountsResult,
+    ActivityFeedResult,
+    InsightsResult,
+    FrequencyResult,
+    NumericBucketResult,
+    NumericSumResult,
+    NumericAverageResult,
+
+    # Discovery types
+    FunnelInfo,
+    SavedCohort,
+    TopEvent,
+
+    # Introspection types
+    TableInfo,
+    TableSchema,
+    ColumnInfo,
+    WorkspaceInfo,
+)
 
 __all__ = [
+    # Core
+    "Workspace",
+    "ephemeral",
+
     # Auth
-    "login",
-    "logout", 
-    "get_current_project",
-    "switch_project",
-    
-    # Fetching
-    "fetch_events",
-    "fetch_users",
-    
-    # Reports
-    "segmentation",
-    "funnel",
-    "retention",
-    "frequency",
-    "get_events",
-    "get_properties",
-    "get_property_values",
-    
-    # Database
-    "query",
-    "query_df",
-    "connect",
-    "get_connection",
-    "get_tables",
-    "get_schema",
-    "get_stats",
+    "ConfigManager",
+    "Credentials",
+    "resolve_credentials",
+
+    # Exceptions
+    "MixpanelDataError",
+    "ConfigError",
+    "AccountNotFoundError",
+    "AccountExistsError",
+    "AuthenticationError",
+    "RateLimitError",
+    "QueryError",
+    "TableExistsError",
+    "TableNotFoundError",
+
+    # Result types
+    "FetchResult",
+    "TableMetadata",
+    "SegmentationResult",
+    "FunnelResult",
+    "FunnelStep",
+    "RetentionResult",
+    "CohortInfo",
+    "JQLResult",
+    "EventCountsResult",
+    "PropertyCountsResult",
+    "ActivityFeedResult",
+    "InsightsResult",
+    "FrequencyResult",
+    "NumericBucketResult",
+    "NumericSumResult",
+    "NumericAverageResult",
+    "FunnelInfo",
+    "SavedCohort",
+    "TopEvent",
+    "TableInfo",
+    "TableSchema",
+    "ColumnInfo",
+    "WorkspaceInfo",
 ]
 ```
 
-**Recommended import pattern:**
+**Recommended usage pattern:**
 
 ```python
 import mixpanel_data as mp
 
-mp.fetch_events(from_date="2024-01-01")
-df = mp.query_df("SELECT * FROM events")
+# Persistent workspace (data survives sessions)
+with mp.Workspace(path="./analytics.db") as ws:
+    ws.fetch_events("signups", from_date="2024-01-01", to_date="2024-01-31")
+    df = ws.query_df("SELECT event, COUNT(*) FROM signups GROUP BY 1")
+
+# Ephemeral workspace (auto-cleanup, great for exploration)
+with mp.ephemeral() as ws:
+    result = ws.segmentation(event="Sign Up", from_date="2024-01-01")
+    print(result.df)
 ```
+
+See [mixpanel_data-design.md](mixpanel_data-design.md#workspace-class) for complete Workspace API documentation.
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: Foundation (MVP)
+> **Note:** This section provides a high-level overview. For the authoritative, detailed implementation plan with task checklists, see **[IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md)**.
 
-**Goal:** Core loop working — fetch events, store locally, query via SQL.
+The implementation is organized into 11 phases:
 
-| Component | Tasks |
-|-----------|-------|
-| Project setup | pyproject.toml, src layout, dev dependencies |
-| Config | `~/.mp/config.toml`, environment variable handling |
-| Auth | `mp auth login --token`, `mp auth status` |
-| Database | DuckDB connection, schema creation, workspace paths |
-| Events | `mp events fetch` with basic options |
-| Query | `mp query` with format options |
-| DB introspection | `mp db tables`, `mp db schema`, `mp db stats` |
+| Phase | Name | Description | Status |
+|-------|------|-------------|--------|
+| 001 | Foundation Layer | Config, credentials, exceptions | ✅ Complete |
+| 002 | API Client | HTTP client with auth, rate limiting, streaming | ✅ Complete |
+| 003 | Storage Engine | DuckDB-based storage with metadata | ✅ Complete |
+| 004 | Discovery Service | Event/property schema introspection | ✅ Complete |
+| 005 | Fetch Service | Event/profile fetching to local storage | ✅ Complete |
+| 006 | Live Query Service | Segmentation, funnels, retention, JQL | ✅ Complete |
+| 007 | Discovery Enhancements | Funnels, cohorts, top events, event/property counts | ✅ Complete |
+| 008 | Query Service Enhancements | Activity feed, insights, frequency, numeric aggregations | ✅ Complete |
+| **009** | **Workspace Facade** | **Unified `Workspace` class as single entry point** | ⏳ Next |
+| 010 | CLI Application | Typer-based `mp` command-line interface | ⏳ Pending |
+| 011 | Polish & Release | Documentation, examples, PyPI release | ⏳ Pending |
 
-**Deliverable:** Can fetch events and query them locally.
+**Current state:** Phases 001-008 complete. All services (Discovery, Fetcher, LiveQuery) and infrastructure (Config, API Client, Storage) are implemented with comprehensive test coverage.
 
-```bash
-mp auth login --token $TOKEN
-mp events fetch --from 2024-01-01 --event "Sign Up"
-mp db tables
-mp query "SELECT event, COUNT(*) FROM events GROUP BY 1" --format json
-```
-
-### Phase 2: Data Discovery & Reports
-
-**Goal:** Live Mixpanel queries and schema discovery.
-
-| Component | Tasks |
-|-----------|-------|
-| Schema discovery | `mp schema events`, `mp schema properties`, `mp schema values` |
-| Segmentation | `mp report segmentation` |
-| Funnels | `mp report funnel` |
-| Retention | `mp report retention` |
-| Report caching | `--save-as` flag to store results locally |
-
-**Deliverable:** Can discover data shape and run live reports.
-
-### Phase 3: Polish & Completeness
-
-**Goal:** Production-ready CLI experience.
-
-| Component | Tasks |
-|-----------|-------|
-| Users | `mp users fetch` |
-| Workspaces | `mp db workspace *` |
-| Lifecycle | `--ephemeral` flag, `mp db prune` |
-| Output | Rich tables, progress bars, error formatting |
-| Raw API | `mp raw` escape hatch |
-| Library API | Clean public exports, docstrings |
-| Testing | Unit tests, integration tests |
-
-**Deliverable:** Complete, polished tool.
-
-### Phase 3.5: Notebook Integration
-
-**Goal:** Enable interactive exploration via notebooks.
-
-| Component | Tasks |
-|-----------|-------|
-| Jupyter generator | `mp explore notebook` generates .ipynb starter |
-| marimo generator | `mp explore marimo` generates .py reactive app |
-| Template content | Pre-configured imports, connection, example queries |
-| Skill documentation | Patterns for notebook usage with mp |
-
-**Why marimo:**
-- Pure Python storage (Git-friendly, Claude Code can read/write directly)
-- Reactive cells (change a query, visualizations auto-update)
-- Native SQL support (can query mp's DuckDB directly)
-- Deployable as apps (`marimo run exploration.py`)
-- Built-in UI elements (date pickers, dropdowns, charts)
-
-marimo becomes the "Lens runtime"—interactive data exploration without building custom infrastructure.
-
-### Phase 4: Skill & Documentation
-
-**Goal:** Enable AI coding agents to use `mp` effectively.
-
-| Component | Tasks |
-|-----------|-------|
-| SKILL.md | Comprehensive agent skill documentation |
-| README | User-facing documentation |
-| Examples | Common workflows, patterns |
+**Next up:** Phase 009 implements the `Workspace` facade that provides a clean, unified API over all services. This is the primary entry point for library users.
 
 ---
 
@@ -1211,17 +1213,11 @@ This could evolve into a more sophisticated "Lens" experience where agents gener
 
 ### Additional Commands (v2+)
 
-- ~~`mp cohorts` — Cohort management~~ (Discovery implemented in v1: `mp cohorts`, `mp funnels`, `mp top-events`)
-- ~~`mp event-counts` — Multi-event time series comparison~~ (implemented in v1)
-- ~~`mp property-counts` — Property breakdown time series~~ (implemented in v1)
-- ~~`mp activity-feed` — User event history~~ (implemented in v1)
-- ~~`mp insights` — Query saved Insights reports~~ (implemented in v1)
-- ~~`mp frequency` — Event frequency distribution analysis~~ (implemented in v1)
-- ~~`mp segmentation-numeric` — Numeric property bucketing~~ (implemented in v1)
-- ~~`mp segmentation-sum` — Sum numeric properties over time~~ (implemented in v1)
-- ~~`mp segmentation-average` — Average numeric properties over time~~ (implemented in v1)
-- `mp annotations` — Event annotations
-- `mp alerts` — Alert configuration
+Commands that may be added in future versions:
+
+- `mp annotations` — Event annotations management
+- `mp alerts` — Alert configuration and monitoring
+- `mp formulas` — Custom metric formulas
 
 ### MCP Server (v2+)
 

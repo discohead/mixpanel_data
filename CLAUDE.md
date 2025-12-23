@@ -182,6 +182,7 @@ All frozen dataclasses with lazy `.df` property and `.to_dict()` method:
 - `NumericBucketResult` — Numeric property bucketing result [Phase 008]
 - `NumericSumResult` — Numeric property sum aggregation [Phase 008]
 - `NumericAverageResult` — Numeric property average aggregation [Phase 008]
+- `WorkspaceInfo` — Workspace metadata (path, project_id, region, account, tables, size_mb) [Phase 009]
 
 ### Storage Engine (`_internal/storage.py`)
 - `StorageEngine` — DuckDB-based storage with persistent and ephemeral modes

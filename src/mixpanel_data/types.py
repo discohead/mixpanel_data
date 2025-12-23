@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
@@ -1149,4 +1150,49 @@ class TableSchema:
         return {
             "table_name": self.table_name,
             "columns": [col.to_dict() for col in self.columns],
+        }
+
+
+# Workspace Types
+
+
+@dataclass(frozen=True)
+class WorkspaceInfo:
+    """Information about a Workspace instance.
+
+    Returned by Workspace.info() to provide metadata about the workspace
+    including database location, connection details, and table summary.
+    """
+
+    path: Path | None
+    """Database file path (None for ephemeral workspaces)."""
+
+    project_id: str
+    """Mixpanel project ID."""
+
+    region: str
+    """Data residency region (us, eu, in)."""
+
+    account: str | None
+    """Named account used (None if credentials from environment)."""
+
+    tables: list[str]
+    """Names of tables in the database."""
+
+    size_mb: float
+    """Database file size in megabytes (0.0 for ephemeral)."""
+
+    created_at: datetime | None
+    """When database was created (None if unknown)."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output."""
+        return {
+            "path": str(self.path) if self.path else None,
+            "project_id": self.project_id,
+            "region": self.region,
+            "account": self.account,
+            "tables": self.tables,
+            "size_mb": self.size_mb,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }

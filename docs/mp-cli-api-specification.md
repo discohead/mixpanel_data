@@ -1,6 +1,6 @@
 # mp CLI Specification
 
-> Version: 0.2.0 (Draft)
+> Version: 0.3.0 (Draft)
 > Status: Design Phase
 > Last Updated: December 2024
 

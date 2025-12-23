@@ -233,55 +233,55 @@ class MixpanelAPIClient:
 ### Tasks (Estimated: 35-40)
 
 **Core Client:**
-- [ ] Create `MixpanelAPIClient` class with `Credentials` injection
-- [ ] Implement `get()` and `post()` methods using httpx
-- [ ] Implement regional endpoint routing based on `credentials.region`
-- [ ] Implement Basic auth header generation from credentials
-- [ ] Implement response parsing (JSON extraction, error detection)
+- [x] Create `MixpanelAPIClient` class with `Credentials` injection
+- [x] Implement `get()` and `post()` methods using httpx
+- [x] Implement regional endpoint routing based on `credentials.region`
+- [x] Implement Basic auth header generation from credentials
+- [x] Implement response parsing (JSON extraction, error detection)
 
 **Rate Limiting:**
-- [ ] Implement 429 detection and retry logic
-- [ ] Implement exponential backoff with jitter
-- [ ] Implement configurable max retries
-- [ ] Raise `RateLimitError` with retry_after when exhausted
+- [x] Implement 429 detection and retry logic
+- [x] Implement exponential backoff with jitter
+- [x] Implement configurable max retries
+- [x] Raise `RateLimitError` with retry_after when exhausted
 
 **Export API:**
-- [ ] Implement `export_events()` streaming iterator
-- [ ] Handle JSONL response format (one JSON object per line)
-- [ ] Support `on_batch` callback for progress
-- [ ] Implement `export_profiles()` streaming iterator
+- [x] Implement `export_events()` streaming iterator
+- [x] Handle JSONL response format (one JSON object per line)
+- [x] Support `on_batch` callback for progress
+- [x] Implement `export_profiles()` streaming iterator
 
 **Discovery API:**
-- [ ] Implement `get_events()` → list[str]
-- [ ] Implement `get_event_properties(event)` → list[str]
-- [ ] Implement `get_property_values(event, prop, limit)` → list[str]
+- [x] Implement `get_events()` → list[str]
+- [x] Implement `get_event_properties(event)` → list[str]
+- [x] Implement `get_property_values(event, prop, limit)` → list[str]
 
 **Query API (raw methods):**
-- [ ] Implement `segmentation()` → dict (raw API response)
-- [ ] Implement `funnel()` → dict (raw API response)
-- [ ] Implement `retention()` → dict (raw API response)
-- [ ] Implement `jql()` → list (raw API response)
+- [x] Implement `segmentation()` → dict (raw API response)
+- [x] Implement `funnel()` → dict (raw API response)
+- [x] Implement `retention()` → dict (raw API response)
+- [x] Implement `jql()` → list (raw API response)
 
 **Error Handling:**
-- [ ] Map HTTP 401 → `AuthenticationError`
-- [ ] Map HTTP 400 → `QueryError` with details
-- [ ] Map HTTP 429 → rate limit retry / `RateLimitError`
-- [ ] Map HTTP 5xx → `MixpanelDataError` with retry suggestion
+- [x] Map HTTP 401 → `AuthenticationError`
+- [x] Map HTTP 400 → `QueryError` with details
+- [x] Map HTTP 429 → rate limit retry / `RateLimitError`
+- [x] Map HTTP 5xx → `MixpanelDataError` with retry suggestion
 
 **Testing:**
-- [ ] Unit tests with httpx mock transport
-- [ ] Rate limiting behavior tests
-- [ ] Regional endpoint routing tests
-- [ ] Streaming export tests with large payloads
-- [ ] Error mapping tests
+- [x] Unit tests with httpx mock transport
+- [x] Rate limiting behavior tests
+- [x] Regional endpoint routing tests
+- [x] Streaming export tests with large payloads
+- [x] Error mapping tests
 
 ### Success Criteria
 
-- [ ] All Mixpanel API endpoints accessible via single client
-- [ ] Rate limiting transparent to caller (automatic retry)
-- [ ] Streaming exports handle 1M+ events without memory issues
-- [ ] 90%+ test coverage
-- [ ] No credentials appear in logs/errors
+- [x] All Mixpanel API endpoints accessible via single client
+- [x] Rate limiting transparent to caller (automatic retry)
+- [x] Streaming exports handle 1M+ events without memory issues
+- [x] 90%+ test coverage
+- [x] No credentials appear in logs/errors
 
 ---
 
@@ -695,6 +695,8 @@ The `Workspace` class is the primary entry point—a facade that orchestrates al
 
 ### Design Reference
 
+See [docs/mixpanel_data-design.md](docs/mixpanel_data-design.md) for complete Workspace API with all method signatures.
+
 ```python
 class Workspace:
     def __init__(
@@ -715,42 +717,58 @@ class Workspace:
     @classmethod
     def open(cls, path: str | Path) -> Workspace: ...
 
-    # Discovery (delegates to DiscoveryService)
+    # Context manager protocol
+    def __enter__(self) -> Workspace: ...
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
+    def close(self) -> None: ...
+
+    # Discovery (7 methods - delegates to DiscoveryService)
     def events(self) -> list[str]: ...
     def properties(self, event: str) -> list[str]: ...
-    def property_values(self, event: str, prop: str, limit: int = 100) -> list[str]: ...
+    def property_values(self, property_name: str, *, event: str | None = None,
+                        limit: int = 100) -> list[str]: ...
     def funnels(self) -> list[FunnelInfo]: ...
     def cohorts(self) -> list[SavedCohort]: ...
-    def top_events(self, type: Literal["general", "average", "unique"] = "general",
+    def top_events(self, *, type: Literal["general", "average", "unique"] = "general",
                    limit: int | None = None) -> list[TopEvent]: ...
+    def clear_discovery_cache(self) -> None: ...
 
-    # Fetching (delegates to FetcherService)
-    def fetch_events(self, name: str = "events", ...) -> FetchResult: ...
-    def fetch_profiles(self, name: str = "profiles", ...) -> FetchResult: ...
+    # Fetching (2 methods - delegates to FetcherService)
+    def fetch_events(self, name: str = "events", *, from_date: str, to_date: str,
+                     events: list[str] | None = None, where: str | None = None,
+                     progress: bool = True) -> FetchResult: ...
+    def fetch_profiles(self, name: str = "profiles", *, where: str | None = None,
+                       progress: bool = True) -> FetchResult: ...
 
-    # Local Queries (delegates to StorageEngine)
+    # Local Queries (3 methods - delegates to StorageEngine)
     def sql(self, query: str) -> pd.DataFrame: ...
     def sql_scalar(self, query: str) -> Any: ...
     def sql_rows(self, query: str) -> list[tuple]: ...
 
-    # Live Queries (delegates to LiveQueryService)
-    def segmentation(self, ...) -> SegmentationResult: ...
-    def funnel(self, ...) -> FunnelResult: ...
-    def retention(self, ...) -> RetentionResult: ...
+    # Live Queries (12 methods - delegates to LiveQueryService)
+    def segmentation(self, event: str, *, from_date: str, to_date: str, ...) -> SegmentationResult: ...
+    def funnel(self, funnel_id: int, *, from_date: str, to_date: str, ...) -> FunnelResult: ...
+    def retention(self, *, born_event: str, return_event: str, ...) -> RetentionResult: ...
     def jql(self, script: str, params: dict | None = None) -> JQLResult: ...
-    def event_counts(self, events: list[str], from_date: str, to_date: str, ...) -> EventCountsResult: ...
-    def property_counts(self, event: str, property_name: str, from_date: str, to_date: str, ...) -> PropertyCountsResult: ...
+    def event_counts(self, events: list[str], *, from_date: str, to_date: str, ...) -> EventCountsResult: ...
+    def property_counts(self, event: str, property_name: str, *, from_date: str, to_date: str, ...) -> PropertyCountsResult: ...
+    def activity_feed(self, distinct_ids: list[str], *, ...) -> ActivityFeedResult: ...
+    def insights(self, bookmark_id: int) -> InsightsResult: ...
+    def frequency(self, *, from_date: str, to_date: str, ...) -> FrequencyResult: ...
+    def segmentation_numeric(self, event: str, *, from_date: str, to_date: str, on: str, ...) -> NumericBucketResult: ...
+    def segmentation_sum(self, event: str, *, from_date: str, to_date: str, on: str, ...) -> NumericSumResult: ...
+    def segmentation_average(self, event: str, *, from_date: str, to_date: str, on: str, ...) -> NumericAverageResult: ...
 
-    # Introspection
+    # Introspection (3 methods)
     def info(self) -> WorkspaceInfo: ...
     def tables(self) -> list[TableInfo]: ...
     def schema(self, table: str) -> TableSchema: ...
 
-    # Table Management
+    # Table Management (2 methods)
     def drop(self, *names: str) -> None: ...
-    def drop_all(self, type: str | None = None) -> None: ...
+    def drop_all(self, type: Literal["events", "profiles"] | None = None) -> None: ...
 
-    # Escape Hatches
+    # Escape Hatches (2 properties)
     @property
     def connection(self) -> duckdb.DuckDBPyConnection: ...
     @property
@@ -770,33 +788,85 @@ class Workspace:
 3. **Open existing database** (P2)
    - Query-only access without credentials
 
-### Tasks (Estimated: 35-40)
+### Tasks (Estimated: 40-45)
 
-- [ ] Create `Workspace` class with DI
-- [ ] Implement credential resolution and service wiring
-- [ ] Implement `ephemeral()` context manager
-- [ ] Implement `open()` for existing databases
-- [ ] Delegate discovery methods to DiscoveryService (events, properties, property_values)
-- [ ] Delegate enhanced discovery methods (funnels, cohorts, top_events)
-- [ ] Delegate fetch methods to FetcherService
-- [ ] Delegate SQL methods to StorageEngine
-- [ ] Delegate live query methods to LiveQueryService (segmentation, funnel, retention, jql)
-- [ ] Delegate enhanced live query methods (event_counts, property_counts)
-- [ ] Delegate advanced analytics methods (activity_feed, insights, frequency, segmentation_numeric, segmentation_sum, segmentation_average)
-- [ ] Implement introspection methods
-- [ ] Implement table management methods
-- [ ] Implement escape hatch properties
-- [ ] Update `__init__.py` with Workspace export
-- [ ] Comprehensive integration tests
+**Core Infrastructure:**
+- [ ] Create `Workspace` class with dependency injection
+- [ ] Implement credential resolution (env → named account → default account)
+- [ ] Implement service wiring (create API client, storage engine, services)
+- [ ] Implement `ephemeral()` classmethod as context manager
+- [ ] Implement `open()` classmethod for existing databases
+- [ ] Implement context manager protocol (`__enter__`, `__exit__`)
+- [ ] Implement `close()` method for resource cleanup
+
+**Discovery Methods (7 methods):**
+- [ ] Delegate `events()` → DiscoveryService.list_events()
+- [ ] Delegate `properties()` → DiscoveryService.list_properties()
+- [ ] Delegate `property_values()` → DiscoveryService.list_property_values()
+- [ ] Delegate `funnels()` → DiscoveryService.list_funnels()
+- [ ] Delegate `cohorts()` → DiscoveryService.list_cohorts()
+- [ ] Delegate `top_events()` → DiscoveryService.list_top_events()
+- [ ] Delegate `clear_discovery_cache()` → DiscoveryService.clear_cache()
+
+**Fetching Methods (2 methods):**
+- [ ] Delegate `fetch_events()` → FetcherService with progress bar wrapper
+- [ ] Delegate `fetch_profiles()` → FetcherService with progress bar wrapper
+- [ ] Implement progress bar callback using Rich
+
+**Local Query Methods (3 methods):**
+- [ ] Delegate `sql()` → StorageEngine.execute_df()
+- [ ] Delegate `sql_scalar()` → StorageEngine.execute_scalar()
+- [ ] Delegate `sql_rows()` → StorageEngine.execute_rows()
+
+**Live Query Methods (12 methods):**
+- [ ] Delegate `segmentation()` → LiveQueryService
+- [ ] Delegate `funnel()` → LiveQueryService
+- [ ] Delegate `retention()` → LiveQueryService
+- [ ] Delegate `jql()` → LiveQueryService
+- [ ] Delegate `event_counts()` → LiveQueryService
+- [ ] Delegate `property_counts()` → LiveQueryService
+- [ ] Delegate `activity_feed()` → LiveQueryService
+- [ ] Delegate `insights()` → LiveQueryService
+- [ ] Delegate `frequency()` → LiveQueryService
+- [ ] Delegate `segmentation_numeric()` → LiveQueryService
+- [ ] Delegate `segmentation_sum()` → LiveQueryService
+- [ ] Delegate `segmentation_average()` → LiveQueryService
+
+**Introspection Methods (3 methods):**
+- [ ] Implement `info()` → returns WorkspaceInfo
+- [ ] Delegate `tables()` → StorageEngine.list_tables()
+- [ ] Delegate `schema()` → StorageEngine.get_schema()
+
+**Table Management Methods (2 methods):**
+- [ ] Delegate `drop()` → StorageEngine.drop_table()
+- [ ] Implement `drop_all()` with optional type filter
+
+**Escape Hatches (2 properties):**
+- [ ] Implement `connection` property → StorageEngine.connection
+- [ ] Implement `api` property → MixpanelAPIClient
+
+**Package Integration:**
+- [ ] Update `__init__.py` with Workspace and WorkspaceInfo exports
+- [ ] Add re-exports for all result types used by Workspace
+
+**Testing:**
+- [ ] Unit tests for credential resolution
+- [ ] Unit tests for service delegation (mocked services)
+- [ ] Integration tests with real DuckDB
 - [ ] End-to-end workflow tests
+- [ ] Ephemeral workspace cleanup tests
 
 ### Success Criteria
 
-- [ ] Single Workspace object provides all functionality
-- [ ] Credentials resolved once at construction
-- [ ] Ephemeral workspaces always cleaned up
-- [ ] All methods documented with examples
-- [ ] Integration tests cover full workflows
+- [ ] Single Workspace object provides all functionality (30+ methods)
+- [ ] Credentials resolved once at construction, immutable thereafter
+- [ ] Context manager support for all workspace types
+- [ ] Ephemeral workspaces always cleaned up (even on exception)
+- [ ] All methods documented with docstrings and examples
+- [ ] Integration tests cover full fetch → query → cleanup workflows
+- [ ] mypy --strict passes
+- [ ] ruff check passes
+- [ ] 90%+ test coverage
 
 ---
 
@@ -848,7 +918,7 @@ The CLI is a thin wrapper over the library using Typer. Every command maps direc
    - List events, properties, values
    - Show table info and schema
 
-### Tasks (Estimated: 45-50)
+### Tasks (Estimated: 55-60)
 
 **Setup:**
 - [ ] Create `cli/main.py` with Typer app
@@ -867,17 +937,34 @@ The CLI is a thin wrapper over the library using Typer. Every command maps direc
 - [ ] Implement `mp fetch events` with progress bar
 - [ ] Implement `mp fetch profiles` with progress bar
 
-**Query Commands:**
+**Query Commands (Core):**
 - [ ] Implement `mp sql` with format options
 - [ ] Implement `mp segmentation`
 - [ ] Implement `mp funnel`
 - [ ] Implement `mp retention`
 - [ ] Implement `mp jql`
 
-**Inspect Commands:**
+**Query Commands (Phase 007):**
+- [ ] Implement `mp event-counts`
+- [ ] Implement `mp property-counts`
+
+**Query Commands (Phase 008):**
+- [ ] Implement `mp activity-feed`
+- [ ] Implement `mp insights`
+- [ ] Implement `mp frequency`
+- [ ] Implement `mp segmentation-numeric`
+- [ ] Implement `mp segmentation-sum`
+- [ ] Implement `mp segmentation-average`
+
+**Discovery Commands:**
 - [ ] Implement `mp events`
 - [ ] Implement `mp properties`
 - [ ] Implement `mp values`
+- [ ] Implement `mp funnels` (Phase 007)
+- [ ] Implement `mp cohorts` (Phase 007)
+- [ ] Implement `mp top-events` (Phase 007)
+
+**Introspection Commands:**
 - [ ] Implement `mp info`
 - [ ] Implement `mp tables`
 - [ ] Implement `mp schema`
@@ -897,11 +984,18 @@ The CLI is a thin wrapper over the library using Typer. Every command maps direc
 
 ### Success Criteria
 
+- [ ] All 31 commands implemented and functional
 - [ ] All commands exit with documented codes
 - [ ] Data goes to stdout, status to stderr
 - [ ] Progress bars work in interactive mode
-- [ ] All output formats work correctly
+- [ ] All output formats work correctly (json, table, csv, jsonl)
 - [ ] `--help` on every command
+- [ ] Global options work on all commands (--account, --format, --quiet, --verbose)
+- [ ] Phase 007 commands: funnels, cohorts, top-events, event-counts, property-counts
+- [ ] Phase 008 commands: activity-feed, insights, frequency, segmentation-numeric/sum/average
+- [ ] Integration tests for all command groups
+- [ ] mypy --strict passes
+- [ ] ruff check passes
 
 ---
 
