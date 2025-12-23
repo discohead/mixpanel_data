@@ -259,9 +259,9 @@ just fmt && just lint
 ```
 
 ## Recent Changes
+- 008-query-service-enhancements: Added Python 3.11+ (type hints required per constitution) + httpx (HTTP client), Pydantic v2 (validation), pandas (DataFrame conversion)
 - 007-discovery-enhancements: Added Python 3.11+ (type hints required per constitution) + httpx (HTTP client), Pydantic v2 (validation), pandas (DataFrame conversion)
 - 006-live-query-service: Added Python 3.11+ (type hints required throughout per constitution) + httpx (HTTP client, already in use), Pydantic v2 (validation), pandas (DataFrame conversion)
-- 005-fetch-service: Implemented FetcherService for fetching events/profiles from Mixpanel API to DuckDB storage
 
 ## Active Technologies
-- Python 3.11+ (type hints required per constitution) + httpx (HTTP client), Pydantic v2 (validation), pandas (DataFrame conversion) (007-discovery-enhancements)
+- N/A (live queries only, no local storage) (008-query-service-enhancements)

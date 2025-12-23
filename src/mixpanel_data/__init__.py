@@ -20,18 +20,25 @@ from mixpanel_data.exceptions import (
     TableNotFoundError,
 )
 from mixpanel_data.types import (
+    ActivityFeedResult,
     CohortInfo,
     EventCountsResult,
     FetchResult,
+    FrequencyResult,
     FunnelInfo,
     FunnelResult,
     FunnelStep,
+    InsightsResult,
     JQLResult,
+    NumericAverageResult,
+    NumericBucketResult,
+    NumericSumResult,
     PropertyCountsResult,
     RetentionResult,
     SavedCohort,
     SegmentationResult,
     TopEvent,
+    UserEvent,
 )
 
 __version__ = "0.1.0"
@@ -64,4 +71,12 @@ __all__ = [
     "TopEvent",
     "EventCountsResult",
     "PropertyCountsResult",
+    # Phase 008: Query Service Enhancement types
+    "UserEvent",
+    "ActivityFeedResult",
+    "InsightsResult",
+    "FrequencyResult",
+    "NumericBucketResult",
+    "NumericSumResult",
+    "NumericAverageResult",
 ]

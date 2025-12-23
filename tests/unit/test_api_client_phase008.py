@@ -1,0 +1,378 @@
+"""Unit tests for Phase 008 MixpanelAPIClient methods.
+
+Tests the new Query Service Enhancement API methods using httpx.MockTransport.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import httpx
+import pytest
+from pydantic import SecretStr
+
+from mixpanel_data._internal.api_client import MixpanelAPIClient
+from mixpanel_data._internal.config import Credentials
+
+
+@pytest.fixture
+def test_credentials() -> Credentials:
+    """Create test credentials."""
+    return Credentials(
+        username="test_user",
+        secret=SecretStr("test_secret"),
+        project_id="12345",
+        region="us",
+    )
+
+
+def create_mock_client(
+    credentials: Credentials,
+    handler: Any,
+) -> MixpanelAPIClient:
+    """Create a client with mock transport."""
+    transport = httpx.MockTransport(handler)
+    return MixpanelAPIClient(credentials, _transport=transport)
+
+
+# =============================================================================
+# US1: Activity Feed Tests
+# =============================================================================
+
+
+class TestActivityFeed:
+    """Tests for MixpanelAPIClient.activity_feed()."""
+
+    def test_activity_feed_basic(self, test_credentials: Credentials) -> None:
+        """activity_feed() should return events for given users."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/stream/query" in str(request.url)
+            assert "distinct_ids" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "status": "ok",
+                    "results": {
+                        "events": [
+                            {
+                                "event": "Sign Up",
+                                "properties": {
+                                    "time": 1704067200,
+                                    "$distinct_id": "user_123",
+                                },
+                            }
+                        ]
+                    },
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.activity_feed(distinct_ids=["user_123"])
+
+        assert result["status"] == "ok"
+        assert len(result["results"]["events"]) == 1
+        assert result["results"]["events"][0]["event"] == "Sign Up"
+
+    def test_activity_feed_with_date_range(self, test_credentials: Credentials) -> None:
+        """activity_feed() should pass date parameters."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            assert "from_date=2024-01-01" in url_str
+            assert "to_date=2024-01-31" in url_str
+            return httpx.Response(200, json={"status": "ok", "results": {"events": []}})
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.activity_feed(
+                distinct_ids=["user_123"],
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+
+        assert result["status"] == "ok"
+
+    def test_activity_feed_multiple_users(self, test_credentials: Credentials) -> None:
+        """activity_feed() should accept multiple user IDs."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            # JSON-encoded list should be in the URL
+            assert "user_123" in url_str
+            assert "user_456" in url_str
+            return httpx.Response(200, json={"status": "ok", "results": {"events": []}})
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.activity_feed(distinct_ids=["user_123", "user_456"])
+
+        assert result["status"] == "ok"
+
+
+# =============================================================================
+# US2: Numeric Sum Tests
+# =============================================================================
+
+
+class TestSegmentationSum:
+    """Tests for MixpanelAPIClient.segmentation_sum()."""
+
+    def test_segmentation_sum_basic(self, test_credentials: Credentials) -> None:
+        """segmentation_sum() should return sum values."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/segmentation/sum" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "status": "ok",
+                    "results": {
+                        "2024-01-01": 15432.50,
+                        "2024-01-02": 18976.25,
+                    },
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.segmentation_sum(
+                event="Purchase",
+                from_date="2024-01-01",
+                to_date="2024-01-02",
+                on='properties["amount"]',
+            )
+
+        assert result["status"] == "ok"
+        assert result["results"]["2024-01-01"] == 15432.50
+
+    def test_segmentation_sum_with_filter(self, test_credentials: Credentials) -> None:
+        """segmentation_sum() should pass where parameter."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "where=" in str(request.url)
+            return httpx.Response(200, json={"status": "ok", "results": {}})
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.segmentation_sum(
+                event="Purchase",
+                from_date="2024-01-01",
+                to_date="2024-01-02",
+                on='properties["amount"]',
+                where='properties["country"] == "US"',
+            )
+
+        assert result["status"] == "ok"
+
+
+# =============================================================================
+# US3: Numeric Average Tests
+# =============================================================================
+
+
+class TestSegmentationAverage:
+    """Tests for MixpanelAPIClient.segmentation_average()."""
+
+    def test_segmentation_average_basic(self, test_credentials: Credentials) -> None:
+        """segmentation_average() should return average values."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/segmentation/average" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "status": "ok",
+                    "results": {
+                        "2024-01-01": 54.32,
+                        "2024-01-02": 62.15,
+                    },
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.segmentation_average(
+                event="Purchase",
+                from_date="2024-01-01",
+                to_date="2024-01-02",
+                on='properties["amount"]',
+            )
+
+        assert result["status"] == "ok"
+        assert result["results"]["2024-01-01"] == 54.32
+
+    def test_segmentation_average_hourly(self, test_credentials: Credentials) -> None:
+        """segmentation_average() should support hourly unit."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "unit=hour" in str(request.url)
+            return httpx.Response(200, json={"status": "ok", "results": {}})
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.segmentation_average(
+                event="Purchase",
+                from_date="2024-01-01",
+                to_date="2024-01-01",
+                on='properties["amount"]',
+                unit="hour",
+            )
+
+        assert result["status"] == "ok"
+
+
+# =============================================================================
+# US4: Frequency Tests
+# =============================================================================
+
+
+class TestFrequency:
+    """Tests for MixpanelAPIClient.frequency()."""
+
+    def test_frequency_basic(self, test_credentials: Credentials) -> None:
+        """frequency() should return frequency arrays."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/retention/addiction" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "2024-01-01": [305, 107, 60, 41, 32],
+                        "2024-01-02": [495, 204, 117, 77, 53],
+                    }
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.frequency(
+                from_date="2024-01-01",
+                to_date="2024-01-02",
+                unit="day",
+                addiction_unit="hour",
+            )
+
+        assert "data" in result
+        assert "2024-01-01" in result["data"]
+        assert result["data"]["2024-01-01"][0] == 305
+
+    def test_frequency_with_event_filter(self, test_credentials: Credentials) -> None:
+        """frequency() should pass event parameter."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "event=" in str(request.url)
+            return httpx.Response(200, json={"data": {}})
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.frequency(
+                from_date="2024-01-01",
+                to_date="2024-01-02",
+                unit="day",
+                addiction_unit="hour",
+                event="App Open",
+            )
+
+        assert "data" in result
+
+
+# =============================================================================
+# US5: Numeric Bucketing Tests
+# =============================================================================
+
+
+class TestSegmentationNumeric:
+    """Tests for MixpanelAPIClient.segmentation_numeric()."""
+
+    def test_segmentation_numeric_basic(self, test_credentials: Credentials) -> None:
+        """segmentation_numeric() should return bucketed values."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/segmentation/numeric" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "series": ["2024-01-01", "2024-01-02"],
+                        "values": {
+                            "0 - 100": {"2024-01-01": 50, "2024-01-02": 65},
+                            "100 - 200": {"2024-01-01": 35, "2024-01-02": 42},
+                        },
+                    },
+                    "legend_size": 2,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.segmentation_numeric(
+                event="Purchase",
+                from_date="2024-01-01",
+                to_date="2024-01-02",
+                on='properties["amount"]',
+            )
+
+        assert "data" in result
+        assert "0 - 100" in result["data"]["values"]
+
+    def test_segmentation_numeric_with_type(
+        self, test_credentials: Credentials
+    ) -> None:
+        """segmentation_numeric() should pass type parameter."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "type=unique" in str(request.url)
+            return httpx.Response(200, json={"data": {"series": [], "values": {}}})
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.segmentation_numeric(
+                event="Purchase",
+                from_date="2024-01-01",
+                to_date="2024-01-02",
+                on='properties["amount"]',
+                type="unique",
+            )
+
+        assert "data" in result
+
+
+# =============================================================================
+# US6: Insights Tests
+# =============================================================================
+
+
+class TestInsights:
+    """Tests for MixpanelAPIClient.insights()."""
+
+    def test_insights_basic(self, test_credentials: Credentials) -> None:
+        """insights() should return report data."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/insights" in str(request.url)
+            assert "bookmark_id=" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "computed_at": "2024-01-15T10:30:00.252314+00:00",
+                    "date_range": {
+                        "from_date": "2024-01-01T00:00:00-08:00",
+                        "to_date": "2024-01-07T00:00:00-08:00",
+                    },
+                    "headers": ["$event"],
+                    "series": {
+                        "Sign Up": {"2024-01-01T00:00:00-08:00": 150},
+                    },
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.insights(bookmark_id=12345678)
+
+        assert "computed_at" in result
+        assert "series" in result
+        assert "Sign Up" in result["series"]
+
+    def test_insights_passes_bookmark_id(self, test_credentials: Credentials) -> None:
+        """insights() should pass bookmark_id in request."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "bookmark_id=99887766" in str(request.url)
+            return httpx.Response(200, json={"series": {}})
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.insights(bookmark_id=99887766)
+
+        assert "series" in result

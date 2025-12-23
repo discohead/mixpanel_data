@@ -1,0 +1,41 @@
+{
+  "status": "ok",
+  "results": {
+    "events": [
+      {
+        "event": "Sign Up",
+        "properties": {
+          "time": 1704067200,
+          "$distinct_id": "user_123",
+          "plan": "premium",
+          "$city": "San Francisco"
+        }
+      },
+      {
+        "event": "Purchase",
+        "properties": {
+          "time": 1704153600,
+          "$distinct_id": "user_123",
+          "amount": 99.99,
+          "product": "Widget"
+        }
+      },
+      {
+        "event": "Login",
+        "properties": {
+          "time": 1704240000,
+          "$distinct_id": "user_456",
+          "method": "oauth"
+        }
+      },
+      {
+        "event": "Page View",
+        "properties": {
+          "time": 1704326400,
+          "$distinct_id": "user_456",
+          "page": "/dashboard"
+        }
+      }
+    ]
+  }
+}
