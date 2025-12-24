@@ -96,7 +96,7 @@ def validate_entity_type(value: str, param_name: str = "--type") -> EntityType:
     """Validate Lexicon entity type.
 
     Args:
-        value: String value from CLI (should be "event" or "profile").
+        value: String value from CLI. Valid types: "event", "profile".
         param_name: Parameter name for error message. Default: "--type".
 
     Returns:

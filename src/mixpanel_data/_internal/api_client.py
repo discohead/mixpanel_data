@@ -184,6 +184,7 @@ class MixpanelAPIClient:
             - 200-299: Parse and return JSON response
             - 400: QueryError with error message from response body
             - 401: AuthenticationError (invalid credentials)
+            - 404: QueryError (resource not found)
             - 412: JQLSyntaxError (JQL script errors with parsed details)
             - 5xx: ServerError with status code and error details
 
@@ -228,6 +229,21 @@ class MixpanelAPIClient:
                 error_msg = response_body.get("error", "Unknown error")
             elif isinstance(response_body, str):
                 error_msg = response_body[:200]
+            raise QueryError(
+                error_msg,
+                status_code=response.status_code,
+                response_body=response_body,
+                request_method=request_method,
+                request_url=request_url,
+                request_params=request_params,
+                request_body=request_body,
+            )
+        if response.status_code == 404:
+            error_msg = "Resource not found"
+            if isinstance(response_body, dict):
+                error_msg = response_body.get("error", "Resource not found")
+            elif isinstance(response_body, str):
+                error_msg = response_body[:200] or "Resource not found"
             raise QueryError(
                 error_msg,
                 status_code=response.status_code,
@@ -454,6 +470,13 @@ class MixpanelAPIClient:
         if params is None:
             params = {}
         params["project_id"] = self._credentials.project_id
+
+        logger.debug(
+            "_request - method: %s, url: %s, final params: %s",
+            method,
+            url,
+            params,
+        )
 
         return self._execute_with_retry(
             method,
@@ -1427,12 +1450,12 @@ class MixpanelAPIClient:
         Mixpanel Lexicon (data dictionary).
 
         Args:
-            entity_type: Optional filter by type ("event" or "profile").
+            entity_type: Optional filter by type ("event", "profile", etc.).
                 If None, returns all schemas.
 
         Returns:
             List of raw schema dictionaries from the API, each containing:
-                - entityType: "event" or "profile"
+                - entityType: "event", "profile", "custom_event", etc.
                 - name: Entity name
                 - schemaJson: Full schema definition with properties and metadata
 
@@ -1440,16 +1463,33 @@ class MixpanelAPIClient:
             AuthenticationError: Invalid credentials.
             RateLimitError: Rate limit exceeded after max retries.
         """
-        url = self._build_url(
-            "app", f"/projects/{self._credentials.project_id}/schemas"
-        )
-        params: dict[str, Any] = {}
+        # entity_type is a path parameter, not a query parameter
+        # URL structure: /api/app/projects/{projectId}/schemas/{entity_type}
         if entity_type is not None:
-            params["entityType"] = entity_type
-        result: dict[str, Any] = self._request(
-            "GET", url, params=params if params else None
+            path = f"/projects/{self._credentials.project_id}/schemas/{entity_type}"
+        else:
+            path = f"/projects/{self._credentials.project_id}/schemas"
+
+        url = self._build_url("app", path)
+
+        logger.debug(
+            "get_schemas request - URL: %s, entity_type filter: %s",
+            url,
+            entity_type,
         )
+
+        # Use request() instead of _request() to avoid adding redundant project_id
+        # query param (project_id is already in the URL path for app API endpoints)
+        result: dict[str, Any] = self.request("GET", url)
+
         schemas: list[dict[str, Any]] = result.get("results", [])
+        entity_types_returned = {s.get("entityType") for s in schemas}
+        logger.debug(
+            "get_schemas response - %d schemas returned, entity types: %s",
+            len(schemas),
+            entity_types_returned,
+        )
+
         return schemas
 
     def get_schema(
@@ -1460,13 +1500,13 @@ class MixpanelAPIClient:
         """Get a single Lexicon schema by entity type and name.
 
         Args:
-            entity_type: Entity type ("event" or "profile").
-            name: Entity name (will be URL-encoded automatically).
+            entity_type: Entity type ("event", "profile", "custom_event", etc.).
+            name: Entity name.
 
         Returns:
-            Raw schema dictionary from the API containing:
-                - entityType: "event" or "profile"
-                - name: Entity name
+            Schema dictionary normalized to match list response format:
+                - entityType: The entity type from request
+                - name: The entity name from request
                 - schemaJson: Full schema definition with properties and metadata
 
         Raises:
@@ -1474,12 +1514,29 @@ class MixpanelAPIClient:
             QueryError: Schema not found (404 mapped to QueryError).
             RateLimitError: Rate limit exceeded after max retries.
         """
-        from urllib.parse import quote
-
-        encoded_name = quote(name, safe="")
+        # URL structure: /api/app/projects/{projectId}/schemas/{entity_type}?entity_name={name}
         url = self._build_url(
             "app",
-            f"/projects/{self._credentials.project_id}/schemas/{entity_type}/{encoded_name}",
+            f"/projects/{self._credentials.project_id}/schemas/{entity_type}",
         )
-        result: dict[str, Any] = self._request("GET", url)
-        return result
+        params = {"entity_name": name}
+
+        logger.debug(
+            "get_schema request - URL: %s, entity_type: %s, name: %s",
+            url,
+            entity_type,
+            name,
+        )
+
+        # Use request() instead of _request() to avoid adding redundant project_id
+        # query param (project_id is already in the URL path for app API endpoints)
+        result: dict[str, Any] = self.request("GET", url, params=params)
+
+        # Single schema response format is: {status: "ok", results: <schemaJson>}
+        # Normalize to match list response format: {entityType, name, schemaJson}
+        schema_json = result.get("results", result)
+        return {
+            "entityType": entity_type,
+            "name": name,
+            "schemaJson": schema_json,
+        }

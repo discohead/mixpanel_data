@@ -435,10 +435,12 @@ class TestAPIClientGetSchemas:
             [Callable[[httpx.Request], httpx.Response]], MixpanelAPIClient
         ],
     ) -> None:
-        """get_schemas() should pass entityType parameter."""
+        """get_schemas() should include entityType in URL path."""
 
         def handler(request: httpx.Request) -> httpx.Response:
-            assert "entityType=event" in str(request.url)
+            # entity_type is a path parameter, not query parameter
+            # URL: /api/app/projects/{projectId}/schemas/{entity_type}
+            assert "/schemas/event" in str(request.url)
             return httpx.Response(200, json={"results": []})
 
         client = mock_client_factory(handler)
@@ -471,40 +473,50 @@ class TestAPIClientGetSchema:
             [Callable[[httpx.Request], httpx.Response]], MixpanelAPIClient
         ],
     ) -> None:
-        """get_schema() should return schema dict."""
+        """get_schema() should return normalized schema dict."""
+        # API returns: {status: "ok", results: <schemaJson>}
+        # Client normalizes to: {entityType, name, schemaJson}
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(
                 200,
                 json={
-                    "entityType": "event",
-                    "name": "Purchase",
-                    "schemaJson": {"properties": {}},
+                    "status": "ok",
+                    "results": {"properties": {}},
                 },
             )
 
         client = mock_client_factory(handler)
         with client:
             schema = client.get_schema("event", "Purchase")
+            # Client normalizes response to include entityType and name
+            assert schema["entityType"] == "event"
             assert schema["name"] == "Purchase"
+            assert schema["schemaJson"] == {"properties": {}}
 
-    def test_get_schema_url_encodes_name(
+    def test_get_schema_passes_entity_name_param(
         self,
         mock_client_factory: Callable[
             [Callable[[httpx.Request], httpx.Response]], MixpanelAPIClient
         ],
     ) -> None:
-        """get_schema() should URL-encode special characters."""
+        """get_schema() should pass entity_name as query param."""
 
         def handler(request: httpx.Request) -> httpx.Response:
-            # "Added To Cart" should be encoded
-            assert "Added%20To%20Cart" in str(request.url)
+            # entity_name should be passed as query param
+            # URL: /schemas/{entity_type}?entity_name={name}
+            url_str = str(request.url)
+            assert "/schemas/event" in url_str
+            # httpx may encode spaces as + or %20
+            assert (
+                "entity_name=Added+To+Cart" in url_str
+                or "entity_name=Added%20To%20Cart" in url_str
+            )
             return httpx.Response(
                 200,
                 json={
-                    "entityType": "event",
-                    "name": "Added To Cart",
-                    "schemaJson": {"properties": {}},
+                    "status": "ok",
+                    "results": {"properties": {}},
                 },
             )
 
@@ -639,14 +651,15 @@ class TestDiscoveryServiceGetSchema:
         ],
     ) -> None:
         """get_schema() should return LexiconSchema."""
+        # API returns: {status: "ok", results: <schemaJson>}
+        # Client normalizes to: {entityType, name, schemaJson}
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(
                 200,
                 json={
-                    "entityType": "event",
-                    "name": "Purchase",
-                    "schemaJson": {
+                    "status": "ok",
+                    "results": {
                         "description": "User made a purchase",
                         "properties": {},
                     },
@@ -676,9 +689,8 @@ class TestDiscoveryServiceGetSchema:
             return httpx.Response(
                 200,
                 json={
-                    "entityType": "event",
-                    "name": "Test",
-                    "schemaJson": {"properties": {}},
+                    "status": "ok",
+                    "results": {"properties": {}},
                 },
             )
 

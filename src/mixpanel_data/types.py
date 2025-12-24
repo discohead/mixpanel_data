@@ -1222,7 +1222,16 @@ class WorkspaceInfo:
 # Lexicon Schemas Types
 
 EntityType = Literal["event", "profile"]
-"""Type alias for Lexicon entity types: 'event' or 'profile'."""
+"""Type alias for Lexicon entity types accepted as input parameters.
+
+Valid input types:
+    - event: Standard tracked events
+    - profile: User profile properties
+
+Note: The Mixpanel API may return additional entity types in responses
+(custom_event, group, lookup, collect_everything_event) which are accepted
+but not supported as input filters.
+"""
 
 
 @dataclass(frozen=True)
@@ -1342,8 +1351,8 @@ class LexiconSchema:
     from the Mixpanel data dictionary.
     """
 
-    entity_type: EntityType
-    """Type of entity: 'event' or 'profile'."""
+    entity_type: str
+    """Type of entity (e.g., 'event', 'profile', 'custom_event', 'group', etc.)."""
 
     name: str
     """Name of the event or profile property."""

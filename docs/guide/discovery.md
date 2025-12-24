@@ -157,7 +157,7 @@ Retrieve data dictionary schemas for events and profile properties. Schemas incl
 ### LexiconSchema
 
 ```python
-s.entity_type           # "event" or "profile"
+s.entity_type           # "event", "profile", or other API-returned types
 s.name                  # "Purchase"
 s.schema_json           # LexiconDefinition object
 ```

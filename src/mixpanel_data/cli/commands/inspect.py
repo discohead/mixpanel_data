@@ -335,7 +335,9 @@ def inspect_lexicon_schemas(
     ctx: typer.Context,
     type_: Annotated[
         str | None,
-        typer.Option("--type", "-t", help="Entity type: event or profile."),
+        typer.Option(
+            "--type", "-t", help="Entity type: event, profile, custom_event, etc."
+        ),
     ] = None,
     format: FormatOption = "json",
 ) -> None:
@@ -375,7 +377,9 @@ def inspect_lexicon_schema(
     ctx: typer.Context,
     type_: Annotated[
         str,
-        typer.Option("--type", "-t", help="Entity type: event or profile."),
+        typer.Option(
+            "--type", "-t", help="Entity type: event, profile, custom_event, etc."
+        ),
     ],
     name: Annotated[
         str,
