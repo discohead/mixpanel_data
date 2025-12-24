@@ -20,6 +20,7 @@ Workspace orchestrates four internal services:
       members:
         - __init__
         - ephemeral
+        - memory
         - open
         - close
         - test_credentials

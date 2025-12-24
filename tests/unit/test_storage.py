@@ -2138,3 +2138,188 @@ def test_rollback_allows_retry_without_table_exists_error(tmp_path: Path) -> Non
 
         assert row_count == 1
         assert storage.table_exists("retry_table")
+
+
+# =============================================================================
+# In-Memory Mode Tests
+# =============================================================================
+
+
+class TestInMemoryMode:
+    """Tests for in-memory database mode (StorageEngine.memory())."""
+
+    def test_memory_creates_in_memory_database(self) -> None:
+        """Test that memory() creates a working in-memory database."""
+        with StorageEngine.memory() as storage:
+            # Should have valid connection
+            assert storage.connection is not None
+            # Path should be None (no file)
+            assert storage.path is None
+            # Should be able to create tables and query
+            storage.connection.execute("CREATE TABLE test (id INTEGER)")
+            storage.connection.execute("INSERT INTO test VALUES (1)")
+            result = storage.connection.execute("SELECT * FROM test").fetchone()
+            assert result == (1,)
+
+    def test_memory_returns_storage_engine_instance(self) -> None:
+        """Test that memory() returns a StorageEngine instance."""
+        with StorageEngine.memory() as storage:
+            assert isinstance(storage, StorageEngine)
+
+    def test_memory_creates_unique_databases(self) -> None:
+        """Test that each memory() call creates an independent database."""
+        with StorageEngine.memory() as s1, StorageEngine.memory() as s2:
+            # Create table in first database
+            s1.connection.execute("CREATE TABLE test (id INTEGER)")
+            s1.connection.execute("INSERT INTO test VALUES (1)")
+
+            # Second database should not see first database's table
+            tables = s2.connection.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'test'"
+            ).fetchone()
+            assert tables == (0,)
+
+    def test_memory_supports_events_table_creation(self) -> None:
+        """Test that events can be stored in memory database."""
+        from datetime import datetime
+
+        from mixpanel_data.types import TableMetadata
+
+        with StorageEngine.memory() as storage:
+            events = [
+                {
+                    "event_name": "Test",
+                    "event_time": datetime.now(UTC),
+                    "distinct_id": "user_1",
+                    "insert_id": "event_1",
+                    "properties": {"key": "value"},
+                }
+            ]
+            metadata = TableMetadata(type="events", fetched_at=datetime.now(UTC))
+
+            row_count = storage.create_events_table("events", iter(events), metadata)
+            assert row_count == 1
+
+            result = storage.execute_scalar("SELECT COUNT(*) FROM events")
+            assert result == 1
+
+    def test_memory_close_is_idempotent(self) -> None:
+        """Test that close() can be called multiple times safely."""
+        storage = StorageEngine.memory()
+        storage.close()
+        storage.close()  # Should not raise
+        storage.close()  # Should not raise
+
+    def test_memory_context_manager_cleanup(self) -> None:
+        """Test context manager properly closes connection."""
+        storage_ref = None
+        with StorageEngine.memory() as storage:
+            storage_ref = storage
+            assert storage.connection is not None
+
+        # After exit, attempting to use connection should fail
+        with pytest.raises(RuntimeError, match="closed"):
+            _ = storage_ref.connection
+
+    def test_memory_path_is_none(self) -> None:
+        """Test that path property returns None for memory databases."""
+        with StorageEngine.memory() as storage:
+            assert storage.path is None
+
+    def test_memory_introspection_works(self) -> None:
+        """Test that list_tables, get_schema work on memory DB."""
+        from datetime import datetime
+
+        from mixpanel_data.types import TableMetadata
+
+        with StorageEngine.memory() as storage:
+            # Initially empty
+            assert storage.list_tables() == []
+
+            # Create table
+            events = [
+                {
+                    "event_name": "Test",
+                    "event_time": datetime.now(UTC),
+                    "distinct_id": "user_1",
+                    "insert_id": "event_1",
+                    "properties": {},
+                }
+            ]
+            metadata = TableMetadata(type="events", fetched_at=datetime.now(UTC))
+            storage.create_events_table("my_events", iter(events), metadata)
+
+            # Introspection should work
+            tables = storage.list_tables()
+            assert len(tables) == 1
+            assert tables[0].name == "my_events"
+
+            schema = storage.get_schema("my_events")
+            assert schema.table_name == "my_events"
+
+    def test_memory_supports_profiles_table_creation(self) -> None:
+        """Test that profiles can be stored in memory database."""
+        from datetime import datetime
+
+        from mixpanel_data.types import TableMetadata
+
+        with StorageEngine.memory() as storage:
+            profiles = [
+                {
+                    "distinct_id": "user_1",
+                    "properties": {"name": "Alice"},
+                    "last_seen": datetime.now(UTC),
+                }
+            ]
+            metadata = TableMetadata(type="profiles", fetched_at=datetime.now(UTC))
+
+            row_count = storage.create_profiles_table(
+                "profiles", iter(profiles), metadata
+            )
+            assert row_count == 1
+
+            result = storage.execute_scalar("SELECT COUNT(*) FROM profiles")
+            assert result == 1
+
+    def test_memory_query_methods_work(self) -> None:
+        """Test that all query methods work on memory database."""
+        from datetime import datetime
+
+        from mixpanel_data.types import TableMetadata
+
+        with StorageEngine.memory() as storage:
+            events = [
+                {
+                    "event_name": f"Event_{i}",
+                    "event_time": datetime.now(UTC),
+                    "distinct_id": f"user_{i}",
+                    "insert_id": f"event_{i}",
+                    "properties": {"index": i},
+                }
+                for i in range(5)
+            ]
+            metadata = TableMetadata(type="events", fetched_at=datetime.now(UTC))
+            storage.create_events_table("events", iter(events), metadata)
+
+            # execute_df
+            df = storage.execute_df("SELECT * FROM events")
+            assert len(df) == 5
+
+            # execute_scalar
+            count = storage.execute_scalar("SELECT COUNT(*) FROM events")
+            assert count == 5
+
+            # execute_rows
+            rows = storage.execute_rows(
+                "SELECT event_name FROM events ORDER BY event_name"
+            )
+            assert len(rows) == 5
+
+            # execute (returns relation)
+            relation = storage.execute("SELECT * FROM events")
+            assert relation.fetchall() is not None
+
+    def test_memory_and_ephemeral_flags_mutually_exclusive(self) -> None:
+        """Test that _in_memory and _ephemeral flags cannot both be True."""
+        with pytest.raises(ValueError, match="Cannot use both"):
+            StorageEngine(path=None, _ephemeral=True, _in_memory=True)

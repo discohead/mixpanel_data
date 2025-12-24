@@ -957,3 +957,188 @@ def test_introspection_after_table_drop(tmp_path: Path) -> None:
 
     finally:
         storage.close()
+
+
+# =============================================================================
+# In-Memory Mode Integration Tests
+# =============================================================================
+
+
+class TestInMemoryIntegration:
+    """Integration tests for in-memory storage mode."""
+
+    def test_memory_full_workflow(self) -> None:
+        """Test complete workflow with in-memory storage."""
+        from datetime import datetime
+
+        from mixpanel_data.types import TableMetadata
+
+        with StorageEngine.memory() as storage:
+            # Create events table
+            events = [
+                {
+                    "event_name": f"Event_{i}",
+                    "event_time": datetime.now(UTC),
+                    "distinct_id": f"user_{i % 10}",
+                    "insert_id": f"event_{i}",
+                    "properties": {"index": i, "category": "test"},
+                }
+                for i in range(100)
+            ]
+            events_meta = TableMetadata(type="events", fetched_at=datetime.now(UTC))
+            storage.create_events_table("events", iter(events), events_meta)
+
+            # Create profiles table
+            profiles = [
+                {
+                    "distinct_id": f"user_{i}",
+                    "properties": {"name": f"User {i}", "tier": "premium"},
+                    "last_seen": datetime.now(UTC),
+                }
+                for i in range(50)
+            ]
+            profiles_meta = TableMetadata(type="profiles", fetched_at=datetime.now(UTC))
+            storage.create_profiles_table("profiles", iter(profiles), profiles_meta)
+
+            # Verify row counts
+            event_count = storage.execute_scalar("SELECT COUNT(*) FROM events")
+            profile_count = storage.execute_scalar("SELECT COUNT(*) FROM profiles")
+            assert event_count == 100
+            assert profile_count == 50
+
+            # Test join query
+            df = storage.execute_df("""
+                SELECT e.event_name, p.properties->>'$.name' as user_name
+                FROM events e
+                JOIN profiles p ON e.distinct_id = p.distinct_id
+                LIMIT 5
+            """)
+            assert len(df) == 5
+
+            # Test introspection
+            tables = storage.list_tables()
+            assert len(tables) == 2
+            table_names = {t.name for t in tables}
+            assert table_names == {"events", "profiles"}
+
+            # Test schema introspection
+            schema = storage.get_schema("events")
+            assert schema.table_name == "events"
+            column_names = [c.name for c in schema.columns]
+            assert "event_name" in column_names
+            assert "properties" in column_names
+
+    def test_memory_multiple_independent_databases(self) -> None:
+        """Test that multiple in-memory databases are independent."""
+        from datetime import datetime
+
+        from mixpanel_data.types import TableMetadata
+
+        with StorageEngine.memory() as s1, StorageEngine.memory() as s2:
+            # Create table in first database
+            events1 = [
+                {
+                    "event_name": "Event_A",
+                    "event_time": datetime.now(UTC),
+                    "distinct_id": "user_1",
+                    "insert_id": "event_1",
+                    "properties": {},
+                }
+            ]
+            meta1 = TableMetadata(type="events", fetched_at=datetime.now(UTC))
+            s1.create_events_table("events", iter(events1), meta1)
+
+            # Create different table in second database
+            events2 = [
+                {
+                    "event_name": "Event_B",
+                    "event_time": datetime.now(UTC),
+                    "distinct_id": "user_2",
+                    "insert_id": "event_2",
+                    "properties": {},
+                },
+                {
+                    "event_name": "Event_C",
+                    "event_time": datetime.now(UTC),
+                    "distinct_id": "user_3",
+                    "insert_id": "event_3",
+                    "properties": {},
+                },
+            ]
+            meta2 = TableMetadata(type="events", fetched_at=datetime.now(UTC))
+            s2.create_events_table("events", iter(events2), meta2)
+
+            # Verify independence
+            count1 = s1.execute_scalar("SELECT COUNT(*) FROM events")
+            count2 = s2.execute_scalar("SELECT COUNT(*) FROM events")
+            assert count1 == 1
+            assert count2 == 2
+
+    def test_memory_handles_empty_iterator(self) -> None:
+        """Test that empty iterator creates valid empty table."""
+        from datetime import datetime
+
+        from mixpanel_data.types import TableMetadata
+
+        with StorageEngine.memory() as storage:
+            # Create empty events table
+            events: list[dict] = []
+            metadata = TableMetadata(type="events", fetched_at=datetime.now(UTC))
+            row_count = storage.create_events_table(
+                "empty_events", iter(events), metadata
+            )
+
+            assert row_count == 0
+
+            # Table should exist with zero rows
+            assert storage.table_exists("empty_events")
+            count = storage.execute_scalar("SELECT COUNT(*) FROM empty_events")
+            assert count == 0
+
+            # Schema should be valid
+            schema = storage.get_schema("empty_events")
+            assert schema.table_name == "empty_events"
+            assert len(schema.columns) == 5  # All event columns present
+
+    def test_memory_drop_and_recreate(self) -> None:
+        """Test dropping and recreating tables in memory database."""
+        from datetime import datetime
+
+        from mixpanel_data.types import TableMetadata
+
+        with StorageEngine.memory() as storage:
+            events = [
+                {
+                    "event_name": "Original",
+                    "event_time": datetime.now(UTC),
+                    "distinct_id": "user_1",
+                    "insert_id": "event_1",
+                    "properties": {},
+                }
+            ]
+            metadata = TableMetadata(type="events", fetched_at=datetime.now(UTC))
+
+            # Create table
+            storage.create_events_table("test_table", iter(events), metadata)
+            assert storage.table_exists("test_table")
+
+            # Drop table
+            storage.drop_table("test_table")
+            assert not storage.table_exists("test_table")
+
+            # Recreate with different data
+            new_events = [
+                {
+                    "event_name": "Recreated",
+                    "event_time": datetime.now(UTC),
+                    "distinct_id": "user_2",
+                    "insert_id": "event_2",
+                    "properties": {},
+                }
+            ]
+            storage.create_events_table("test_table", iter(new_events), metadata)
+            assert storage.table_exists("test_table")
+
+            # Verify new data
+            name = storage.execute_scalar("SELECT event_name FROM test_table")
+            assert name == "Recreated"

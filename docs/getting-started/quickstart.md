@@ -188,18 +188,24 @@ For ETL pipelines or one-time processing, stream data directly without storing:
     ws.close()
     ```
 
-## Using Ephemeral Workspaces
+## Temporary Workspaces
 
-For one-off analysis without persisting data:
+For one-off analysis without persisting data, use **ephemeral** or **in-memory** workspaces:
 
 ```python
 import mixpanel_data as mp
 
+# Ephemeral: uses temp file (best for large datasets, benefits from compression)
 with mp.Workspace.ephemeral() as ws:
+    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-31")
+    total = ws.sql_scalar("SELECT COUNT(*) FROM events")
+# Database automatically deleted when context exits
+
+# In-memory: no files created (best for small datasets or zero disk footprint)
+with mp.Workspace.memory() as ws:
     ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-07")
     total = ws.sql_scalar("SELECT COUNT(*) FROM events")
-    print(f"Total events: {total}")
-# Database automatically deleted when context exits
+# Database gone - no files ever created
 ```
 
 ## Next Steps

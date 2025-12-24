@@ -112,15 +112,22 @@ result = ws.segmentation(
 print(result.df)
 ```
 
-### Ephemeral Workspaces
+### Temporary Workspaces
 
 For one-off analysis without persisting data:
 
 ```python
+# Ephemeral: temp file with compression (best for large datasets)
 with mp.Workspace.ephemeral() as ws:
-    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-07")
+    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-31")
     total = ws.sql_scalar("SELECT COUNT(*) FROM events")
 # Database automatically deleted
+
+# In-memory: zero disk footprint (best for small datasets, testing)
+with mp.Workspace.memory() as ws:
+    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-07")
+    total = ws.sql_scalar("SELECT COUNT(*) FROM events")
+# No files ever created
 ```
 
 ### Streaming

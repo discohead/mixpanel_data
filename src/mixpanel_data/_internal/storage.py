@@ -63,24 +63,43 @@ class StorageEngine:
         # Database automatically cleaned up
     """
 
-    def __init__(self, path: Path | None = None, *, _ephemeral: bool = False) -> None:
+    def __init__(
+        self,
+        path: Path | None = None,
+        *,
+        _ephemeral: bool = False,
+        _in_memory: bool = False,
+    ) -> None:
         """Initialize storage engine with database at specified path.
 
         Args:
-            path: Path to database file. If None, creates ephemeral database.
+            path: Path to database file. Required unless _in_memory=True.
             _ephemeral: Internal flag to mark database as ephemeral.
                 DO NOT USE DIRECTLY - use StorageEngine.ephemeral() instead.
                 This parameter is keyword-only and prefixed with underscore
                 to indicate it's for internal use only.
+            _in_memory: Internal flag for in-memory databases.
+                DO NOT USE DIRECTLY - use StorageEngine.memory() instead.
 
         Raises:
             OSError: If path is invalid or lacks write permissions.
-            ValueError: If _ephemeral is used incorrectly.
+            ValueError: If _ephemeral or _in_memory is used incorrectly.
         """
         self._path: Path | None = None
         self._conn: duckdb.DuckDBPyConnection | None = None
         self._is_ephemeral = _ephemeral
+        self._is_in_memory = _in_memory
         self._closed = False  # Track if close() was explicitly called
+
+        # Validate mutually exclusive flags
+        if _ephemeral and _in_memory:
+            raise ValueError("Cannot use both _ephemeral and _in_memory flags")
+
+        # Handle in-memory mode - no file created
+        if _in_memory:
+            self._path = None
+            self._conn = duckdb.connect(":memory:")
+            return
 
         # Validate _ephemeral usage: prevent users from accidentally marking
         # arbitrary paths as ephemeral (which would delete them on close!)
@@ -114,9 +133,10 @@ class StorageEngine:
                 # Wrap any error as OSError for consistency
                 raise OSError(f"Failed to create database at {path}: {e}") from e
         else:
-            # Ephemeral mode - should use ephemeral() classmethod instead
+            # No path provided - should use ephemeral() or memory() classmethod
             raise ValueError(
-                "Use StorageEngine.ephemeral() to create ephemeral databases"
+                "Use StorageEngine.ephemeral() or StorageEngine.memory() "
+                "for temporary databases"
             )
 
     @classmethod
@@ -143,6 +163,33 @@ class StorageEngine:
         storage = cls(path=temp_path, _ephemeral=True)
 
         return storage
+
+    @classmethod
+    def memory(cls) -> StorageEngine:
+        """Create true in-memory database with no disk footprint.
+
+        The database exists only in RAM and is lost when closed.
+        No files are created on disk (until DuckDB needs to spill
+        for larger-than-memory operations).
+
+        Best for:
+        - Small datasets where zero disk footprint is required
+        - Unit tests without filesystem side effects
+        - Quick exploratory queries
+
+        For large datasets, prefer ephemeral() which benefits from
+        DuckDB's compression (can be 8x faster for large workloads).
+
+        Returns:
+            StorageEngine instance with in-memory database.
+
+        Example:
+            >>> with StorageEngine.memory() as storage:
+            ...     storage.create_events_table("events", data, metadata)
+            ...     df = storage.execute_df("SELECT * FROM events")
+            # Database gone - no cleanup needed
+        """
+        return cls(path=None, _in_memory=True)
 
     @classmethod
     def open_existing(cls, path: Path) -> StorageEngine:
@@ -251,7 +298,8 @@ class StorageEngine:
         """Close database connection and cleanup if ephemeral.
 
         Safe to call multiple times. For ephemeral databases, deletes the
-        temporary file and WAL files.
+        temporary file and WAL files. For in-memory databases, just closes
+        the connection (no file cleanup needed).
 
         Example:
             >>> storage = StorageEngine(path=Path("data.db"))
@@ -261,7 +309,16 @@ class StorageEngine:
             ... finally:
             ...     storage.close()
         """
-        if self._is_ephemeral:
+        if self._is_in_memory:
+            # In-memory database - just close connection, no file cleanup
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except Exception as e:
+                    _logger.debug("Failed to close in-memory connection: %s", e)
+                finally:
+                    self._conn = None
+        elif self._is_ephemeral:
             # Cleanup ephemeral database
             self._cleanup_ephemeral()
         else:

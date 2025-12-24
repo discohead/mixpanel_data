@@ -1378,3 +1378,135 @@ class TestTestCredentials:
 
             assert result["success"] is True
             assert result["account"] is None  # No named account used
+
+
+# =============================================================================
+# In-Memory Workspace Tests
+# =============================================================================
+
+
+class TestMemoryWorkspace:
+    """Tests for in-memory workspaces (Workspace.memory())."""
+
+    def test_memory_creates_in_memory_storage(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+    ) -> None:
+        """Test memory() creates workspace with in-memory storage."""
+        with Workspace.memory(
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        ) as ws:
+            assert ws._storage._is_in_memory is True
+            assert ws._storage.path is None
+
+    def test_memory_info_reflects_in_memory(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+    ) -> None:
+        """Test info() returns appropriate values for memory workspace."""
+        with Workspace.memory(
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        ) as ws:
+            info = ws.info()
+            assert info.path is None
+            assert info.size_mb == 0.0
+            assert info.created_at is None
+
+    def test_memory_sql_operations_work(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+    ) -> None:
+        """Test SQL operations work on memory workspace."""
+        with Workspace.memory(
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        ) as ws:
+            # Direct SQL should work
+            ws.connection.execute("CREATE TABLE test (id INTEGER)")
+            ws.connection.execute("INSERT INTO test VALUES (1)")
+
+            result = ws.sql_scalar("SELECT COUNT(*) FROM test")
+            assert result == 1
+
+    def test_memory_context_manager_closes_properly(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+    ) -> None:
+        """Test memory() context manager closes resources on exit."""
+        ws_ref = None
+        with Workspace.memory(
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        ) as ws:
+            ws_ref = ws
+            # Connection should be active
+            assert ws._storage._conn is not None
+
+        # After exit, connection should be closed
+        assert ws_ref._storage._conn is None
+
+    def test_memory_with_account_parameter(
+        self,
+        mock_api_client: MagicMock,
+        temp_dir: Path,
+    ) -> None:
+        """Test memory() works with account parameter."""
+        # Create config with named account
+        config_path = temp_dir / "config.toml"
+        config_manager = ConfigManager(config_path=config_path)
+        config_manager.add_account(
+            name="test_account",
+            username="test_user",
+            secret="test_secret",
+            project_id="12345",
+            region="us",
+        )
+
+        with Workspace.memory(
+            account="test_account",
+            _config_manager=config_manager,
+            _api_client=mock_api_client,
+        ) as ws:
+            assert ws._account_name == "test_account"
+            assert ws._storage._is_in_memory is True
+
+    def test_memory_with_project_override(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+    ) -> None:
+        """Test memory() works with project_id override."""
+        with Workspace.memory(
+            project_id="override_project",
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        ) as ws:
+            assert ws._credentials.project_id == "override_project"
+            assert ws._storage._is_in_memory is True
+
+    def test_memory_tables_method_works(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+    ) -> None:
+        """Test tables() introspection works on memory workspace."""
+        with Workspace.memory(
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        ) as ws:
+            # Initially no tables
+            tables = ws.tables()
+            assert tables == []
+
+            # Create a table directly
+            ws.connection.execute("CREATE TABLE test (id INTEGER)")
+
+            # tables() won't show it because it uses _metadata table
+            # But this confirms the introspection methods work
+            assert ws._storage.list_tables() == []

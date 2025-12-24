@@ -237,6 +237,61 @@ class Workspace:
             ws.close()
 
     @classmethod
+    @contextmanager
+    def memory(
+        cls,
+        account: str | None = None,
+        project_id: str | None = None,
+        region: str | None = None,
+        _config_manager: ConfigManager | None = None,
+        _api_client: MixpanelAPIClient | None = None,
+    ) -> Iterator[Workspace]:
+        """Create a workspace with true in-memory database.
+
+        The database exists only in RAM with zero disk footprint.
+        All data is lost when the context manager exits.
+
+        Best for:
+        - Small datasets where zero disk footprint is required
+        - Unit tests without filesystem side effects
+        - Quick exploratory queries
+
+        For large datasets, prefer ephemeral() which benefits from
+        DuckDB's compression (can be 8x faster for large workloads).
+
+        Args:
+            account: Named account from config file to use.
+            project_id: Override project ID from credentials.
+            region: Override region from credentials.
+            _config_manager: Injected ConfigManager for testing.
+            _api_client: Injected MixpanelAPIClient for testing.
+
+        Yields:
+            Workspace: A workspace with in-memory database.
+
+        Example:
+            ```python
+            with Workspace.memory() as ws:
+                ws.fetch_events(from_date="2024-01-01", to_date="2024-01-01")
+                total = ws.sql_scalar("SELECT COUNT(*) FROM events")
+            # Database gone - no cleanup needed, no files left behind
+            ```
+        """
+        storage = StorageEngine.memory()
+        ws = cls(
+            account=account,
+            project_id=project_id,
+            region=region,
+            _config_manager=_config_manager,
+            _api_client=_api_client,
+            _storage=storage,
+        )
+        try:
+            yield ws
+        finally:
+            ws.close()
+
+    @classmethod
     def open(cls, path: str | Path) -> Workspace:
         """Open an existing database for query-only access.
 
@@ -714,16 +769,21 @@ class Workspace:
             QueryError: If filter expression is invalid.
 
         Example:
-            >>> ws = Workspace()
-            >>> for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
-            ...     process(event)
-            >>> ws.close()
+            ```python
+            ws = Workspace()
+            for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+                process(event)
+            ws.close()
+            ```
 
-            >>> # With raw format
-            >>> for event in ws.stream_events(
-            ...     from_date="2024-01-01", to_date="2024-01-31", raw=True
-            ... ):
-            ...     legacy_system.ingest(event)
+            With raw format:
+
+            ```python
+            for event in ws.stream_events(
+                from_date="2024-01-01", to_date="2024-01-31", raw=True
+            ):
+                legacy_system.ingest(event)
+            ```
         """
         api_client = self._require_api_client()
         event_iterator = api_client.export_events(
@@ -764,14 +824,19 @@ class Workspace:
             RateLimitError: If rate limit exceeded after max retries.
 
         Example:
-            >>> ws = Workspace()
-            >>> for profile in ws.stream_profiles():
-            ...     sync_to_crm(profile)
-            >>> ws.close()
+            ```python
+            ws = Workspace()
+            for profile in ws.stream_profiles():
+                sync_to_crm(profile)
+            ws.close()
+            ```
 
-            >>> # Filter to premium users
-            >>> for profile in ws.stream_profiles(where='properties["plan"]=="premium"'):
-            ...     send_survey(profile)
+            Filter to premium users:
+
+            ```python
+            for profile in ws.stream_profiles(where='properties["plan"]=="premium"'):
+                send_survey(profile)
+            ```
         """
         api_client = self._require_api_client()
         profile_iterator = api_client.export_profiles(where=where)

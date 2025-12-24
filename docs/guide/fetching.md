@@ -238,14 +238,38 @@ while current < end:
     current = chunk_end + datetime.timedelta(days=1)
 ```
 
-### Use Ephemeral Workspaces for One-Off Analysis
+### Choose the Right Storage Mode
+
+mixpanel_data offers three storage modes:
+
+| Mode | Method | Disk Usage | Best For |
+|------|--------|------------|----------|
+| **Persistent** | `Workspace()` | Yes (permanent) | Repeated analysis, large datasets |
+| **Ephemeral** | `Workspace.ephemeral()` | Yes (temp file, auto-deleted) | One-off analysis with large data |
+| **In-Memory** | `Workspace.memory()` | None | Small datasets, testing, zero disk footprint |
+
+**Ephemeral mode** creates a temp file that benefits from DuckDB's compression—up to 8× faster for large datasets:
 
 ```python
 with mp.Workspace.ephemeral() as ws:
-    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-07")
+    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-31")
     result = ws.sql("SELECT event_name, COUNT(*) FROM events GROUP BY 1")
 # Database automatically deleted
 ```
+
+**In-memory mode** creates no files at all—ideal for small datasets, unit tests, or privacy-sensitive scenarios:
+
+```python
+with mp.Workspace.memory() as ws:
+    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-07")
+    total = ws.sql_scalar("SELECT COUNT(*) FROM events")
+# Database gone - no files ever created
+```
+
+!!! tip "When to use each mode"
+    - **Persistent**: You'll query the same data multiple times across sessions
+    - **Ephemeral**: Large datasets where you need compression benefits but won't keep the data
+    - **In-Memory**: Small datasets, unit tests, or when zero disk footprint is required
 
 ## Streaming as an Alternative
 

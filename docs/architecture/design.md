@@ -93,7 +93,7 @@ HTTP client with Mixpanel-specific features:
 
 DuckDB-based storage:
 
-- Persistent and ephemeral modes
+- Persistent, ephemeral, and in-memory modes
 - Table creation with streaming batch ingestion
 - Query execution (DataFrame, scalar, rows)
 - Schema introspection and metadata
