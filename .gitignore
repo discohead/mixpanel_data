@@ -56,3 +56,6 @@ htmlcov/
 
 # Logs
 *.log
+
+# Documentation
+site/

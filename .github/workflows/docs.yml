@@ -1,7 +1,9 @@
-name: Deploy Docs
+name: Docs
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -11,8 +13,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: "pages-${{ github.ref }}"
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -28,14 +30,16 @@ jobs:
         run: uv sync --extra docs
 
       - name: Build documentation
-        run: uv run mkdocs build
+        run: uv run mkdocs build --strict
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site/
 
   deploy:
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
