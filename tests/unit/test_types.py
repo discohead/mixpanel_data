@@ -207,6 +207,22 @@ class TestSegmentationResult:
         assert len(df) == 0
         assert "date" in df.columns
 
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        result = SegmentationResult(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            unit="day",
+            segment_property=None,
+            total=0,
+            series={},
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2  # Same object, not recomputed
+
     def test_to_dict_serializable(self) -> None:
         """to_dict should be JSON serializable."""
         result = SegmentationResult(
@@ -303,6 +319,22 @@ class TestFunnelResult:
         assert "conversion_rate" in df.columns
         assert len(df) == 2
 
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        steps = [FunnelStep(event="View", count=1000, conversion_rate=1.0)]
+        result = FunnelResult(
+            funnel_id=1,
+            funnel_name="Test",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            conversion_rate=1.0,
+            steps=steps,
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2  # Same object, not recomputed
+
     def test_to_dict_serializable(self) -> None:
         """to_dict should be JSON serializable."""
         steps = [
@@ -381,6 +413,22 @@ class TestRetentionResult:
         assert "period_1" in df.columns
         assert "period_2" in df.columns
 
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        cohorts = [CohortInfo(date="2024-01-01", size=1000, retention=[1.0, 0.5])]
+        result = RetentionResult(
+            born_event="Sign Up",
+            return_event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            unit="week",
+            cohorts=cohorts,
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2  # Same object, not recomputed
+
     def test_to_dict_serializable(self) -> None:
         """to_dict should be JSON serializable."""
         cohorts = [
@@ -438,6 +486,14 @@ class TestJQLResult:
 
         df = result.df
         assert len(df) == 0
+
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        result = JQLResult(_raw=[{"a": 1}, {"a": 2}])
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2  # Same object, not recomputed
 
     def test_to_dict_serializable(self) -> None:
         """to_dict should be JSON serializable."""

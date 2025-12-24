@@ -233,6 +233,21 @@ class TestNumericSumResult:
         assert len(df) == 0
         assert "date" in df.columns
 
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        result = NumericSumResult(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            property_expr='properties["amount"]',
+            unit="day",
+            results={"2024-01-01": 100.0},
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2  # Same object, not recomputed
+
     def test_to_dict_with_computed_at(self) -> None:
         """to_dict should include computed_at when present."""
         result = NumericSumResult(
@@ -316,6 +331,21 @@ class TestNumericAverageResult:
         assert len(df) == 0
         assert "date" in df.columns
 
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        result = NumericAverageResult(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            property_expr='properties["amount"]',
+            unit="day",
+            results={"2024-01-01": 50.0},
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2  # Same object, not recomputed
+
     def test_to_dict_serializable(self) -> None:
         """to_dict output should be JSON serializable."""
         result = NumericAverageResult(
@@ -393,6 +423,21 @@ class TestFrequencyResult:
         df = result.df
         assert len(df) == 0
         assert "date" in df.columns
+
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        result = FrequencyResult(
+            event="App Open",
+            from_date="2024-01-01",
+            to_date="2024-01-01",
+            unit="day",
+            addiction_unit="hour",
+            data={"2024-01-01": [100, 50]},
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2  # Same object, not recomputed
 
     def test_event_can_be_none(self) -> None:
         """event can be None for all events query."""
@@ -487,6 +532,21 @@ class TestNumericBucketResult:
         assert len(df) == 0
         assert "date" in df.columns
 
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        result = NumericBucketResult(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            property_expr='properties["amount"]',
+            unit="day",
+            series={"0 - 100": {"2024-01-01": 50}},
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2  # Same object, not recomputed
+
     def test_to_dict_serializable(self) -> None:
         """to_dict output should be JSON serializable."""
         result = NumericBucketResult(
@@ -565,6 +625,21 @@ class TestInsightsResult:
         df = result.df
         assert len(df) == 0
         assert "date" in df.columns
+
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        result = InsightsResult(
+            bookmark_id=12345,
+            computed_at="2024-01-15T10:30:00+00:00",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            headers=["$event"],
+            series={"Sign Up": {"2024-01-01": 100}},
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2  # Same object, not recomputed
 
     def test_to_dict_serializable(self) -> None:
         """to_dict output should be JSON serializable."""

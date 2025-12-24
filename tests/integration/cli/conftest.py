@@ -9,12 +9,77 @@ import pytest
 from typer.testing import CliRunner
 
 from mixpanel_data._internal.config import AccountInfo
+from mixpanel_data.types import (
+    FetchResult,
+    SegmentationResult,
+    TableInfo,
+    WorkspaceInfo,
+)
 
 
 @pytest.fixture
 def cli_runner() -> CliRunner:
     """Create a CLI runner for testing commands."""
     return CliRunner()
+
+
+@pytest.fixture
+def mock_workspace() -> MagicMock:
+    """Create a mock Workspace for testing commands."""
+    workspace = MagicMock()
+
+    # Set up common return values
+    workspace.events.return_value = ["Event1", "Event2", "Event3"]
+    workspace.properties.return_value = ["property1", "property2"]
+    workspace.property_values.return_value = ["value1", "value2", "value3"]
+    workspace.funnels.return_value = []
+    workspace.cohorts.return_value = []
+    workspace.top_events.return_value = []
+
+    workspace.tables.return_value = [
+        TableInfo(
+            name="events",
+            type="events",
+            row_count=1000,
+            fetched_at="2024-01-01T00:00:00Z",
+        ),
+    ]
+
+    workspace.info.return_value = WorkspaceInfo(
+        path="/tmp/workspace.db",
+        account="default",
+        project_id="12345",
+        region="us",
+        tables=["events"],
+        size_mb=1.5,
+        created_at=None,
+    )
+
+    workspace.sql_rows.return_value = [{"count": 100}]
+    workspace.sql_scalar.return_value = 100
+
+    from datetime import datetime
+
+    workspace.fetch_events.return_value = FetchResult(
+        table="events",
+        rows=1000,
+        type="events",
+        date_range=("2024-01-01", "2024-01-31"),
+        duration_seconds=5.0,
+        fetched_at=datetime.now(),
+    )
+
+    workspace.segmentation.return_value = SegmentationResult(
+        event="Signup",
+        from_date="2024-01-01",
+        to_date="2024-01-31",
+        unit="day",
+        segment_property=None,
+        total=500,
+        series={"$overall": {"2024-01-01": 100}},
+    )
+
+    return workspace
 
 
 @pytest.fixture

@@ -63,6 +63,23 @@ def test_init_with_invalid_path_raises_error() -> None:
         StorageEngine(path=invalid_path)
 
 
+def test_init_ephemeral_with_non_temp_path_raises_error() -> None:
+    """Test that _ephemeral=True with non-temp path raises ValueError."""
+    # The _ephemeral parameter is for internal use only and should only
+    # be used with paths in the system temp directory
+    # Use a path clearly outside the temp directory
+    non_temp_path = Path("/home/user/my_database.db")
+
+    with pytest.raises(ValueError, match="_ephemeral parameter is for internal use"):
+        StorageEngine(path=non_temp_path, _ephemeral=True)
+
+
+def test_init_with_none_path_raises_error() -> None:
+    """Test that path=None raises ValueError with helpful message."""
+    with pytest.raises(ValueError, match="Use StorageEngine.ephemeral"):
+        StorageEngine(path=None)
+
+
 # =============================================================================
 # T011: Test default path resolution
 # =============================================================================
@@ -1979,3 +1996,145 @@ def test_create_events_table_handles_many_duplicates(tmp_path: Path) -> None:
         # But table should only have 100 unique rows
         actual_count = storage.execute_scalar("SELECT COUNT(*) FROM test_events")
         assert actual_count == 100
+
+
+# =============================================================================
+# Transaction Rollback Tests
+# =============================================================================
+
+
+def test_create_events_table_rolls_back_on_failure(tmp_path: Path) -> None:
+    """Test that failed event table creation rolls back the transaction."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+
+    def failing_iterator() -> Iterator[dict[str, Any]]:
+        """Iterator that yields valid events then fails."""
+        yield {
+            "event_name": "Valid Event",
+            "event_time": datetime(2024, 1, 1, 10, 0, tzinfo=UTC),
+            "distinct_id": "user_1",
+            "insert_id": "id_1",
+            "properties": {"key": "value"},
+        }
+        raise ValueError("Simulated failure during iteration")
+
+    with StorageEngine(path=db_path) as storage:
+        metadata = TableMetadata(
+            type="events",
+            fetched_at=datetime.now(UTC),
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        # Should raise the error from the iterator
+        with pytest.raises(ValueError, match="Simulated failure"):
+            storage.create_events_table(
+                name="test_events",
+                data=failing_iterator(),
+                metadata=metadata,
+            )
+
+        # Table should not exist due to rollback
+        assert not storage.table_exists("test_events")
+
+
+def test_create_profiles_table_rolls_back_on_failure(tmp_path: Path) -> None:
+    """Test that failed profile table creation rolls back the transaction."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+
+    def failing_iterator() -> Iterator[dict[str, Any]]:
+        """Iterator that yields valid profiles then fails."""
+        yield {
+            "distinct_id": "user_1",
+            "last_seen": "2024-01-01T10:00:00Z",
+            "properties": {"name": "Alice"},
+        }
+        raise RuntimeError("Simulated database error")
+
+    with StorageEngine(path=db_path) as storage:
+        metadata = TableMetadata(
+            type="profiles",
+            fetched_at=datetime.now(UTC),
+        )
+
+        # Should raise the error from the iterator
+        with pytest.raises(RuntimeError, match="Simulated database error"):
+            storage.create_profiles_table(
+                name="test_profiles",
+                data=failing_iterator(),
+                metadata=metadata,
+            )
+
+        # Table should not exist due to rollback
+        assert not storage.table_exists("test_profiles")
+
+
+def test_rollback_allows_retry_without_table_exists_error(tmp_path: Path) -> None:
+    """Test that after rollback, retrying table creation works."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    attempt = [0]
+
+    def sometimes_failing_iterator() -> Iterator[dict[str, Any]]:
+        """Iterator that fails on first attempt, succeeds on second."""
+        yield {
+            "event_name": "Event",
+            "event_time": datetime(2024, 1, 1, 10, 0, tzinfo=UTC),
+            "distinct_id": "user_1",
+            "insert_id": "id_1",
+            "properties": {},
+        }
+        attempt[0] += 1
+        if attempt[0] == 1:
+            raise ValueError("First attempt fails")
+        # Second attempt succeeds
+
+    with StorageEngine(path=db_path) as storage:
+        metadata = TableMetadata(
+            type="events",
+            fetched_at=datetime.now(UTC),
+            from_date="2024-01-01",
+            to_date="2024-01-01",
+        )
+
+        # First attempt fails
+        with pytest.raises(ValueError):
+            storage.create_events_table(
+                name="retry_table",
+                data=sometimes_failing_iterator(),
+                metadata=metadata,
+            )
+
+        # Table should not exist
+        assert not storage.table_exists("retry_table")
+
+        # Retry should succeed (not raise TableExistsError)
+        row_count = storage.create_events_table(
+            name="retry_table",
+            data=iter(
+                [
+                    {
+                        "event_name": "Retry Event",
+                        "event_time": datetime(2024, 1, 1, 10, 0, tzinfo=UTC),
+                        "distinct_id": "user_1",
+                        "insert_id": "id_2",
+                        "properties": {},
+                    }
+                ]
+            ),
+            metadata=metadata,
+        )
+
+        assert row_count == 1
+        assert storage.table_exists("retry_table")

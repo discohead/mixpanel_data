@@ -10,12 +10,37 @@ from datetime import date, datetime
 from rich.table import Table
 
 from mixpanel_data.cli.formatters import (
+    _json_serializer,
     format_csv,
     format_json,
     format_jsonl,
     format_plain,
     format_table,
 )
+
+
+class TestJsonSerializer:
+    """Tests for _json_serializer helper."""
+
+    def test_serializes_datetime(self) -> None:
+        """Test serializing datetime."""
+        result = _json_serializer(datetime(2024, 1, 15, 10, 30))
+        assert result == "2024-01-15T10:30:00"
+
+    def test_serializes_date(self) -> None:
+        """Test serializing date."""
+        result = _json_serializer(date(2024, 1, 15))
+        assert result == "2024-01-15"
+
+    def test_serializes_unknown_type_as_str(self) -> None:
+        """Test that unknown types are converted to string."""
+
+        class CustomClass:
+            def __str__(self) -> str:
+                return "custom-string-repr"
+
+        result = _json_serializer(CustomClass())
+        assert result == "custom-string-repr"
 
 
 class TestFormatJson:
@@ -163,6 +188,22 @@ class TestFormatTable:
         table = format_table(data)
 
         assert isinstance(table, Table)
+
+    def test_format_with_datetime_values(self) -> None:
+        """Test formatting data with datetime values."""
+        data = [{"timestamp": datetime(2024, 1, 15, 10, 30, 0)}]
+        table = format_table(data)
+
+        assert isinstance(table, Table)
+        assert table.row_count == 1
+
+    def test_format_with_nested_list(self) -> None:
+        """Test formatting data with nested list values."""
+        data = [{"tags": ["a", "b", "c"]}]
+        table = format_table(data)
+
+        assert isinstance(table, Table)
+        assert table.row_count == 1
 
 
 class TestFormatCsv:

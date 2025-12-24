@@ -200,6 +200,60 @@ class TestCredentialResolution:
         with pytest.raises(ConfigError):
             Workspace(_config_manager=config_manager, _storage=mock_storage)
 
+    def test_project_id_override(
+        self,
+        mock_config_manager: MagicMock,
+        mock_storage: StorageEngine,
+    ) -> None:
+        """Test that project_id parameter overrides credentials."""
+        ws = Workspace(
+            project_id="override_project",
+            _config_manager=mock_config_manager,
+            _storage=mock_storage,
+        )
+        try:
+            assert ws._credentials.project_id == "override_project"
+            # Original username should be preserved
+            assert ws._credentials.username == "test_user"
+        finally:
+            ws.close()
+
+    def test_region_override(
+        self,
+        mock_config_manager: MagicMock,
+        mock_storage: StorageEngine,
+    ) -> None:
+        """Test that region parameter overrides credentials."""
+        ws = Workspace(
+            region="eu",
+            _config_manager=mock_config_manager,
+            _storage=mock_storage,
+        )
+        try:
+            assert ws._credentials.region == "eu"
+            # Original project_id should be preserved
+            assert ws._credentials.project_id == "12345"
+        finally:
+            ws.close()
+
+    def test_both_overrides(
+        self,
+        mock_config_manager: MagicMock,
+        mock_storage: StorageEngine,
+    ) -> None:
+        """Test that both project_id and region can be overridden."""
+        ws = Workspace(
+            project_id="new_project",
+            region="in",
+            _config_manager=mock_config_manager,
+            _storage=mock_storage,
+        )
+        try:
+            assert ws._credentials.project_id == "new_project"
+            assert ws._credentials.region == "in"
+        finally:
+            ws.close()
+
 
 # =============================================================================
 # Phase 4: US1 Basic Workflow Tests
@@ -945,6 +999,25 @@ class TestQueryOnlyMode:
         try:
             with pytest.raises(ConfigError) as exc_info:
                 ws.events()
+
+            assert "API access requires credentials" in str(exc_info.value)
+        finally:
+            ws.close()
+
+    def test_api_property_raises_config_error(
+        self,
+        temp_dir: Path,
+    ) -> None:
+        """Test .api property raises ConfigError in query-only mode."""
+        # Create a database file
+        db_path = temp_dir / "test.db"
+        storage = StorageEngine(path=db_path)
+        storage.close()
+
+        ws = Workspace.open(db_path)
+        try:
+            with pytest.raises(ConfigError) as exc_info:
+                _ = ws.api
 
             assert "API access requires credentials" in str(exc_info.value)
         finally:

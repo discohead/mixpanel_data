@@ -1007,6 +1007,73 @@ class TestErrorHandling:
 
         assert "JQL failed" in str(exc_info.value)
 
+    def test_query_error_on_400_with_plain_text(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should raise QueryError with plain text response on 400."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, text="Bad request: missing required field")
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(QueryError) as exc_info,
+        ):
+            client.get_events()
+
+        assert "Bad request: missing required field" in str(exc_info.value)
+
+
+class TestServerErrors:
+    """Test 5xx server error handling."""
+
+    def test_server_error_with_dict_body(self, test_credentials: Credentials) -> None:
+        """Should raise ServerError with error message from dict."""
+        from mixpanel_data.exceptions import ServerError
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(500, json={"error": "Internal database error"})
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(ServerError) as exc_info,
+        ):
+            client.get_events()
+
+        assert "Internal database error" in str(exc_info.value)
+        assert exc_info.value.status_code == 500
+
+    def test_server_error_with_string_body(self, test_credentials: Credentials) -> None:
+        """Should raise ServerError with truncated string body."""
+        from mixpanel_data.exceptions import ServerError
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(503, text="Service temporarily unavailable")
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(ServerError) as exc_info,
+        ):
+            client.get_events()
+
+        assert "Service temporarily unavailable" in str(exc_info.value)
+        assert exc_info.value.status_code == 503
+
+    def test_server_error_with_empty_body(self, test_credentials: Credentials) -> None:
+        """Should raise ServerError with status code only."""
+        from mixpanel_data.exceptions import ServerError
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(502, text="")
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(ServerError) as exc_info,
+        ):
+            client.get_events()
+
+        assert "Server error: 502" in str(exc_info.value)
+
 
 # =============================================================================
 # Regression Tests: Request Encoding

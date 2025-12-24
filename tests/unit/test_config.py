@@ -58,6 +58,16 @@ class TestCredentials:
                 region="invalid",
             )
 
+    def test_region_non_string_type_rejected(self) -> None:
+        """Test that non-string region type is rejected."""
+        with pytest.raises(ValueError, match="Region must be a string"):
+            Credentials(
+                username="user",
+                secret=SecretStr("secret"),
+                project_id="123",
+                region=123,  # type: ignore[arg-type]
+            )
+
     def test_empty_field_validation(self) -> None:
         """Test that empty fields are rejected."""
         with pytest.raises(ValueError, match="cannot be empty"):
@@ -376,6 +386,21 @@ class TestCredentialResolution:
             config_manager.resolve_credentials()
 
         assert "No credentials configured" in str(exc_info.value)
+
+    def test_resolve_invalid_env_region_raises(
+        self, config_manager: ConfigManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Invalid MP_REGION env var should raise ConfigError."""
+        monkeypatch.setenv("MP_USERNAME", "env_user")
+        monkeypatch.setenv("MP_SECRET", "env_secret")
+        monkeypatch.setenv("MP_PROJECT_ID", "env_project")
+        monkeypatch.setenv("MP_REGION", "invalid_region")
+
+        with pytest.raises(ConfigError) as exc_info:
+            config_manager.resolve_credentials()
+
+        assert "Invalid MP_REGION" in str(exc_info.value)
+        assert "invalid_region" in str(exc_info.value)
 
     def test_account_not_found_lists_available(
         self, config_manager: ConfigManager
