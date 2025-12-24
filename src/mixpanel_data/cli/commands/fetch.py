@@ -3,12 +3,17 @@
 This module provides commands for fetching data from Mixpanel:
 - events: Fetch events into local storage
 - profiles: Fetch user profiles into local storage
+
+Both commands support streaming to stdout with --stdout flag, which bypasses
+local storage and outputs JSONL directly for piping to other tools.
 """
 
 from __future__ import annotations
 
 import contextlib
-from typing import Annotated
+import json
+import sys
+from typing import Annotated, Any
 
 import typer
 
@@ -28,14 +33,22 @@ fetch_app = typer.Typer(
 )
 
 
+def _json_serializer(obj: Any) -> str:
+    """JSON serializer for objects not serializable by default json code."""
+    if hasattr(obj, "isoformat"):
+        result: str = obj.isoformat()
+        return result
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 @fetch_app.command("events")
 @handle_errors
 def fetch_events(
     ctx: typer.Context,
     name: Annotated[
-        str,
-        typer.Argument(help="Table name for storing events."),
-    ] = "events",
+        str | None,
+        typer.Argument(help="Table name for storing events. Ignored with --stdout."),
+    ] = None,
     from_date: Annotated[
         str,
         typer.Option("--from", help="Start date (YYYY-MM-DD).", show_default=False),
@@ -60,6 +73,14 @@ def fetch_events(
         bool,
         typer.Option("--no-progress", help="Hide progress bar."),
     ] = False,
+    stdout: Annotated[
+        bool,
+        typer.Option("--stdout", help="Stream to stdout as JSONL instead of storing."),
+    ] = False,
+    raw: Annotated[
+        bool,
+        typer.Option("--raw", help="Output raw API format (only with --stdout)."),
+    ] = False,
     format: FormatOption = "json",
 ) -> None:
     """Fetch events from Mixpanel into local storage.
@@ -69,6 +90,8 @@ def fetch_events(
 
     Use --events to filter by event name (comma-separated list).
     Use --where for Mixpanel expression filters (e.g., 'properties["country"]=="US"').
+    Use --stdout to stream JSONL to stdout instead of storing locally.
+    Use --raw with --stdout to output raw Mixpanel API format.
 
     Output shows table name, row count, duration, and date range.
 
@@ -77,6 +100,8 @@ def fetch_events(
       mp fetch events signups --from 2025-01-01 --to 2025-01-31 --events "Sign Up"
       mp fetch events --from 2025-01-01 --to 2025-01-31 --where 'properties["country"]=="US"'
       mp fetch events --from 2025-01-01 --to 2025-01-31 --replace
+      mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout
+      mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout --raw | jq '.event'
     """
     # Validate required options
     if not from_date:
@@ -86,21 +111,50 @@ def fetch_events(
         err_console.print("[red]Error:[/red] --to is required")
         raise typer.Exit(3)
 
+    # Validate --raw only with --stdout
+    if raw and not stdout:
+        err_console.print("[red]Error:[/red] --raw requires --stdout")
+        raise typer.Exit(3)
+
     # Parse events filter
     events_list = [e.strip() for e in events.split(",")] if events else None
 
     workspace = get_workspace(ctx)
 
+    # Streaming mode: output JSONL to stdout
+    if stdout:
+        quiet = ctx.obj.get("quiet", False)
+        count = 0
+
+        for event in workspace.stream_events(
+            from_date=from_date,
+            to_date=to_date,
+            events=events_list,
+            where=where,
+            raw=raw,
+        ):
+            print(json.dumps(event, default=_json_serializer), file=sys.stdout)
+            count += 1
+            if not quiet and count % 1000 == 0:
+                err_console.print(f"Streaming events... {count} rows", highlight=False)
+
+        if not quiet:
+            err_console.print(f"Streamed {count} events", highlight=False)
+        return
+
+    # Storage mode: fetch into local database
+    table_name = name if name else "events"
+
     # Drop table if replace is set
     if replace:
         with contextlib.suppress(Exception):
-            workspace.drop(name)
+            workspace.drop(table_name)
 
     quiet = ctx.obj.get("quiet", False)
     show_progress = not quiet and not no_progress
 
     result = workspace.fetch_events(
-        name=name,
+        name=table_name,
         from_date=from_date,
         to_date=to_date,
         events=events_list,
@@ -116,9 +170,9 @@ def fetch_events(
 def fetch_profiles(
     ctx: typer.Context,
     name: Annotated[
-        str,
-        typer.Argument(help="Table name for storing profiles."),
-    ] = "profiles",
+        str | None,
+        typer.Argument(help="Table name for storing profiles. Ignored with --stdout."),
+    ] = None,
     where: Annotated[
         str | None,
         typer.Option("--where", "-w", help="Mixpanel filter expression."),
@@ -131,6 +185,14 @@ def fetch_profiles(
         bool,
         typer.Option("--no-progress", help="Hide progress bar."),
     ] = False,
+    stdout: Annotated[
+        bool,
+        typer.Option("--stdout", help="Stream to stdout as JSONL instead of storing."),
+    ] = False,
+    raw: Annotated[
+        bool,
+        typer.Option("--raw", help="Output raw API format (only with --stdout)."),
+    ] = False,
     format: FormatOption = "json",
 ) -> None:
     """Fetch user profiles from Mixpanel into local storage.
@@ -139,6 +201,8 @@ def fetch_profiles(
     shows fetch progress (disable with --no-progress or --quiet).
 
     Use --where for Mixpanel expression filters on profile properties.
+    Use --stdout to stream JSONL to stdout instead of storing locally.
+    Use --raw with --stdout to output raw Mixpanel API format.
 
     Output shows table name, row count, and fetch duration.
 
@@ -146,19 +210,46 @@ def fetch_profiles(
       mp fetch profiles
       mp fetch profiles users --replace
       mp fetch profiles --where 'properties["plan"]=="premium"'
+      mp fetch profiles --stdout
+      mp fetch profiles --stdout --raw
     """
+    # Validate --raw only with --stdout
+    if raw and not stdout:
+        err_console.print("[red]Error:[/red] --raw requires --stdout")
+        raise typer.Exit(3)
+
     workspace = get_workspace(ctx)
+
+    # Streaming mode: output JSONL to stdout
+    if stdout:
+        quiet = ctx.obj.get("quiet", False)
+        count = 0
+
+        for profile in workspace.stream_profiles(where=where, raw=raw):
+            print(json.dumps(profile, default=_json_serializer), file=sys.stdout)
+            count += 1
+            if not quiet and count % 1000 == 0:
+                err_console.print(
+                    f"Streaming profiles... {count} rows", highlight=False
+                )
+
+        if not quiet:
+            err_console.print(f"Streamed {count} profiles", highlight=False)
+        return
+
+    # Storage mode: fetch into local database
+    table_name = name if name else "profiles"
 
     # Drop table if replace is set
     if replace:
         with contextlib.suppress(Exception):
-            workspace.drop(name)
+            workspace.drop(table_name)
 
     quiet = ctx.obj.get("quiet", False)
     show_progress = not quiet and not no_progress
 
     result = workspace.fetch_profiles(
-        name=name,
+        name=table_name,
         where=where,
         progress=show_progress,
     )

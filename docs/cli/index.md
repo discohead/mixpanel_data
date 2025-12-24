@@ -43,12 +43,19 @@ Manage stored credentials and accounts.
 
 ### fetch — Data Fetching
 
-Fetch data from Mixpanel into local storage.
+Fetch data from Mixpanel into local storage, or stream directly to stdout.
 
 | Command | Description |
 |---------|-------------|
 | `mp fetch events` | Fetch events to local DuckDB |
 | `mp fetch profiles` | Fetch user profiles to local DuckDB |
+
+**Streaming Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--stdout` | Stream data as JSONL to stdout instead of storing |
+| `--raw` | Output raw Mixpanel API format (requires `--stdout`) |
 
 ### query — Query Operations
 
@@ -169,6 +176,28 @@ mp query segmentation --event Login --from 2024-01-01 --to 2024-01-31 --format j
 
 # Count lines
 mp query sql "SELECT * FROM events" --format jsonl | wc -l
+```
+
+### Streaming to Stdout
+
+Stream data directly without storing locally:
+
+```bash
+# Stream events as JSONL
+mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout
+
+# Stream profiles
+mp fetch profiles --stdout
+
+# Pipe to jq for filtering
+mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout \
+    | jq 'select(.event_name == "Purchase")'
+
+# Save to file
+mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout > events.jsonl
+
+# Raw Mixpanel API format
+mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout --raw
 ```
 
 ## Full Command Reference

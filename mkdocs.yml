@@ -91,6 +91,7 @@ nav:
       - Configuration: getting-started/configuration.md
   - User Guide:
       - Fetching Data: guide/fetching.md
+      - Streaming Data: guide/streaming.md
       - Local SQL Queries: guide/sql-queries.md
       - Live Analytics: guide/live-analytics.md
       - Data Discovery: guide/discovery.md

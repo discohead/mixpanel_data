@@ -7,7 +7,7 @@ The `Workspace` class is the unified entry point for all Mixpanel data operation
 Workspace orchestrates four internal services:
 
 - **DiscoveryService** — Schema exploration (events, properties, funnels, cohorts)
-- **FetcherService** — Data ingestion from Mixpanel to DuckDB
+- **FetcherService** — Data ingestion from Mixpanel to DuckDB, or streaming without storage
 - **LiveQueryService** — Real-time analytics queries
 - **StorageEngine** — Local SQL query execution
 
@@ -32,6 +32,8 @@ Workspace orchestrates four internal services:
         - clear_discovery_cache
         - fetch_events
         - fetch_profiles
+        - stream_events
+        - stream_profiles
         - sql
         - sql_scalar
         - sql_rows

@@ -13,6 +13,7 @@ Fetch data once, store it locally in DuckDB, query repeatedly with SQL. Data liv
 ## Features
 
 - **Local Data Store** — Fetch events and profiles from Mixpanel, store in DuckDB, query with SQL
+- **Streaming** — Stream data directly without storage for ETL pipelines and one-time processing
 - **Live Queries** — Run Mixpanel reports (segmentation, funnels, retention) directly when fresh data is needed
 - **Data Discovery** — Introspect events, properties, values, saved funnels, and cohorts before writing queries
 - **Event Analytics** — Query multi-event time series and property breakdowns across date ranges
