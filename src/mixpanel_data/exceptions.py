@@ -98,13 +98,15 @@ class APIError(MixpanelDataError):
     - Modify their approach and retry autonomously
 
     Example:
-        >>> try:
-        ...     result = client.segmentation(event="signup", ...)
-        ... except APIError as e:
-        ...     print(f"Status: {e.status_code}")
-        ...     print(f"Response: {e.response_body}")
-        ...     print(f"Request URL: {e.request_url}")
-        ...     print(f"Request params: {e.request_params}")
+        ```python
+        try:
+            result = client.segmentation(event="signup", ...)
+        except APIError as e:
+            print(f"Status: {e.status_code}")
+            print(f"Response: {e.response_body}")
+            print(f"Request URL: {e.request_url}")
+            print(f"Request params: {e.request_params}")
+        ```
     """
 
     def __init__(
@@ -289,12 +291,14 @@ class AuthenticationError(APIError):
     Inherits from APIError to provide full request/response context.
 
     Example:
-        >>> try:
-        ...     client.segmentation(...)
-        ... except AuthenticationError as e:
-        ...     print(f"Auth failed: {e.message}")
-        ...     print(f"Request URL: {e.request_url}")
-        ...     # Check if project_id is correct, credentials are valid, etc.
+        ```python
+        try:
+            client.segmentation(...)
+        except AuthenticationError as e:
+            print(f"Auth failed: {e.message}")
+            print(f"Request URL: {e.request_url}")
+            # Check if project_id is correct, credentials are valid, etc.
+        ```
     """
 
     def __init__(
@@ -339,13 +343,15 @@ class RateLimitError(APIError):
     to provide full request context for debugging.
 
     Example:
-        >>> try:
-        ...     for _ in range(1000):
-        ...         client.segmentation(...)
-        ... except RateLimitError as e:
-        ...     print(f"Rate limited! Retry after {e.retry_after}s")
-        ...     print(f"Request: {e.request_method} {e.request_url}")
-        ...     time.sleep(e.retry_after or 60)
+        ```python
+        try:
+            for _ in range(1000):
+                client.segmentation(...)
+        except RateLimitError as e:
+            print(f"Rate limited! Retry after {e.retry_after}s")
+            print(f"Request: {e.request_method} {e.request_url}")
+            time.sleep(e.retry_after or 60)
+        ```
     """
 
     def __init__(
@@ -404,12 +410,14 @@ class QueryError(APIError):
     request/response context for debugging.
 
     Example:
-        >>> try:
-        ...     client.segmentation(event="nonexistent", ...)
-        ... except QueryError as e:
-        ...     print(f"Query failed: {e.message}")
-        ...     print(f"Response: {e.response_body}")
-        ...     print(f"Request params: {e.request_params}")
+        ```python
+        try:
+            client.segmentation(event="nonexistent", ...)
+        except QueryError as e:
+            print(f"Query failed: {e.message}")
+            print(f"Response: {e.response_body}")
+            print(f"Request params: {e.request_params}")
+        ```
     """
 
     def __init__(
@@ -455,13 +463,15 @@ class ServerError(APIError):
     actionable information (e.g., "unit and interval both specified").
 
     Example:
-        >>> try:
-        ...     client.retention(born_event="signup", ...)
-        ... except ServerError as e:
-        ...     print(f"Server error {e.status_code}: {e.message}")
-        ...     print(f"Response: {e.response_body}")
-        ...     print(f"Request params: {e.request_params}")
-        ...     # AI agent can analyze response_body to fix the request
+        ```python
+        try:
+            client.retention(born_event="signup", ...)
+        except ServerError as e:
+            print(f"Server error {e.status_code}: {e.message}")
+            print(f"Response: {e.response_body}")
+            print(f"Request params: {e.request_params}")
+            # AI agent can analyze response_body to fix the request
+        ```
     """
 
     def __init__(
@@ -562,13 +572,15 @@ class JQLSyntaxError(QueryError):
     Inherits from QueryError (and thus APIError) to provide full HTTP context.
 
     Example:
-        >>> try:
-        ...     result = live_query.jql(script)
-        ... except JQLSyntaxError as e:
-        ...     print(f"Error: {e.error_type}: {e.error_message}")
-        ...     print(f"Script: {e.script}")
-        ...     print(f"Line info: {e.line_info}")
-        ...     # AI agent can use this to fix the script and retry
+        ```python
+        try:
+            result = live_query.jql(script)
+        except JQLSyntaxError as e:
+            print(f"Error: {e.error_type}: {e.error_message}")
+            print(f"Script: {e.script}")
+            print(f"Line info: {e.line_info}")
+            # AI agent can use this to fix the script and retry
+        ```
     """
 
     def __init__(

@@ -54,3 +54,22 @@ build: clean
 # Run the CLI
 mp *args:
     uv run mp {{ args }}
+
+# === Documentation ===
+
+# Build documentation
+docs:
+    uv run mkdocs build
+
+# Serve documentation locally with live reload
+docs-serve:
+    uv run mkdocs serve
+
+# Deploy docs to GitHub Pages (manual, uses gh-pages branch)
+# --force is used because gh-pages contains only build artifacts, not source history
+docs-deploy:
+    uv run mkdocs gh-deploy --force
+
+# Clean documentation build artifacts
+docs-clean:
+    rm -rf site/
