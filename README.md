@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/mixpanel_data)](https://pypi.org/project/mixpanel_data/)
 [![License](https://img.shields.io/github/license/discohead/mixpanel_data)](LICENSE)
 
-A Python library and CLI for working with Mixpanel analytics data—fetch once, query repeatedly with SQL.
+A Python library and CLI for working with Mixpanel analytics data—fetch once, query repeatedly with SQL, or stream directly to ETL pipelines.
 
 ## Why mixpanel_data?
 
@@ -74,6 +74,13 @@ mp query sql "SELECT event_name, COUNT(*) FROM jan GROUP BY 1 ORDER BY 2 DESC" -
 mp query segmentation --event Purchase --from 2024-01-01 --to 2024-01-31 --on country
 ```
 
+### 6. Or Stream Directly (No Storage)
+
+```bash
+# Stream events as JSONL for piping to other tools
+mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout | jq '.event_name'
+```
+
 ## Python API
 
 ```python
@@ -116,6 +123,16 @@ with mp.Workspace.ephemeral() as ws:
 # Database automatically deleted
 ```
 
+### Streaming
+
+For ETL pipelines or one-time processing without storage:
+
+```python
+# Stream events directly to external system
+for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+    send_to_warehouse(event)
+```
+
 ## CLI Reference
 
 The `mp` CLI provides 31 commands across four groups:
@@ -128,6 +145,8 @@ The `mp` CLI provides 31 commands across four groups:
 | `mp inspect` | `events`, `properties`, `values`, `funnels`, `cohorts`, `top-events`, `info`, `tables`, `schema`, `drop` |
 
 All commands support `--format` (json, jsonl, table, csv, plain) and `--help`.
+
+`mp fetch` commands also support `--stdout` (stream as JSONL) and `--raw` (raw API format).
 
 ## DuckDB JSON Queries
 
@@ -152,6 +171,7 @@ Full documentation: [discohead.github.io/mixpanel_data](https://discohead.github
 - [Quick Start](https://discohead.github.io/mixpanel_data/getting-started/quickstart/)
 - [CLI Reference](https://discohead.github.io/mixpanel_data/cli/)
 - [Python API](https://discohead.github.io/mixpanel_data/api/)
+- [Streaming Guide](https://discohead.github.io/mixpanel_data/guide/streaming/)
 - [SQL Query Guide](https://discohead.github.io/mixpanel_data/guide/sql-queries/)
 - [Live Analytics](https://discohead.github.io/mixpanel_data/guide/live-analytics/)
 
@@ -160,6 +180,7 @@ Full documentation: [discohead.github.io/mixpanel_data](https://discohead.github
 `mixpanel_data` is designed with AI coding agents in mind:
 
 - **Context preservation**: Fetch data once, query repeatedly without re-fetching
+- **Streaming for ETL**: Stream data directly to external systems with `--stdout`
 - **Structured output**: All commands support `--format json` for machine-readable responses
 - **Discoverable schema**: `mp inspect` commands reveal events, properties, and values before querying
 - **Local SQL**: Complex analysis via SQL instead of multiple API round-trips
@@ -172,7 +193,7 @@ Typical agent workflow:
 mp inspect events --format json
 mp inspect properties --event Purchase --format json
 
-# 2. Fetch relevant data
+# 2. Fetch relevant data (or stream with --stdout for ETL)
 mp fetch events data --from 2024-01-01 --to 2024-01-31
 
 # 3. Iterate with SQL queries

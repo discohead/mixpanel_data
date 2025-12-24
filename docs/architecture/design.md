@@ -54,11 +54,12 @@ Schema introspection with session-scoped caching:
 
 #### FetcherService
 
-Coordinates data ingestion from Mixpanel API to DuckDB:
+Coordinates data ingestion from Mixpanel API to DuckDB, or direct streaming:
 
 - Streaming transformation (memory efficient)
 - Progress callback integration
-- Returns `FetchResult` with metadata
+- Returns `FetchResult` with metadata (fetch mode)
+- Returns `Iterator[dict]` without storage (stream mode)
 
 #### LiveQueryService
 
@@ -129,6 +130,23 @@ Best for:
 - Custom SQL logic
 - Context window preservation (AI agents)
 - Offline analysis
+
+### Streaming Path
+
+```
+User Request → Workspace → MixpanelAPIClient → Mixpanel Export API
+                                    ↓
+                          Iterator[dict] (no storage)
+                                    ↓
+                          Process each record inline
+```
+
+Best for:
+
+- ETL pipelines to external systems
+- One-time processing without storage
+- Memory-constrained environments
+- Unix pipeline integration (CLI `--stdout`)
 
 ## Key Design Decisions
 

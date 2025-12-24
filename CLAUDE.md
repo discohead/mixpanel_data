@@ -131,3 +131,10 @@ Design documents in `context/`:
 - [mixpanel_data-design.md](context/mixpanel_data-design.md) — Architecture and public API
 - [mp-cli-project-spec.md](context/mp-cli-project-spec.md) — CLI specification
 - [mixpanel-http-api-specification.md](context/mixpanel-http-api-specification.md) — Mixpanel API reference
+
+## Active Technologies
+- Python 3.11+ + Typer (CLI), httpx (HTTP), Rich (progress to stderr) (011-streaming-api)
+- N/A for streaming (bypasses DuckDB entirely) (011-streaming-api)
+
+## Recent Changes
+- 011-streaming-api: Added Python 3.11+ + Typer (CLI), httpx (HTTP), Rich (progress to stderr)

@@ -45,7 +45,11 @@ import pandas as pd
 from mixpanel_data._internal.api_client import MixpanelAPIClient
 from mixpanel_data._internal.config import ConfigManager, Credentials
 from mixpanel_data._internal.services.discovery import DiscoveryService
-from mixpanel_data._internal.services.fetcher import FetcherService
+from mixpanel_data._internal.services.fetcher import (
+    FetcherService,
+    _transform_event,
+    _transform_profile,
+)
 from mixpanel_data._internal.services.live_query import LiveQueryService
 from mixpanel_data._internal.storage import StorageEngine
 from mixpanel_data.exceptions import ConfigError
@@ -673,6 +677,110 @@ class Workspace:
                 pbar.stop()
 
         return result
+
+    # =========================================================================
+    # STREAMING METHODS
+    # =========================================================================
+
+    def stream_events(
+        self,
+        *,
+        from_date: str,
+        to_date: str,
+        events: list[str] | None = None,
+        where: str | None = None,
+        raw: bool = False,
+    ) -> Iterator[dict[str, Any]]:
+        """Stream events directly from Mixpanel API without storing.
+
+        Yields events one at a time as they are received from the API.
+        No database files or tables are created.
+
+        Args:
+            from_date: Start date inclusive (YYYY-MM-DD format).
+            to_date: End date inclusive (YYYY-MM-DD format).
+            events: Optional list of event names to filter. If None, all events returned.
+            where: Optional Mixpanel filter expression (e.g., 'properties["country"]=="US"').
+            raw: If True, return events in raw Mixpanel API format.
+                 If False (default), return normalized format with datetime objects.
+
+        Yields:
+            dict[str, Any]: Event dictionaries in normalized or raw format.
+
+        Raises:
+            ConfigError: If API credentials are not available.
+            AuthenticationError: If credentials are invalid.
+            RateLimitError: If rate limit exceeded after max retries.
+            QueryError: If filter expression is invalid.
+
+        Example:
+            >>> ws = Workspace()
+            >>> for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+            ...     process(event)
+            >>> ws.close()
+
+            >>> # With raw format
+            >>> for event in ws.stream_events(
+            ...     from_date="2024-01-01", to_date="2024-01-31", raw=True
+            ... ):
+            ...     legacy_system.ingest(event)
+        """
+        api_client = self._require_api_client()
+        event_iterator = api_client.export_events(
+            from_date=from_date,
+            to_date=to_date,
+            events=events,
+            where=where,
+        )
+
+        if raw:
+            yield from event_iterator
+        else:
+            for event in event_iterator:
+                yield _transform_event(event)
+
+    def stream_profiles(
+        self,
+        *,
+        where: str | None = None,
+        raw: bool = False,
+    ) -> Iterator[dict[str, Any]]:
+        """Stream user profiles directly from Mixpanel API without storing.
+
+        Yields profiles one at a time as they are received from the API.
+        No database files or tables are created.
+
+        Args:
+            where: Optional Mixpanel filter expression for profile properties.
+            raw: If True, return profiles in raw Mixpanel API format.
+                 If False (default), return normalized format.
+
+        Yields:
+            dict[str, Any]: Profile dictionaries in normalized or raw format.
+
+        Raises:
+            ConfigError: If API credentials are not available.
+            AuthenticationError: If credentials are invalid.
+            RateLimitError: If rate limit exceeded after max retries.
+
+        Example:
+            >>> ws = Workspace()
+            >>> for profile in ws.stream_profiles():
+            ...     sync_to_crm(profile)
+            >>> ws.close()
+
+            >>> # Filter to premium users
+            >>> for profile in ws.stream_profiles(where='properties["plan"]=="premium"'):
+            ...     send_survey(profile)
+        """
+        api_client = self._require_api_client()
+        profile_iterator = api_client.export_profiles(where=where)
+
+        if raw:
+            yield from profile_iterator
+        else:
+            for profile in profile_iterator:
+                yield _transform_profile(profile)
 
     # =========================================================================
     # LOCAL QUERY METHODS

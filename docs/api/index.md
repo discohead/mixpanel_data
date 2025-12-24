@@ -26,6 +26,7 @@ The main entry point for all operations:
 
 - **Discovery** — Explore events, properties, funnels, cohorts
 - **Fetching** — Download events and profiles to local storage
+- **Streaming** — Stream data directly without storage (ETL, pipelines)
 - **Local Queries** — SQL queries against DuckDB
 - **Live Queries** — Real-time analytics from Mixpanel API
 - **Introspection** — Examine local tables and schemas

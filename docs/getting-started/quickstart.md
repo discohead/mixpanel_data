@@ -163,6 +163,31 @@ For real-time analytics, query Mixpanel directly:
     print(result.df)
     ```
 
+## Alternative: Stream Data Without Storage
+
+For ETL pipelines or one-time processing, stream data directly without storing:
+
+=== "CLI"
+
+    ```bash
+    # Stream events as JSONL
+    mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout
+
+    # Pipe to other tools
+    mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout | jq '.event_name'
+    ```
+
+=== "Python"
+
+    ```python
+    import mixpanel_data as mp
+
+    ws = mp.Workspace()
+    for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+        send_to_warehouse(event)
+    ws.close()
+    ```
+
 ## Using Ephemeral Workspaces
 
 For one-off analysis without persisting data:
@@ -181,5 +206,6 @@ with mp.Workspace.ephemeral() as ws:
 
 - [Configuration](configuration.md) — Multiple accounts and advanced settings
 - [Fetching Data](../guide/fetching.md) — Filtering and progress callbacks
+- [Streaming Data](../guide/streaming.md) — Process data without local storage
 - [SQL Queries](../guide/sql-queries.md) — DuckDB JSON syntax and patterns
 - [Live Analytics](../guide/live-analytics.md) — Segmentation, funnels, retention

@@ -247,7 +247,25 @@ with mp.Workspace.ephemeral() as ws:
 # Database automatically deleted
 ```
 
+## Streaming as an Alternative
+
+If you don't need to store data locally, use streaming instead:
+
+| Approach | Storage | Best For |
+|----------|---------|----------|
+| `fetch_events()` | DuckDB table | Repeated SQL analysis |
+| `stream_events()` | None | ETL pipelines, one-time processing |
+
+```python
+# Stream directly without storage
+for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+    send_to_warehouse(event)
+```
+
+See [Streaming Data](streaming.md) for details.
+
 ## Next Steps
 
+- [Streaming Data](streaming.md) — Process data without local storage
 - [SQL Queries](sql-queries.md) — Query your fetched data with SQL
 - [Live Analytics](live-analytics.md) — Query Mixpanel directly for real-time data

@@ -163,14 +163,13 @@ Config file: `~/.mp/config.toml` (TOML format)
 ### Architecture Enforcement
 
 **Layer Boundaries**: Flag any code that:
-- Imports from `_internal/` in public modules (only `auth.py` is allowed to re-export)
 - Has CLI code directly accessing storage or API clients (should go through Workspace facade)
 - Has services calling other services horizontally (they should only call infrastructure)
 
-**Private API Leakage**: The `src/mixpanel_data/_internal/` directory is private implementation. Flag any:
-- Direct imports of `_internal` modules in user-facing code
-- Types from `_internal/` appearing in public function signatures
+**Private API for External Consumers**: The `src/mixpanel_data/_internal/` directory is private implementation that external consumers should not import. However, internal package code (like `workspace.py`, `auth.py`, CLI commands) legitimately imports from `_internal/` to implement the public API. Flag any:
+- Types from `_internal/` appearing in public function signatures (return types, parameters)
 - `__all__` exports that include `_internal` symbols
+- Documentation or examples that tell users to import from `_internal`
 
 ### Exception Handling
 
