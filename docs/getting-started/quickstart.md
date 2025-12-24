@@ -24,14 +24,25 @@ export MP_REGION="us"
 ### Option B: Using the CLI
 
 ```bash
+# Interactive prompt (secure, recommended)
 mp auth add production \
     --username sa_abc123... \
-    --secret your-secret-here \
     --project 12345 \
     --region us
+# You'll be prompted for the secret with hidden input
 ```
 
 This stores credentials in `~/.mp/config.toml` and sets `production` as the default account.
+
+For CI/CD environments, provide the secret via environment variable or stdin:
+
+```bash
+# Via environment variable
+MP_SECRET=your-secret mp auth add production --username sa_abc123... --project 12345
+
+# Via stdin
+echo "$SECRET" | mp auth add production --username sa_abc123... --project 12345 --secret-stdin
+```
 
 ## Step 2: Test Your Connection
 
@@ -79,7 +90,7 @@ Fetch a month of events into a local DuckDB database:
 === "CLI"
 
     ```bash
-    mp fetch events --name jan_events --from 2024-01-01 --to 2024-01-31
+    mp fetch events jan_events --from 2024-01-01 --to 2024-01-31
     ```
 
 === "Python"

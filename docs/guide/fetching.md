@@ -27,7 +27,7 @@ Fetch all events for a date range:
 === "CLI"
 
     ```bash
-    mp fetch events --name jan_events --from 2024-01-01 --to 2024-01-31
+    mp fetch events jan_events --from 2024-01-01 --to 2024-01-31
     ```
 
 ### Filtering Events
@@ -48,8 +48,8 @@ Fetch specific event types:
 === "CLI"
 
     ```bash
-    mp fetch events --name purchases --from 2024-01-01 --to 2024-01-31 \
-        --event Purchase --event "Checkout Started"
+    mp fetch events purchases --from 2024-01-01 --to 2024-01-31 \
+        --events Purchase,"Checkout Started"
     ```
 
 ### Using Where Clauses
@@ -70,7 +70,7 @@ Filter with Mixpanel expression syntax:
 === "CLI"
 
     ```bash
-    mp fetch events --name premium_purchases --from 2024-01-01 --to 2024-01-31 \
+    mp fetch events premium_purchases --from 2024-01-01 --to 2024-01-31 \
         --where 'properties["plan"] == "premium"'
     ```
 
@@ -106,7 +106,7 @@ Fetch user profiles into local storage:
 === "CLI"
 
     ```bash
-    mp fetch profiles --name users
+    mp fetch profiles users
     ```
 
 ### Filtering Profiles
@@ -125,7 +125,7 @@ Use Mixpanel expression syntax:
 === "CLI"
 
     ```bash
-    mp fetch profiles --name premium_users \
+    mp fetch profiles premium_users \
         --where 'properties["plan"] == "premium"'
     ```
 

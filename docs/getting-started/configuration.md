@@ -55,11 +55,22 @@ region = "us"
 Add a new account:
 
 ```bash
+# Interactive prompt (secure, recommended)
 mp auth add production \
     --username sa_abc123... \
-    --secret your-secret \
     --project 12345 \
     --region us
+# You'll be prompted for the secret with hidden input
+```
+
+For CI/CD environments, provide the secret via environment variable or stdin:
+
+```bash
+# Via environment variable
+MP_SECRET=your-secret mp auth add production --username sa_abc123... --project 12345
+
+# Via stdin
+echo "$SECRET" | mp auth add production --username sa_abc123... --project 12345 --secret-stdin
 ```
 
 List configured accounts:

@@ -1,26 +1,16 @@
 # mixpanel_data
 
-A Python library and CLI for working with Mixpanel analytics data, designed for AI coding agents.
+[![PyPI](https://img.shields.io/pypi/v/mixpanel_data)](https://pypi.org/project/mixpanel_data/)
+[![Python](https://img.shields.io/pypi/pyversions/mixpanel_data)](https://pypi.org/project/mixpanel_data/)
+[![License](https://img.shields.io/github/license/discohead/mixpanel_data)](LICENSE)
 
-**Status:** All core components complete — polish and release next.
+A Python library and CLI for working with Mixpanel analytics data—fetch once, query repeatedly with SQL.
 
-## The Problem
+## Why mixpanel_data?
 
-AI coding agents consume context window tokens when receiving Mixpanel API responses. A single query can return 30KB of JSON—tokens that could otherwise be used for reasoning and iteration.
+Every Mixpanel API call returns JSON that must be parsed, transformed, and reasoned about. For AI coding agents, this consumes valuable context window tokens. For data analysts, it means repetitive API calls.
 
-## The Solution
-
-Fetch data once, store it locally in DuckDB, query repeatedly with SQL. Data lives outside the context window; only precise answers flow back in.
-
-## Features
-
-- **Local Data Store** — Fetch events and profiles from Mixpanel, store in DuckDB, query with SQL
-- **Live Queries** — Run Mixpanel reports (segmentation, funnels, retention) directly when fresh data is needed
-- **Data Discovery** — Introspect events, properties, values, saved funnels, and cohorts before writing queries
-- **Event Analytics** — Query multi-event time series and property breakdowns across date ranges
-- **Advanced Analytics** — User activity feeds, saved Insights reports, frequency analysis, numeric aggregations
-- **Python Library** — Import and use programmatically in scripts and notebooks
-- **CLI** — Compose into Unix pipelines, invoke from agents without writing Python
+**mixpanel_data** solves this by fetching data into a local [DuckDB](https://duckdb.org) database. Query it with SQL as many times as needed. Data lives on disk; only answers flow back.
 
 ## Installation
 
@@ -28,26 +18,79 @@ Fetch data once, store it locally in DuckDB, query repeatedly with SQL. Data liv
 pip install mixpanel_data
 ```
 
+Requires Python 3.11+. Verify installation:
+
+```bash
+mp --version
+```
+
 ## Quick Start
 
-### Python API
+### 1. Configure Credentials
+
+```bash
+# Interactive prompt (secure, recommended)
+mp auth add production --username sa_xxx --project 12345 --region us
+# You'll be prompted for the secret with hidden input
+
+mp auth test  # Verify connection
+```
+
+Alternative methods for CI/CD:
+
+```bash
+# Via environment variable
+MP_SECRET=xxx mp auth add production --username sa_xxx --project 12345
+
+# Via stdin
+echo "$SECRET" | mp auth add production --username sa_xxx --project 12345 --secret-stdin
+```
+
+Or set all credentials as environment variables: `MP_USERNAME`, `MP_SECRET`, `MP_PROJECT_ID`, `MP_REGION`
+
+### 2. Explore Your Data
+
+```bash
+mp inspect events                      # List all events
+mp inspect properties --event Purchase # Properties for an event
+mp inspect funnels                     # Saved funnels
+```
+
+### 3. Fetch Events to Local Storage
+
+```bash
+mp fetch events jan --from 2024-01-01 --to 2024-01-31
+```
+
+### 4. Query with SQL
+
+```bash
+mp query sql "SELECT event_name, COUNT(*) FROM jan GROUP BY 1 ORDER BY 2 DESC" --format table
+```
+
+### 5. Run Live Analytics
+
+```bash
+mp query segmentation --event Purchase --from 2024-01-01 --to 2024-01-31 --on country
+```
+
+## Python API
 
 ```python
 import mixpanel_data as mp
 
-# Create workspace with stored credentials
 ws = mp.Workspace()
 
 # Fetch events into local DuckDB
-ws.fetch_events("jan_events", from_date="2024-01-01", to_date="2024-01-31")
+ws.fetch_events("jan", from_date="2024-01-01", to_date="2024-01-31")
 
-# Query with SQL
+# Query with SQL — returns pandas DataFrame
 df = ws.sql("""
     SELECT
         DATE_TRUNC('day', event_time) as day,
         event_name,
         COUNT(*) as count
-    FROM jan_events
+    FROM jan
     GROUP BY 1, 2
     ORDER BY 1, 3 DESC
 """)
@@ -59,138 +102,87 @@ result = ws.segmentation(
     to_date="2024-01-31",
     on="properties.country"
 )
+print(result.df)
 ```
 
-### Ephemeral Workspace
+### Ephemeral Workspaces
+
+For one-off analysis without persisting data:
 
 ```python
 with mp.Workspace.ephemeral() as ws:
-    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-31")
+    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-07")
     total = ws.sql_scalar("SELECT COUNT(*) FROM events")
 # Database automatically deleted
 ```
 
-### CLI
+## CLI Reference
 
-```bash
-# Configure credentials
-mp auth add production \
-    --username sa_xxx \
-    --secret xxx \
-    --project 12345 \
-    --region us
+The `mp` CLI provides 31 commands across four groups:
 
-# Fetch events
-mp fetch events --from 2024-01-01 --to 2024-01-31
+| Group | Commands |
+|-------|----------|
+| `mp auth` | `list`, `add`, `remove`, `switch`, `show`, `test` |
+| `mp fetch` | `events`, `profiles` |
+| `mp query` | `sql`, `segmentation`, `funnel`, `retention`, `jql`, `event-counts`, `property-counts`, `activity-feed`, `insights`, `frequency`, `segmentation-numeric`, `segmentation-sum`, `segmentation-average` |
+| `mp inspect` | `events`, `properties`, `values`, `funnels`, `cohorts`, `top-events`, `info`, `tables`, `schema`, `drop` |
 
-# Query locally
-mp sql "SELECT event_name, COUNT(*) FROM events GROUP BY 1" --format table
+All commands support `--format` (json, jsonl, table, csv, plain) and `--help`.
 
-# Run live segmentation
-mp segmentation --event Purchase --from 2024-01-01 --to 2024-01-31 --on country
-
-# Export to CSV
-mp sql "SELECT * FROM events" --format csv > events.csv
-```
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `MP_USERNAME` | Service account username |
-| `MP_SECRET` | Service account secret |
-| `MP_PROJECT_ID` | Project ID |
-| `MP_REGION` | Data residency region (`us`, `eu`, `in`) |
-
-### Config File
-
-Credentials can be stored in `~/.mp/config.toml`:
-
-```toml
-default = "production"
-
-[accounts.production]
-username = "sa_abc123..."
-secret = "..."
-project_id = "12345"
-region = "us"
-
-[accounts.staging]
-username = "sa_xyz789..."
-secret = "..."
-project_id = "67890"
-region = "eu"
-```
-
-## DuckDB JSON Query Syntax
+## DuckDB JSON Queries
 
 Mixpanel properties are stored as JSON columns:
 
 ```sql
--- Extract string property
+-- Extract property
 SELECT properties->>'$.country' as country FROM events
-
--- Extract and cast numeric
-SELECT CAST(properties->>'$.amount' AS DECIMAL) as amount FROM events
 
 -- Filter on property
 SELECT * FROM events WHERE properties->>'$.plan' = 'premium'
 
--- Nested property access
-SELECT properties->>'$.user.email' as email FROM events
+-- Cast numeric
+SELECT SUM(CAST(properties->>'$.amount' AS DECIMAL)) FROM events
 ```
 
 ## Documentation
 
-Full documentation is available at [discohead.github.io/mixpanel_data](https://discohead.github.io/mixpanel_data/).
+Full documentation: [discohead.github.io/mixpanel_data](https://discohead.github.io/mixpanel_data/)
 
-Internal design documents:
+- [Installation](https://discohead.github.io/mixpanel_data/getting-started/installation/)
+- [Quick Start](https://discohead.github.io/mixpanel_data/getting-started/quickstart/)
+- [CLI Reference](https://discohead.github.io/mixpanel_data/cli/)
+- [Python API](https://discohead.github.io/mixpanel_data/api/)
+- [SQL Query Guide](https://discohead.github.io/mixpanel_data/guide/sql-queries/)
+- [Live Analytics](https://discohead.github.io/mixpanel_data/guide/live-analytics/)
 
-- [Project Brief](context/mixpanel_data-project-brief.md) — Vision and goals
-- [Design Document](context/mixpanel_data-design.md) — Architecture, component specs, public API
-- [CLI Specification](context/mp-cli-project-spec.md) — Full CLI reference
-- [Mixpanel Data Model](context/MIXPANEL_DATA_MODEL_REFERENCE.md) — Data model reference
+## For AI Agents
 
-## Architecture
+`mixpanel_data` is designed with AI coding agents in mind:
 
+- **Context preservation**: Fetch data once, query repeatedly without re-fetching
+- **Structured output**: All commands support `--format json` for machine-readable responses
+- **Discoverable schema**: `mp inspect` commands reveal events, properties, and values before querying
+- **Local SQL**: Complex analysis via SQL instead of multiple API round-trips
+- **Predictable errors**: Typed exceptions with error codes for programmatic handling
+
+Typical agent workflow:
+
+```bash
+# 1. Discover schema
+mp inspect events --format json
+mp inspect properties --event Purchase --format json
+
+# 2. Fetch relevant data
+mp fetch events data --from 2024-01-01 --to 2024-01-31
+
+# 3. Iterate with SQL queries
+mp query sql "SELECT ..." --format json
+mp query sql "SELECT ..." --format json  # No re-fetch needed
 ```
-CLI Layer (Typer)           → Argument parsing, output formatting
-    ↓
-Public API Layer            → Workspace class, auth module
-    ↓
-Service Layer               → DiscoveryService, FetcherService, LiveQueryService
-    ↓
-Infrastructure Layer        → ConfigManager, MixpanelAPIClient, StorageEngine (DuckDB)
-```
 
-## Technology Stack
+## Contributing
 
-| Component | Choice |
-|-----------|--------|
-| Language | Python 3.11+ |
-| CLI Framework | Typer |
-| Output Formatting | Rich |
-| Validation | Pydantic |
-| Database | DuckDB |
-| HTTP Client | httpx |
-
-## Development Status
-
-Implementation following the phased roadmap in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md):
-
-1. ✅ **Foundation Layer** — Exceptions, types, ConfigManager, auth module
-2. ✅ **API Client** — MixpanelAPIClient with HTTP transport, rate limiting, streaming
-3. ✅ **Storage Engine** — DuckDB operations, schema management, query execution
-4. ✅ **Discovery Service** — DiscoveryService with caching
-5. ✅ **Fetch Service** — FetcherService for events/profiles ingestion
-6. ✅ **Live Queries** — LiveQueryService for segmentation, funnels, retention, JQL
-7. ✅ **Discovery Enhancements** — Funnels, cohorts, top events; event/property counts
-8. ✅ **Query Service Enhancements** — Activity feed, insights, frequency, numeric aggregations
-9. ✅ **Workspace** — Facade class, lifecycle management
-10. ✅ **CLI** — Typer application with 31 commands, 5 output formats
-11. ⏳ **Polish** — SKILL.md, documentation, PyPI release (next)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 
