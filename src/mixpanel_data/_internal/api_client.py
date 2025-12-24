@@ -296,30 +296,32 @@ class MixpanelAPIClient:
         jitter: float = random.uniform(0, delay * 0.1)  # noqa: S311
         return delay + jitter
 
-    def _request(
+    def _execute_with_retry(
         self,
         method: str,
         url: str,
         *,
         params: dict[str, Any] | None = None,
-        data: dict[str, Any] | None = None,
+        json_data: dict[str, Any] | None = None,
         form_data: dict[str, Any] | None = None,
+        headers: dict[str, str],
         timeout: float | None = None,
         script: str | None = None,
     ) -> Any:
-        """Make an authenticated request with retry on rate limit.
+        """Execute HTTP request with retry logic for rate limiting.
 
-        Automatically adds project_id to all requests and handles rate limiting
-        with exponential backoff. Retries up to max_retries times (default 3)
-        before raising RateLimitError.
+        This is the core request execution method used by both _request() and
+        request(). Handles rate limiting with exponential backoff and error
+        response parsing.
 
         Args:
             method: HTTP method (GET, POST, etc.).
             url: Full URL to request.
-            params: Query parameters. project_id is automatically added.
-            data: Request body as JSON (for POST).
-            form_data: Request body as form-encoded (for POST).
-            timeout: Override default timeout (uses self._timeout if not specified).
+            params: Optional query parameters.
+            json_data: Optional JSON request body.
+            form_data: Optional form-encoded request body.
+            headers: Request headers (must include Authorization).
+            timeout: Optional request timeout in seconds.
             script: Optional JQL script for error context.
 
         Returns:
@@ -334,16 +336,7 @@ class MixpanelAPIClient:
             MixpanelDataError: Network/connection errors.
         """
         client = self._ensure_client()
-
-        # Add project_id to all requests
-        if params is None:
-            params = {}
-        params["project_id"] = self._credentials.project_id
-
-        headers = {"Authorization": self._get_auth_header()}
-
-        # Capture request body for error context
-        request_body = data or form_data
+        request_body = json_data or form_data
 
         for attempt in range(self._max_retries + 1):
             try:
@@ -351,7 +344,7 @@ class MixpanelAPIClient:
                     method,
                     url,
                     params=params,
-                    json=data,
+                    json=json_data,
                     data=form_data,
                     headers=headers,
                     timeout=timeout or self._timeout,
@@ -360,7 +353,6 @@ class MixpanelAPIClient:
                 if response.status_code == 429:
                     if attempt >= self._max_retries:
                         retry_after = self._parse_retry_after(response)
-                        # Parse response body for error details
                         response_body: str | dict[str, Any] | None = None
                         try:
                             response_body = response.json()
@@ -377,7 +369,6 @@ class MixpanelAPIClient:
                             request_url=url,
                             request_params=params,
                         )
-                    # Calculate wait time
                     retry_after = self._parse_retry_after(response)
                     if retry_after is not None:
                         wait_time = float(retry_after)
@@ -402,7 +393,6 @@ class MixpanelAPIClient:
                 )
 
             except httpx.HTTPError as e:
-                # Network/connection errors
                 raise MixpanelDataError(
                     f"HTTP error: {e}",
                     code="HTTP_ERROR",
@@ -421,6 +411,134 @@ class MixpanelAPIClient:
             request_url=url,
             request_params=params,
         )
+
+    def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+        form_data: dict[str, Any] | None = None,
+        timeout: float | None = None,
+        script: str | None = None,
+    ) -> Any:
+        """Make an authenticated request with automatic project_id injection.
+
+        Used internally by API methods. Automatically adds project_id to all
+        requests and handles rate limiting with exponential backoff.
+
+        Args:
+            method: HTTP method (GET, POST, etc.).
+            url: Full URL to request.
+            params: Query parameters. project_id is automatically added.
+            data: Request body as JSON (for POST).
+            form_data: Request body as form-encoded (for POST).
+            timeout: Override default timeout (uses self._timeout if not specified).
+            script: Optional JQL script for error context.
+
+        Returns:
+            Parsed JSON response.
+
+        Raises:
+            AuthenticationError: Invalid credentials (401).
+            RateLimitError: Rate limit exceeded after max retries (429).
+            QueryError: Invalid parameters (400).
+            JQLSyntaxError: JQL script syntax/runtime error (412).
+            ServerError: Server-side errors (5xx).
+            MixpanelDataError: Network/connection errors.
+        """
+        if params is None:
+            params = {}
+        params["project_id"] = self._credentials.project_id
+
+        return self._execute_with_retry(
+            method,
+            url,
+            params=params,
+            json_data=data,
+            form_data=form_data,
+            headers={"Authorization": self._get_auth_header()},
+            timeout=timeout,
+            script=script,
+        )
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> Any:
+        """Make an authenticated request to any Mixpanel API endpoint.
+
+        This is the escape hatch for calling Mixpanel APIs not covered by the
+        Workspace class. Authentication is handled automatically.
+
+        Args:
+            method: HTTP method (GET, POST, PUT, DELETE, etc.).
+            url: Full URL to request.
+            params: Optional query parameters.
+            json_body: Optional JSON request body.
+            headers: Optional additional headers (Authorization is added automatically).
+            timeout: Optional request timeout in seconds.
+
+        Returns:
+            Parsed JSON response.
+
+        Raises:
+            AuthenticationError: Invalid credentials (401).
+            RateLimitError: Rate limit exceeded after max retries (429).
+            QueryError: Invalid parameters (400).
+            ServerError: Server-side errors (5xx).
+            MixpanelDataError: Network/connection errors.
+
+        Example:
+            Get event schema from the Lexicon API::
+
+                client = ws.api
+                schema = client.request(
+                    "GET",
+                    f"https://mixpanel.com/api/app/projects/{client.project_id}/schemas/event/Purchase"
+                )
+        """
+        request_headers = {"Authorization": self._get_auth_header()}
+        if headers:
+            request_headers.update(headers)
+
+        return self._execute_with_retry(
+            method,
+            url,
+            params=params,
+            json_data=json_body,
+            headers=request_headers,
+            timeout=timeout,
+        )
+
+    @property
+    def project_id(self) -> str:
+        """Get the project ID from credentials.
+
+        Useful when constructing URLs that require the project ID.
+
+        Returns:
+            The Mixpanel project ID.
+        """
+        return self._credentials.project_id
+
+    @property
+    def region(self) -> str:
+        """Get the configured region.
+
+        Useful when constructing regional URLs.
+
+        Returns:
+            The region code ('us', 'eu', or 'in').
+        """
+        return self._credentials.region
 
     def _parse_retry_after(self, response: httpx.Response) -> int | None:
         """Parse Retry-After header if present.

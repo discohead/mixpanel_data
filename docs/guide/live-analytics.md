@@ -392,6 +392,45 @@ result = ws.segmentation_average(
 # Average purchase amount per time period
 ```
 
+## API Escape Hatch
+
+For Mixpanel APIs not covered by the Workspace class, use the `api` property to make authenticated requests directly:
+
+=== "Python"
+
+    ```python
+    import mixpanel_data as mp
+    from urllib.parse import quote
+
+    ws = mp.Workspace()
+    client = ws.api
+
+    # Example: Fetch event schema from the Lexicon Schemas API
+    # Many Mixpanel APIs require the project ID in the URL path
+    event_name = quote("Added To Cart", safe="")
+    url = f"https://mixpanel.com/api/app/projects/{client.project_id}/schemas/event/{event_name}"
+
+    schema = client.request("GET", url)
+    print(schema)
+    ```
+
+### Request Parameters
+
+```python
+client.request(
+    "POST",
+    "https://mixpanel.com/api/some/endpoint",
+    params={"key": "value"},           # Query parameters
+    json_body={"data": "payload"},     # JSON request body
+    headers={"X-Custom": "header"},    # Additional headers
+    timeout=60.0                       # Request timeout in seconds
+)
+```
+
+Authentication is handled automatically — the client adds the proper `Authorization` header to all requests.
+
+The client also exposes `project_id` and `region` properties, which are useful when constructing URLs for APIs that require these values in the path.
+
 ## Next Steps
 
 - [Data Discovery](discovery.md) — Explore your event schema

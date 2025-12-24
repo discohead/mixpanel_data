@@ -1383,12 +1383,36 @@ class Workspace:
     def api(self) -> MixpanelAPIClient:
         """Direct access to the Mixpanel API client.
 
-        Use this for API operations not covered by the Workspace API.
+        Use this escape hatch for Mixpanel API operations not covered by the
+        Workspace class. The client handles authentication automatically.
+
+        The client provides:
+            - ``request(method, url, **kwargs)``: Make authenticated requests
+              to any Mixpanel API endpoint.
+            - ``project_id``: The configured project ID for constructing URLs.
+            - ``region``: The configured region ('us', 'eu', or 'in').
 
         Returns:
             The underlying MixpanelAPIClient.
 
         Raises:
             ConfigError: If API credentials not available.
+
+        Example:
+            Fetch event schema from the Lexicon Schemas API::
+
+                import mixpanel_data as mp
+                from urllib.parse import quote
+
+                ws = mp.Workspace()
+                client = ws.api
+
+                # Build the URL with proper encoding
+                event_name = quote("Added To Cart", safe="")
+                url = f"https://mixpanel.com/api/app/projects/{client.project_id}/schemas/event/{event_name}"
+
+                # Make the authenticated request
+                schema = client.request("GET", url)
+                print(schema)
         """
         return self._require_api_client()

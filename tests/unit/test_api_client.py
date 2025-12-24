@@ -1321,3 +1321,240 @@ class TestRetryStateResetRegression:
 
         # Should have exactly 5 events (not accumulated across attempts)
         assert len(events) == 5
+
+
+# =============================================================================
+# Public request() Method - Escape Hatch for Arbitrary APIs
+# =============================================================================
+
+
+class TestPublicRequest:
+    """Test the public request() method for arbitrary API calls."""
+
+    def test_request_sends_auth_header(self, test_credentials: Credentials) -> None:
+        """request() should send authentication header."""
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(dict(request.headers))
+            return httpx.Response(200, json={"result": "ok"})
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.request("GET", "https://mixpanel.com/api/app/test")
+
+        assert "authorization" in captured_headers
+        assert captured_headers["authorization"].startswith("Basic ")
+
+    def test_request_with_query_params(self, test_credentials: Credentials) -> None:
+        """request() should include query parameters."""
+        captured_url: str = ""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_url
+            captured_url = str(request.url)
+            return httpx.Response(200, json={})
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.request(
+                "GET",
+                "https://mixpanel.com/api/app/test",
+                params={"foo": "bar", "limit": 10},
+            )
+
+        assert "foo=bar" in captured_url
+        assert "limit=10" in captured_url
+
+    def test_request_with_json_body(self, test_credentials: Credentials) -> None:
+        """request() should send JSON body for POST requests."""
+        captured_body: dict[str, Any] = {}
+        captured_content_type: str = ""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_body, captured_content_type
+            captured_content_type = request.headers.get("content-type", "")
+            if request.content:
+                captured_body = json.loads(request.content)
+            return httpx.Response(200, json={"created": True})
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.request(
+                "POST",
+                "https://mixpanel.com/api/app/projects/12345/data",
+                json_body={"name": "test", "value": 123},
+            )
+
+        assert "application/json" in captured_content_type
+        assert captured_body == {"name": "test", "value": 123}
+
+    def test_request_with_custom_headers(self, test_credentials: Credentials) -> None:
+        """request() should merge custom headers with auth."""
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(dict(request.headers))
+            return httpx.Response(200, json={})
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.request(
+                "GET",
+                "https://mixpanel.com/api/app/test",
+                headers={"X-Custom-Header": "custom-value"},
+            )
+
+        # Should have both auth and custom headers
+        assert "authorization" in captured_headers
+        assert captured_headers["x-custom-header"] == "custom-value"
+
+    def test_request_does_not_inject_project_id(
+        self, test_credentials: Credentials
+    ) -> None:
+        """request() should NOT automatically inject project_id (user controls URL)."""
+        captured_url: str = ""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_url
+            captured_url = str(request.url)
+            return httpx.Response(200, json={})
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.request("GET", "https://mixpanel.com/api/app/test")
+
+        # project_id should NOT be automatically added
+        assert "project_id" not in captured_url
+
+    def test_request_returns_json_response(self, test_credentials: Credentials) -> None:
+        """request() should return parsed JSON response."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={"data": {"events": ["A", "B"]}, "status": "ok"},
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.request("GET", "https://mixpanel.com/api/app/test")
+
+        assert result == {"data": {"events": ["A", "B"]}, "status": "ok"}
+
+    def test_request_handles_401(self, test_credentials: Credentials) -> None:
+        """request() should raise AuthenticationError on 401."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(401, json={"error": "Invalid token"})
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(AuthenticationError),
+        ):
+            client.request("GET", "https://mixpanel.com/api/app/test")
+
+    def test_request_handles_400(self, test_credentials: Credentials) -> None:
+        """request() should raise QueryError on 400."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": "Bad request"})
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(QueryError) as exc_info,
+        ):
+            client.request("GET", "https://mixpanel.com/api/app/test")
+
+        assert "Bad request" in str(exc_info.value)
+
+    def test_request_handles_429_with_retry(
+        self, test_credentials: Credentials
+    ) -> None:
+        """request() should retry on 429."""
+        call_count = 0
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(429, headers={"Retry-After": "0"})
+            return httpx.Response(200, json={"success": True})
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.request("GET", "https://mixpanel.com/api/app/test")
+
+        assert call_count == 2
+        assert result == {"success": True}
+
+    def test_request_raises_rate_limit_after_max_retries(
+        self, test_credentials: Credentials
+    ) -> None:
+        """request() should raise RateLimitError after max retries."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429, headers={"Retry-After": "60"})
+
+        transport = httpx.MockTransport(handler)
+        client = MixpanelAPIClient(
+            test_credentials, max_retries=1, _transport=transport
+        )
+
+        with client, pytest.raises(RateLimitError) as exc_info:
+            client.request("GET", "https://mixpanel.com/api/app/test")
+
+        assert exc_info.value.retry_after == 60
+
+    def test_request_lexicon_schemas_example(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Example: Fetch event schema from Lexicon API."""
+        captured_url: str = ""
+        captured_method: str = ""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_url, captured_method
+            captured_url = str(request.url)
+            captured_method = request.method
+            return httpx.Response(
+                200,
+                json={
+                    "entityType": "event",
+                    "name": "Added To Cart",
+                    "schemaJson": {"properties": {}},
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            project_id = client.project_id
+            result = client.request(
+                "GET",
+                f"https://mixpanel.com/api/app/projects/{project_id}/schemas/event/Added%20To%20Cart",
+            )
+
+        assert captured_method == "GET"
+        assert "/projects/12345/schemas/event/Added%20To%20Cart" in captured_url
+        assert result["entityType"] == "event"
+        assert result["name"] == "Added To Cart"
+
+
+class TestAPIClientProperties:
+    """Test project_id and region properties on MixpanelAPIClient."""
+
+    def test_project_id_property(self, test_credentials: Credentials) -> None:
+        """project_id property should return credentials project_id."""
+        client = MixpanelAPIClient(test_credentials)
+        assert client.project_id == "12345"
+        client.close()
+
+    def test_region_property_us(self, test_credentials: Credentials) -> None:
+        """region property should return US for US credentials."""
+        client = MixpanelAPIClient(test_credentials)
+        assert client.region == "us"
+        client.close()
+
+    def test_region_property_eu(self, eu_credentials: Credentials) -> None:
+        """region property should return EU for EU credentials."""
+        client = MixpanelAPIClient(eu_credentials)
+        assert client.region == "eu"
+        client.close()
+
+    def test_region_property_india(self, india_credentials: Credentials) -> None:
+        """region property should return IN for India credentials."""
+        client = MixpanelAPIClient(india_credentials)
+        assert client.region == "in"
+        client.close()
