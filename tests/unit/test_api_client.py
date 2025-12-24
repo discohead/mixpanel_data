@@ -377,7 +377,7 @@ class TestRateLimiting:
         """Should raise RateLimitError after max retries."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(429, headers={"Retry-After": "60"})
+            return httpx.Response(429, headers={"Retry-After": "0"})
 
         transport = httpx.MockTransport(handler)
         client = MixpanelAPIClient(
@@ -387,7 +387,7 @@ class TestRateLimiting:
         with client, pytest.raises(RateLimitError) as exc_info:
             client.get_events()
 
-        assert exc_info.value.retry_after == 60
+        assert exc_info.value.retry_after == 0
 
     def test_successful_response_after_retry(
         self, test_credentials: Credentials
@@ -1487,7 +1487,7 @@ class TestPublicRequest:
         """request() should raise RateLimitError after max retries."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(429, headers={"Retry-After": "60"})
+            return httpx.Response(429, headers={"Retry-After": "0"})
 
         transport = httpx.MockTransport(handler)
         client = MixpanelAPIClient(
@@ -1497,7 +1497,7 @@ class TestPublicRequest:
         with client, pytest.raises(RateLimitError) as exc_info:
             client.request("GET", "https://mixpanel.com/api/app/test")
 
-        assert exc_info.value.retry_after == 60
+        assert exc_info.value.retry_after == 0
 
     def test_request_lexicon_schemas_example(
         self, test_credentials: Credentials
