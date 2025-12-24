@@ -1186,7 +1186,7 @@ class WorkspaceInfo:
     """
 
     path: Path | None
-    """Database file path (None for ephemeral workspaces)."""
+    """Database file path (None for ephemeral or in-memory workspaces)."""
 
     project_id: str
     """Mixpanel project ID."""
@@ -1201,7 +1201,7 @@ class WorkspaceInfo:
     """Names of tables in the database."""
 
     size_mb: float
-    """Database file size in megabytes (0.0 for ephemeral)."""
+    """Database file size in megabytes (0.0 for in-memory workspaces)."""
 
     created_at: datetime | None
     """When database was created (None if unknown)."""

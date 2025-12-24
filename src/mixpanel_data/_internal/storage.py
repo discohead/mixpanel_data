@@ -73,7 +73,7 @@ class StorageEngine:
         """Initialize storage engine with database at specified path.
 
         Args:
-            path: Path to database file. If None, creates ephemeral database.
+            path: Path to database file. Required unless _in_memory=True.
             _ephemeral: Internal flag to mark database as ephemeral.
                 DO NOT USE DIRECTLY - use StorageEngine.ephemeral() instead.
                 This parameter is keyword-only and prefixed with underscore
