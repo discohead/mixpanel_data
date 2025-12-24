@@ -30,6 +30,8 @@ Workspace orchestrates four internal services:
         - funnels
         - cohorts
         - top_events
+        - lexicon_schemas
+        - lexicon_schema
         - clear_discovery_cache
         - fetch_events
         - fetch_profiles
@@ -52,7 +54,7 @@ Workspace orchestrates four internal services:
         - segmentation_average
         - info
         - tables
-        - schema
+        - table_schema
         - drop
         - drop_all
         - connection

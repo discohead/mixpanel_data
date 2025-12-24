@@ -119,6 +119,81 @@ c.created      # datetime
 c.is_visible   # True
 ```
 
+## Lexicon Schemas
+
+Retrieve data dictionary schemas for events and profile properties. Schemas include descriptions, property types, and metadata defined in Mixpanel's Lexicon.
+
+!!! note "Schema Coverage"
+    The Lexicon API returns only events/properties with explicit schemas (defined via API, CSV import, or UI). It does not return all events visible in Lexicon's UI.
+
+=== "Python"
+
+    ```python
+    # List all schemas
+    schemas = ws.lexicon_schemas()
+    for s in schemas:
+        print(f"{s.entity_type}: {s.name}")
+
+    # Filter by entity type
+    event_schemas = ws.lexicon_schemas(entity_type="event")
+    profile_schemas = ws.lexicon_schemas(entity_type="profile")
+
+    # Get a specific schema
+    schema = ws.lexicon_schema("event", "Purchase")
+    print(schema.schema_json.description)
+    for prop, info in schema.schema_json.properties.items():
+        print(f"  {prop}: {info.type}")
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp inspect lexicon-schemas
+    mp inspect lexicon-schemas --type event
+    mp inspect lexicon-schemas --type profile
+    mp inspect lexicon-schema --type event --name Purchase
+    ```
+
+### LexiconSchema
+
+```python
+s.entity_type           # "event" or "profile"
+s.name                  # "Purchase"
+s.schema_json           # LexiconDefinition object
+```
+
+### LexiconDefinition
+
+```python
+s.schema_json.description                # "User completes a purchase"
+s.schema_json.properties                 # dict[str, LexiconProperty]
+s.schema_json.metadata                   # LexiconMetadata or None
+```
+
+### LexiconProperty
+
+```python
+prop = s.schema_json.properties["amount"]
+prop.type                                # "number"
+prop.description                         # "Purchase amount in USD"
+prop.metadata                            # LexiconMetadata or None
+```
+
+### LexiconMetadata
+
+```python
+meta = s.schema_json.metadata
+meta.display_name       # "Purchase Event"
+meta.tags               # ["core", "revenue"]
+meta.hidden             # False
+meta.dropped            # False
+meta.contacts           # ["owner@company.com"]
+meta.team_contacts      # ["Analytics Team"]
+```
+
+!!! warning "Rate Limit"
+    The Lexicon API has a strict rate limit of **5 requests per minute**. Schema results are cached for the session to minimize API calls.
+
 ## Top Events
 
 Get today's most active events:
@@ -197,7 +272,7 @@ Inspect tables in your local database:
 === "Python"
 
     ```python
-    schema = ws.schema("jan_events")
+    schema = ws.table_schema("jan_events")
     for col in schema.columns:
         print(f"{col.name}: {col.type} (nullable: {col.nullable})")
     ```

@@ -62,6 +62,28 @@ All result types are immutable frozen dataclasses with:
       show_root_heading: true
       show_root_toc_entry: true
 
+## Lexicon Types
+
+::: mixpanel_data.LexiconSchema
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.LexiconDefinition
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.LexiconProperty
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.LexiconMetadata
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
 ## Event Analytics Results
 
 ::: mixpanel_data.EventCountsResult

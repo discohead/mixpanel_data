@@ -142,14 +142,14 @@ for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
 
 ## CLI Reference
 
-The `mp` CLI provides 31 commands across four groups:
+The `mp` CLI provides 33 commands across four groups:
 
 | Group | Commands |
 |-------|----------|
 | `mp auth` | `list`, `add`, `remove`, `switch`, `show`, `test` |
 | `mp fetch` | `events`, `profiles` |
 | `mp query` | `sql`, `segmentation`, `funnel`, `retention`, `jql`, `event-counts`, `property-counts`, `activity-feed`, `insights`, `frequency`, `segmentation-numeric`, `segmentation-sum`, `segmentation-average` |
-| `mp inspect` | `events`, `properties`, `values`, `funnels`, `cohorts`, `top-events`, `info`, `tables`, `schema`, `drop` |
+| `mp inspect` | `events`, `properties`, `values`, `funnels`, `cohorts`, `top-events`, `lexicon-schemas`, `lexicon-schema`, `info`, `tables`, `schema`, `drop` |
 
 All commands support `--format` (json, jsonl, table, csv, plain) and `--help`.
 
