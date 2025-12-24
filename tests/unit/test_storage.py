@@ -2318,3 +2318,8 @@ class TestInMemoryMode:
             # execute (returns relation)
             relation = storage.execute("SELECT * FROM events")
             assert relation.fetchall() is not None
+
+    def test_memory_and_ephemeral_flags_mutually_exclusive(self) -> None:
+        """Test that _in_memory and _ephemeral flags cannot both be True."""
+        with pytest.raises(ValueError, match="Cannot use both"):
+            StorageEngine(path=None, _ephemeral=True, _in_memory=True)

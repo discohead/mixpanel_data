@@ -91,6 +91,10 @@ class StorageEngine:
         self._is_in_memory = _in_memory
         self._closed = False  # Track if close() was explicitly called
 
+        # Validate mutually exclusive flags
+        if _ephemeral and _in_memory:
+            raise ValueError("Cannot use both _ephemeral and _in_memory flags")
+
         # Handle in-memory mode - no file created
         if _in_memory:
             self._path = None
