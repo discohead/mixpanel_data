@@ -635,6 +635,11 @@ class Workspace:
         Raises:
             ConfigError: If API credentials not available.
             AuthenticationError: If credentials are invalid.
+
+        Note:
+            The Lexicon API has a strict 5 requests/minute rate limit.
+            Caching helps avoid hitting this limit; call clear_discovery_cache()
+            only when fresh data is needed.
         """
         return self._discovery_service.list_schemas(entity_type=entity_type)
 
@@ -661,6 +666,11 @@ class Workspace:
             ConfigError: If API credentials not available.
             AuthenticationError: If credentials are invalid.
             QueryError: If schema not found.
+
+        Note:
+            The Lexicon API has a strict 5 requests/minute rate limit.
+            Caching helps avoid hitting this limit; call clear_discovery_cache()
+            only when fresh data is needed.
         """
         return self._discovery_service.get_schema(entity_type, name)
 

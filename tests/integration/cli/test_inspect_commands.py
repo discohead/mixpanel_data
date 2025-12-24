@@ -11,6 +11,9 @@ from mixpanel_data.cli.main import app
 from mixpanel_data.types import (
     ColumnInfo,
     FunnelInfo,
+    LexiconDefinition,
+    LexiconProperty,
+    LexiconSchema,
     SavedCohort,
     TableInfo,
     TableSchema,
@@ -416,3 +419,167 @@ class TestInspectDrop:
 
         assert result.exit_code == 2  # Cancelled
         mock_workspace.drop.assert_not_called()
+
+
+class TestInspectLexiconSchemas:
+    """Tests for mp inspect lexicon-schemas command."""
+
+    def test_lexicon_schemas_json_format(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test listing Lexicon schemas in JSON format."""
+        mock_workspace.lexicon_schemas.return_value = [
+            LexiconSchema(
+                entity_type="event",
+                name="Purchase",
+                schema_json=LexiconDefinition(
+                    description="User made a purchase",
+                    properties={
+                        "amount": LexiconProperty(
+                            type="number", description="Amount", metadata=None
+                        ),
+                    },
+                    metadata=None,
+                ),
+            ),
+            LexiconSchema(
+                entity_type="profile",
+                name="Plan Type",
+                schema_json=LexiconDefinition(
+                    description="User subscription plan",
+                    properties={},
+                    metadata=None,
+                ),
+            ),
+        ]
+
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app, ["inspect", "lexicon-schemas", "--format", "json"]
+            )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert len(data) == 2
+        assert data[0]["entity_type"] == "event"
+        assert data[0]["name"] == "Purchase"
+        assert data[0]["property_count"] == 1
+        assert data[1]["entity_type"] == "profile"
+
+    def test_lexicon_schemas_with_type_filter(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test filtering Lexicon schemas by entity type."""
+        mock_workspace.lexicon_schemas.return_value = [
+            LexiconSchema(
+                entity_type="event",
+                name="Login",
+                schema_json=LexiconDefinition(
+                    description="User logged in",
+                    properties={},
+                    metadata=None,
+                ),
+            ),
+        ]
+
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["inspect", "lexicon-schemas", "--type", "event", "--format", "json"],
+            )
+
+        assert result.exit_code == 0
+        mock_workspace.lexicon_schemas.assert_called_once_with(entity_type="event")
+
+    def test_lexicon_schemas_invalid_type(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test invalid entity type returns error."""
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app, ["inspect", "lexicon-schemas", "--type", "invalid"]
+            )
+
+        assert result.exit_code == 3  # INVALID_ARGS
+
+
+class TestInspectLexiconSchema:
+    """Tests for mp inspect lexicon-schema command."""
+
+    def test_lexicon_schema_json_format(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test getting single Lexicon schema in JSON format."""
+        mock_workspace.lexicon_schema.return_value = LexiconSchema(
+            entity_type="event",
+            name="Purchase",
+            schema_json=LexiconDefinition(
+                description="User made a purchase",
+                properties={
+                    "amount": LexiconProperty(
+                        type="number", description="Purchase amount", metadata=None
+                    ),
+                    "currency": LexiconProperty(
+                        type="string", description="Currency code", metadata=None
+                    ),
+                },
+                metadata=None,
+            ),
+        )
+
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "inspect",
+                    "lexicon-schema",
+                    "--type",
+                    "event",
+                    "--name",
+                    "Purchase",
+                    "--format",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["entity_type"] == "event"
+        assert data["name"] == "Purchase"
+        assert "amount" in data["schema_json"]["properties"]
+        assert "currency" in data["schema_json"]["properties"]
+        mock_workspace.lexicon_schema.assert_called_once_with("event", "Purchase")
+
+    def test_lexicon_schema_invalid_type(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test invalid entity type returns error."""
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "inspect",
+                    "lexicon-schema",
+                    "--type",
+                    "invalid",
+                    "--name",
+                    "Test",
+                ],
+            )
+
+        assert result.exit_code == 3  # INVALID_ARGS
