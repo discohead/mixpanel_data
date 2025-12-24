@@ -1,0 +1,113 @@
+site_name: mixpanel_data
+site_description: Python library for working with Mixpanel analytics data, designed for AI coding agents
+site_author: Jared McFarland
+site_url: https://discohead.github.io/mixpanel_data/
+
+repo_name: discohead/mixpanel_data
+repo_url: https://github.com/discohead/mixpanel_data
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.instant
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - header.autohide
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/mixpanel.css
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_toc_entry: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            docstring_style: google
+            docstring_section_style: spacy
+            merge_init_into_class: true
+            show_signature_annotations: true
+            separate_signature: true
+            line_length: 80
+            members_order: source
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+  - mkdocs-typer
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Configuration: getting-started/configuration.md
+  - User Guide:
+      - Fetching Data: guide/fetching.md
+      - Local SQL Queries: guide/sql-queries.md
+      - Live Analytics: guide/live-analytics.md
+      - Data Discovery: guide/discovery.md
+  - API Reference:
+      - Overview: api/index.md
+      - Workspace: api/workspace.md
+      - Auth: api/auth.md
+      - Exceptions: api/exceptions.md
+      - Result Types: api/types.md
+  - CLI Reference:
+      - Overview: cli/index.md
+      - Commands: cli/commands.md
+  - Architecture:
+      - Design: architecture/design.md
+      - Data Model: architecture/data-model.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/discohead/mixpanel_data

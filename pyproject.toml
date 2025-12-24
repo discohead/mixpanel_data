@@ -43,6 +43,12 @@ dev = [
     "mypy>=1.0",
     "pandas-stubs>=2.0",
 ]
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.24",
+    "mkdocs-typer>=0.0.3",
+]
 
 [project.scripts]
 mp = "mixpanel_data.cli.main:app"

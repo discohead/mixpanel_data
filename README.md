@@ -144,10 +144,14 @@ SELECT properties->>'$.user.email' as email FROM events
 
 ## Documentation
 
-- [Project Brief](docs/mixpanel_data-project-brief.md) — Vision and goals
-- [Design Document](docs/mixpanel_data-design.md) — Architecture, component specs, public API
-- [CLI Specification](docs/mp-cli-project-spec.md) — Full CLI reference
-- [Mixpanel Data Model](docs/MIXPANEL_DATA_MODEL_REFERENCE.md) — Data model reference
+Full documentation is available at [discohead.github.io/mixpanel_data](https://discohead.github.io/mixpanel_data/).
+
+Internal design documents:
+
+- [Project Brief](context/mixpanel_data-project-brief.md) — Vision and goals
+- [Design Document](context/mixpanel_data-design.md) — Architecture, component specs, public API
+- [CLI Specification](context/mp-cli-project-spec.md) — Full CLI reference
+- [Mixpanel Data Model](context/MIXPANEL_DATA_MODEL_REFERENCE.md) — Data model reference
 
 ## Architecture
 

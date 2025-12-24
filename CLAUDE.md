@@ -45,10 +45,10 @@ Infrastructure Layer        → ConfigManager, MixpanelAPIClient, StorageEngine 
 
 Read in this order for implementation:
 
-1. **[docs/mixpanel_data-project-brief.md](docs/mixpanel_data-project-brief.md)** — Vision and goals
-2. **[docs/mixpanel_data-design.md](docs/mixpanel_data-design.md)** — Architecture, component specs, public API
-3. **[docs/mp-cli-project-spec.md](docs/mp-cli-project-spec.md)** — Full CLI specification
-4. **[docs/MIXPANEL_DATA_MODEL_REFERENCE.md](docs/MIXPANEL_DATA_MODEL_REFERENCE.md)** — Mixpanel data model for Pydantic/DuckDB mapping
+1. **[context/mixpanel_data-project-brief.md](context/mixpanel_data-project-brief.md)** — Vision and goals
+2. **[context/mixpanel_data-design.md](context/mixpanel_data-design.md)** — Architecture, component specs, public API
+3. **[context/mp-cli-project-spec.md](context/mp-cli-project-spec.md)** — Full CLI specification
+4. **[context/MIXPANEL_DATA_MODEL_REFERENCE.md](context/MIXPANEL_DATA_MODEL_REFERENCE.md)** — Mixpanel data model for Pydantic/DuckDB mapping
 
 ## Package Structure
 
@@ -102,12 +102,12 @@ Legend: ✅ Implemented | ⏳ Pending
 
 ## Mixpanel API Reference
 
-Complete API documentation in `docs/api-docs/`:
+Complete API documentation in `context/api-docs/`:
 - **Event Export API** — Raw event fetching for local storage
 - **Query API** — Segmentation, funnels, retention, JQL
 - **Lexicon Schemas API** — Event/property discovery
 
-OpenAPI specs: `docs/api-docs/openapi/src/*.openapi.yaml`
+OpenAPI specs: `context/api-docs/openapi/src/*.openapi.yaml`
 
 ## Environment Variables
 
