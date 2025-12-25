@@ -401,3 +401,144 @@ def inspect_lexicon_schema(
     workspace = get_workspace(ctx)
     schema = workspace.lexicon_schema(validated_type, name)
     output_result(ctx, schema.to_dict(), format=format)
+
+
+@inspect_app.command("sample")
+@handle_errors
+def inspect_sample(
+    ctx: typer.Context,
+    table: Annotated[
+        str,
+        typer.Option("--table", "-t", help="Table name."),
+    ],
+    rows: Annotated[
+        int,
+        typer.Option("--rows", "-n", help="Number of rows to sample."),
+    ] = 10,
+    format: FormatOption = "table",
+) -> None:
+    """Show random sample rows from a table.
+
+    Uses reservoir sampling to return representative rows from throughout
+    the table. Useful for quickly exploring data structure and values.
+
+    [dim]Examples:[/dim]
+      mp inspect sample -t events
+      mp inspect sample -t events -n 5 --format json
+    """
+    workspace = get_workspace(ctx)
+    df = workspace.sample(table, n=rows)
+    # Convert DataFrame to list of dicts for output
+    data = df.to_dict(orient="records")
+    output_result(ctx, data, format=format)
+
+
+@inspect_app.command("summarize")
+@handle_errors
+def inspect_summarize(
+    ctx: typer.Context,
+    table: Annotated[
+        str,
+        typer.Option("--table", "-t", help="Table name."),
+    ],
+    format: FormatOption = "table",
+) -> None:
+    """Show statistical summary of all columns in a table.
+
+    Uses DuckDB's SUMMARIZE command to compute per-column statistics
+    including min/max, quartiles, null percentage, and distinct counts.
+
+    [dim]Examples:[/dim]
+      mp inspect summarize -t events
+      mp inspect summarize -t events --format json
+    """
+    workspace = get_workspace(ctx)
+    result = workspace.summarize(table)
+    output_result(ctx, result.to_dict(), format=format)
+
+
+@inspect_app.command("breakdown")
+@handle_errors
+def inspect_breakdown(
+    ctx: typer.Context,
+    table: Annotated[
+        str,
+        typer.Option("--table", "-t", help="Table name."),
+    ],
+    format: FormatOption = "table",
+) -> None:
+    """Show event distribution in a table.
+
+    Analyzes event counts, unique users, date ranges, and percentages
+    for each event type. Requires event_name, event_time, distinct_id columns.
+
+    [dim]Examples:[/dim]
+      mp inspect breakdown -t events
+      mp inspect breakdown -t events --format json
+    """
+    workspace = get_workspace(ctx)
+    result = workspace.event_breakdown(table)
+    output_result(ctx, result.to_dict(), format=format)
+
+
+@inspect_app.command("keys")
+@handle_errors
+def inspect_keys(
+    ctx: typer.Context,
+    table: Annotated[
+        str,
+        typer.Option("--table", "-t", help="Table name."),
+    ],
+    event: Annotated[
+        str | None,
+        typer.Option("--event", "-e", help="Filter to specific event type."),
+    ] = None,
+    format: FormatOption = "json",
+) -> None:
+    """List JSON property keys in a table.
+
+    Extracts distinct keys from the 'properties' JSON column. Useful
+    for discovering queryable fields in event properties.
+
+    [dim]Examples:[/dim]
+      mp inspect keys -t events
+      mp inspect keys -t events -e "Purchase"
+      mp inspect keys -t events --format table
+    """
+    workspace = get_workspace(ctx)
+    keys = workspace.property_keys(table, event=event)
+    output_result(ctx, keys, format=format)
+
+
+@inspect_app.command("column")
+@handle_errors
+def inspect_column(
+    ctx: typer.Context,
+    table: Annotated[
+        str,
+        typer.Option("--table", "-t", help="Table name."),
+    ],
+    column: Annotated[
+        str,
+        typer.Option("--column", "-c", help="Column name or expression."),
+    ],
+    top: Annotated[
+        int,
+        typer.Option("--top", help="Number of top values to show."),
+    ] = 10,
+    format: FormatOption = "json",
+) -> None:
+    """Show detailed statistics for a single column.
+
+    Performs deep analysis including null rates, cardinality, top values,
+    and numeric statistics. Supports JSON path expressions like
+    "properties->>'$.country'" for analyzing JSON columns.
+
+    [dim]Examples:[/dim]
+      mp inspect column -t events -c event_name
+      mp inspect column -t events -c "properties->>'$.country'"
+      mp inspect column -t events -c distinct_id --top 20
+    """
+    workspace = get_workspace(ctx)
+    result = workspace.column_stats(table, column, top_n=top)
+    output_result(ctx, result.to_dict(), format=format)

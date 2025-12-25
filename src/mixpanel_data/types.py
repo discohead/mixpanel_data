@@ -1371,3 +1371,368 @@ class LexiconSchema:
             "name": self.name,
             "schema_json": self.schema_json.to_dict(),
         }
+
+
+# Introspection Types
+
+
+@dataclass(frozen=True)
+class ColumnSummary:
+    """Statistical summary of a single column from DuckDB's SUMMARIZE command.
+
+    Contains per-column statistics including min/max, quartiles, null percentage,
+    and approximate distinct counts. Numeric columns include additional stats
+    like average and standard deviation.
+    """
+
+    column_name: str
+    """Name of the column."""
+
+    column_type: str
+    """DuckDB data type (VARCHAR, TIMESTAMP, INTEGER, JSON, etc.)."""
+
+    min: Any
+    """Minimum value (type varies by column type)."""
+
+    max: Any
+    """Maximum value (type varies by column type)."""
+
+    approx_unique: int
+    """Approximate count of distinct values (HyperLogLog)."""
+
+    avg: float | None
+    """Mean value (None for non-numeric columns)."""
+
+    std: float | None
+    """Standard deviation (None for non-numeric columns)."""
+
+    q25: Any
+    """25th percentile value (None for non-numeric)."""
+
+    q50: Any
+    """Median / 50th percentile (None for non-numeric)."""
+
+    q75: Any
+    """75th percentile value (None for non-numeric)."""
+
+    count: int
+    """Number of non-null values."""
+
+    null_percentage: float
+    """Percentage of null values (0.0 to 100.0)."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all column statistics.
+        """
+        return {
+            "column_name": self.column_name,
+            "column_type": self.column_type,
+            "min": self.min,
+            "max": self.max,
+            "approx_unique": self.approx_unique,
+            "avg": self.avg,
+            "std": self.std,
+            "q25": self.q25,
+            "q50": self.q50,
+            "q75": self.q75,
+            "count": self.count,
+            "null_percentage": self.null_percentage,
+        }
+
+
+@dataclass(frozen=True)
+class SummaryResult:
+    """Statistical summary of all columns in a table.
+
+    Contains row count and per-column statistics from DuckDB's SUMMARIZE command.
+    Provides both structured access via the columns list and DataFrame conversion
+    via the df property.
+    """
+
+    table: str
+    """Name of the summarized table."""
+
+    row_count: int
+    """Total number of rows in the table."""
+
+    columns: list[ColumnSummary] = field(default_factory=list)
+    """Per-column statistics."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with one row per column.
+
+        Conversion is lazy - computed on first access and cached.
+
+        Returns:
+            DataFrame with column statistics.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = [col.to_dict() for col in self.columns]
+
+        result_df = (
+            pd.DataFrame(rows)
+            if rows
+            else pd.DataFrame(
+                columns=[
+                    "column_name",
+                    "column_type",
+                    "min",
+                    "max",
+                    "approx_unique",
+                    "avg",
+                    "std",
+                    "q25",
+                    "q50",
+                    "q75",
+                    "count",
+                    "null_percentage",
+                ]
+            )
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with table name, row count, and column statistics.
+        """
+        return {
+            "table": self.table,
+            "row_count": self.row_count,
+            "columns": [col.to_dict() for col in self.columns],
+        }
+
+
+@dataclass(frozen=True)
+class EventStats:
+    """Statistics for a single event type.
+
+    Contains count, unique users, date range, and percentage of total
+    for a specific event in an events table.
+    """
+
+    event_name: str
+    """Name of the event."""
+
+    count: int
+    """Total occurrences of this event."""
+
+    unique_users: int
+    """Count of distinct users who triggered this event."""
+
+    first_seen: datetime
+    """Earliest occurrence timestamp."""
+
+    last_seen: datetime
+    """Latest occurrence timestamp."""
+
+    pct_of_total: float
+    """Percentage of all events (0.0 to 100.0)."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with event statistics (datetimes as ISO strings).
+        """
+        return {
+            "event_name": self.event_name,
+            "count": self.count,
+            "unique_users": self.unique_users,
+            "first_seen": self.first_seen.isoformat(),
+            "last_seen": self.last_seen.isoformat(),
+            "pct_of_total": self.pct_of_total,
+        }
+
+
+@dataclass(frozen=True)
+class EventBreakdownResult:
+    """Distribution of events in a table.
+
+    Contains aggregate statistics and per-event breakdown with counts,
+    unique users, date ranges, and percentages.
+    """
+
+    table: str
+    """Name of the analyzed table."""
+
+    total_events: int
+    """Total number of events in the table."""
+
+    total_users: int
+    """Total distinct users across all events."""
+
+    date_range: tuple[datetime, datetime]
+    """(earliest, latest) event timestamps."""
+
+    events: list[EventStats] = field(default_factory=list)
+    """Per-event statistics, ordered by count descending."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with one row per event type.
+
+        Conversion is lazy - computed on first access and cached.
+
+        Returns:
+            DataFrame with event statistics.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = []
+        for event in self.events:
+            rows.append(
+                {
+                    "event_name": event.event_name,
+                    "count": event.count,
+                    "unique_users": event.unique_users,
+                    "first_seen": event.first_seen,
+                    "last_seen": event.last_seen,
+                    "pct_of_total": event.pct_of_total,
+                }
+            )
+
+        result_df = (
+            pd.DataFrame(rows)
+            if rows
+            else pd.DataFrame(
+                columns=[
+                    "event_name",
+                    "count",
+                    "unique_users",
+                    "first_seen",
+                    "last_seen",
+                    "pct_of_total",
+                ]
+            )
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with table info and event statistics.
+        """
+        return {
+            "table": self.table,
+            "total_events": self.total_events,
+            "total_users": self.total_users,
+            "date_range": [
+                self.date_range[0].isoformat(),
+                self.date_range[1].isoformat(),
+            ],
+            "events": [event.to_dict() for event in self.events],
+        }
+
+
+@dataclass(frozen=True)
+class ColumnStatsResult:
+    """Deep statistical analysis of a single column.
+
+    Provides detailed statistics including null rates, cardinality,
+    top values, and numeric statistics (for numeric columns).
+    Supports JSON path expressions for analyzing properties.
+    """
+
+    table: str
+    """Name of the source table."""
+
+    column: str
+    """Column expression analyzed (may include JSON path)."""
+
+    dtype: str
+    """DuckDB data type of the column."""
+
+    count: int
+    """Number of non-null values."""
+
+    null_count: int
+    """Number of null values."""
+
+    null_pct: float
+    """Percentage of null values (0.0 to 100.0)."""
+
+    unique_count: int
+    """Approximate count of distinct values."""
+
+    unique_pct: float
+    """Percentage of values that are unique (0.0 to 100.0)."""
+
+    top_values: list[tuple[Any, int]] = field(default_factory=list)
+    """Most frequent (value, count) pairs."""
+
+    min: float | None = None
+    """Minimum value (None for non-numeric)."""
+
+    max: float | None = None
+    """Maximum value (None for non-numeric)."""
+
+    mean: float | None = None
+    """Mean value (None for non-numeric)."""
+
+    std: float | None = None
+    """Standard deviation (None for non-numeric)."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert top values to DataFrame with columns: value, count.
+
+        Conversion is lazy - computed on first access and cached.
+
+        Returns:
+            DataFrame with top values and their counts.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = [
+            {"value": value, "count": count} for value, count in self.top_values
+        ]
+
+        result_df = (
+            pd.DataFrame(rows) if rows else pd.DataFrame(columns=["value", "count"])
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all column statistics.
+        """
+        return {
+            "table": self.table,
+            "column": self.column,
+            "dtype": self.dtype,
+            "count": self.count,
+            "null_count": self.null_count,
+            "null_pct": self.null_pct,
+            "unique_count": self.unique_count,
+            "unique_pct": self.unique_pct,
+            "top_values": [[value, count] for value, count in self.top_values],
+            "min": self.min,
+            "max": self.max,
+            "mean": self.mean,
+            "std": self.std,
+        }

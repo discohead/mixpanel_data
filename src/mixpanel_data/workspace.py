@@ -52,11 +52,15 @@ from mixpanel_data._internal.services.fetcher import (
 )
 from mixpanel_data._internal.services.live_query import LiveQueryService
 from mixpanel_data._internal.storage import StorageEngine
-from mixpanel_data.exceptions import ConfigError
+from mixpanel_data.exceptions import ConfigError, QueryError
 from mixpanel_data.types import (
     ActivityFeedResult,
+    ColumnStatsResult,
+    ColumnSummary,
     EntityType,
+    EventBreakdownResult,
     EventCountsResult,
+    EventStats,
     FetchResult,
     FrequencyResult,
     FunnelInfo,
@@ -71,6 +75,7 @@ from mixpanel_data.types import (
     RetentionResult,
     SavedCohort,
     SegmentationResult,
+    SummaryResult,
     TableInfo,
     TableSchema,
     TopEvent,
@@ -1403,6 +1408,429 @@ class Workspace:
             TableNotFoundError: If table doesn't exist.
         """
         return self._storage.get_schema(table)
+
+    def sample(self, table: str, n: int = 10) -> pd.DataFrame:
+        """Return random sample rows from a table.
+
+        Uses DuckDB's reservoir sampling for representative results.
+        Unlike LIMIT, sampling returns rows from throughout the table.
+
+        Args:
+            table: Table name to sample from.
+            n: Number of rows to return (default: 10).
+
+        Returns:
+            DataFrame with n random rows. If table has fewer than n rows,
+            returns all available rows.
+
+        Raises:
+            TableNotFoundError: If table doesn't exist.
+
+        Example:
+            >>> ws = Workspace()
+            >>> ws.sample("events")  # 10 random rows
+            >>> ws.sample("events", n=5)  # 5 random rows
+        """
+        # Validate table exists
+        self._storage.get_schema(table)
+
+        # Use DuckDB's reservoir sampling
+        sql = f'SELECT * FROM "{table}" USING SAMPLE {n}'
+        return self._storage.execute_df(sql)
+
+    def summarize(self, table: str) -> SummaryResult:
+        """Get statistical summary of all columns in a table.
+
+        Uses DuckDB's SUMMARIZE command to compute min/max, quartiles,
+        null percentage, and approximate distinct counts for each column.
+
+        Args:
+            table: Table name to summarize.
+
+        Returns:
+            SummaryResult with per-column statistics and total row count.
+
+        Raises:
+            TableNotFoundError: If table doesn't exist.
+
+        Example:
+            >>> result = ws.summarize("events")
+            >>> result.row_count         # 1234567
+            >>> result.columns[0].null_percentage  # 0.5
+            >>> result.df                # Full summary as DataFrame
+        """
+        # Validate table exists
+        self._storage.get_schema(table)
+
+        # Get row count
+        row_count = self._storage.execute_scalar(f'SELECT COUNT(*) FROM "{table}"')
+
+        # Get column statistics using SUMMARIZE
+        summary_df = self._storage.execute_df(f'SUMMARIZE "{table}"')
+
+        # Convert to ColumnSummary objects
+        columns: list[ColumnSummary] = []
+        for _, row in summary_df.iterrows():
+            columns.append(
+                ColumnSummary(
+                    column_name=str(row["column_name"]),
+                    column_type=str(row["column_type"]),
+                    min=row["min"],
+                    max=row["max"],
+                    approx_unique=int(row["approx_unique"]),
+                    avg=float(row["avg"]) if row["avg"] is not None else None,
+                    std=float(row["std"]) if row["std"] is not None else None,
+                    q25=row["q25"],
+                    q50=row["q50"],
+                    q75=row["q75"],
+                    count=int(row["count"]),
+                    null_percentage=float(row["null_percentage"]),
+                )
+            )
+
+        return SummaryResult(
+            table=table,
+            row_count=int(row_count),
+            columns=columns,
+        )
+
+    def event_breakdown(self, table: str) -> EventBreakdownResult:
+        """Analyze event distribution in a table.
+
+        Computes per-event counts, unique users, date ranges, and
+        percentage of total for each event type.
+
+        Args:
+            table: Table name containing events. Must have columns:
+                   event_name, event_time, distinct_id.
+
+        Returns:
+            EventBreakdownResult with per-event statistics.
+
+        Raises:
+            TableNotFoundError: If table doesn't exist.
+            QueryError: If table lacks required columns (event_name,
+                       event_time, distinct_id). Error message lists
+                       the specific missing columns.
+
+        Example:
+            >>> breakdown = ws.event_breakdown("events")
+            >>> breakdown.total_events           # 1234567
+            >>> breakdown.events[0].event_name   # "Page View"
+            >>> breakdown.events[0].pct_of_total # 45.2
+        """
+        # Validate table exists and get schema
+        schema = self._storage.get_schema(table)
+        column_names = {col.name for col in schema.columns}
+
+        # Check for required columns
+        required_columns = {"event_name", "event_time", "distinct_id"}
+        missing = required_columns - column_names
+        if missing:
+            raise QueryError(
+                f"event_breakdown() requires columns {required_columns}, "
+                f"but '{table}' is missing: {missing}",
+                status_code=0,
+            )
+
+        # Get aggregate statistics
+        agg_sql = f"""
+            SELECT
+                COUNT(*) as total_events,
+                COUNT(DISTINCT distinct_id) as total_users,
+                MIN(event_time) as min_time,
+                MAX(event_time) as max_time
+            FROM "{table}"
+        """
+        agg_result = self._storage.execute_rows(agg_sql)
+        total_events, total_users, min_time, max_time = agg_result[0]
+
+        # Handle empty table
+        if total_events == 0:
+            return EventBreakdownResult(
+                table=table,
+                total_events=0,
+                total_users=0,
+                date_range=(datetime.min, datetime.min),
+                events=[],
+            )
+
+        # Get per-event statistics
+        breakdown_sql = f"""
+            SELECT
+                event_name,
+                COUNT(*) as count,
+                COUNT(DISTINCT distinct_id) as unique_users,
+                MIN(event_time) as first_seen,
+                MAX(event_time) as last_seen,
+                ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as pct_of_total
+            FROM "{table}"
+            GROUP BY event_name
+            ORDER BY count DESC
+        """
+        breakdown_rows = self._storage.execute_rows(breakdown_sql)
+
+        events: list[EventStats] = []
+        for row in breakdown_rows:
+            event_name, count, unique_users, first_seen, last_seen, pct = row
+            events.append(
+                EventStats(
+                    event_name=str(event_name),
+                    count=int(count),
+                    unique_users=int(unique_users),
+                    first_seen=first_seen
+                    if isinstance(first_seen, datetime)
+                    else datetime.fromisoformat(str(first_seen)),
+                    last_seen=last_seen
+                    if isinstance(last_seen, datetime)
+                    else datetime.fromisoformat(str(last_seen)),
+                    pct_of_total=float(pct),
+                )
+            )
+
+        return EventBreakdownResult(
+            table=table,
+            total_events=int(total_events),
+            total_users=int(total_users),
+            date_range=(
+                min_time
+                if isinstance(min_time, datetime)
+                else datetime.fromisoformat(str(min_time)),
+                max_time
+                if isinstance(max_time, datetime)
+                else datetime.fromisoformat(str(max_time)),
+            ),
+            events=events,
+        )
+
+    def property_keys(
+        self,
+        table: str,
+        event: str | None = None,
+    ) -> list[str]:
+        """List all JSON property keys in a table.
+
+        Extracts distinct keys from the 'properties' JSON column.
+        Useful for discovering queryable fields in event properties.
+
+        Args:
+            table: Table name with a 'properties' JSON column.
+            event: Optional event name to filter by. If provided, only
+                   returns keys present in events of that type.
+
+        Returns:
+            Alphabetically sorted list of property key names.
+            Empty list if no keys found.
+
+        Raises:
+            TableNotFoundError: If table doesn't exist.
+            QueryError: If table lacks 'properties' column.
+
+        Example:
+            >>> # All keys across all events
+            >>> ws.property_keys("events")
+            ['$browser', '$city', 'page', 'referrer', 'user_plan']
+
+            >>> # Keys for specific event type
+            >>> ws.property_keys("events", event="Purchase")
+            ['amount', 'currency', 'product_id', 'quantity']
+        """
+        # Validate table exists and get schema
+        schema = self._storage.get_schema(table)
+        column_names = {col.name for col in schema.columns}
+
+        # Check for required column
+        if "properties" not in column_names:
+            raise QueryError(
+                f"property_keys() requires a 'properties' column, "
+                f"but '{table}' does not have one",
+                status_code=0,
+            )
+
+        # Build query with optional event filter
+        if event is not None:
+            # Check if event_name column exists
+            if "event_name" not in column_names:
+                raise QueryError(
+                    f"Cannot filter by event: '{table}' lacks 'event_name' column",
+                    status_code=0,
+                )
+            sql = f"""
+                SELECT DISTINCT unnest(json_keys(properties)) as key
+                FROM "{table}"
+                WHERE event_name = ?
+                ORDER BY key
+            """
+            rows = self._storage.connection.execute(sql, [event]).fetchall()
+        else:
+            sql = f"""
+                SELECT DISTINCT unnest(json_keys(properties)) as key
+                FROM "{table}"
+                ORDER BY key
+            """
+            rows = self._storage.execute_rows(sql)
+
+        return [str(row[0]) for row in rows]
+
+    def column_stats(
+        self,
+        table: str,
+        column: str,
+        *,
+        top_n: int = 10,
+    ) -> ColumnStatsResult:
+        """Get detailed statistics for a single column.
+
+        Performs deep analysis including null rates, cardinality,
+        top values, and numeric statistics (for numeric columns).
+
+        The column parameter supports JSON path expressions for
+        analyzing properties stored in JSON columns:
+        - `properties->>'$.country'` for string extraction
+        - `CAST(properties->>'$.amount' AS DOUBLE)` for numeric
+
+        Args:
+            table: Table name to analyze.
+            column: Column name or expression to analyze.
+            top_n: Number of top values to return (default: 10).
+
+        Returns:
+            ColumnStatsResult with comprehensive column statistics.
+
+        Raises:
+            TableNotFoundError: If table doesn't exist.
+            QueryError: If column expression is invalid.
+
+        Example:
+            >>> # Analyze standard column
+            >>> stats = ws.column_stats("events", "event_name")
+            >>> stats.unique_count      # 47
+            >>> stats.top_values[:3]    # [('Page View', 45230), ...]
+
+            >>> # Analyze JSON property
+            >>> stats = ws.column_stats("events", "properties->>'$.country'")
+        """
+        # Validate table exists
+        self._storage.get_schema(table)
+
+        # Get total row count
+        total_rows = self._storage.execute_scalar(f'SELECT COUNT(*) FROM "{table}"')
+
+        # Get basic stats: count, null_count, approx unique
+        stats_sql = f"""
+            SELECT
+                COUNT({column}) as count,
+                COUNT(*) - COUNT({column}) as null_count,
+                APPROX_COUNT_DISTINCT({column}) as unique_count
+            FROM "{table}"
+        """
+        try:
+            stats_result = self._storage.execute_rows(stats_sql)
+        except Exception as e:
+            raise QueryError(
+                f"Invalid column expression: {column}. Error: {e}",
+                status_code=0,
+            ) from e
+
+        count, null_count, unique_count = stats_result[0]
+
+        # Calculate percentages
+        null_pct = (null_count / total_rows * 100) if total_rows > 0 else 0.0
+        unique_pct = (unique_count / count * 100) if count > 0 else 0.0
+
+        # Get top values
+        top_sql = f"""
+            SELECT {column} as value, COUNT(*) as cnt
+            FROM "{table}"
+            WHERE {column} IS NOT NULL
+            GROUP BY {column}
+            ORDER BY cnt DESC
+            LIMIT {top_n}
+        """
+        top_rows = self._storage.execute_rows(top_sql)
+        top_values: list[tuple[Any, int]] = [(row[0], int(row[1])) for row in top_rows]
+
+        # Detect column type to determine if numeric stats apply
+        type_sql = (
+            f'SELECT typeof({column}) FROM "{table}" WHERE {column} IS NOT NULL LIMIT 1'
+        )
+        try:
+            type_result = self._storage.execute_rows(type_sql)
+            dtype = str(type_result[0][0]) if type_result else "UNKNOWN"
+        except Exception:
+            dtype = "UNKNOWN"
+
+        # Get numeric stats if applicable
+        min_val: float | None = None
+        max_val: float | None = None
+        mean_val: float | None = None
+        std_val: float | None = None
+
+        numeric_types = {
+            "INTEGER",
+            "BIGINT",
+            "DOUBLE",
+            "FLOAT",
+            "DECIMAL",
+            "HUGEINT",
+            "SMALLINT",
+            "TINYINT",
+            "UBIGINT",
+            "UINTEGER",
+            "USMALLINT",
+            "UTINYINT",
+        }
+        if dtype.upper() in numeric_types:
+            numeric_sql = f"""
+                SELECT
+                    MIN({column}) as min_val,
+                    MAX({column}) as max_val,
+                    AVG({column}) as mean_val,
+                    STDDEV({column}) as std_val
+                FROM "{table}"
+            """
+            try:
+                numeric_result = self._storage.execute_rows(numeric_sql)
+                if numeric_result:
+                    min_val = (
+                        float(numeric_result[0][0])
+                        if numeric_result[0][0] is not None
+                        else None
+                    )
+                    max_val = (
+                        float(numeric_result[0][1])
+                        if numeric_result[0][1] is not None
+                        else None
+                    )
+                    mean_val = (
+                        float(numeric_result[0][2])
+                        if numeric_result[0][2] is not None
+                        else None
+                    )
+                    std_val = (
+                        float(numeric_result[0][3])
+                        if numeric_result[0][3] is not None
+                        else None
+                    )
+            except Exception:
+                # Not numeric, skip
+                pass
+
+        return ColumnStatsResult(
+            table=table,
+            column=column,
+            dtype=dtype,
+            count=int(count),
+            null_count=int(null_count),
+            null_pct=round(null_pct, 2),
+            unique_count=int(unique_count),
+            unique_pct=round(unique_pct, 2),
+            top_values=top_values,
+            min=min_val,
+            max=max_val,
+            mean=mean_val,
+            std=std_val,
+        )
 
     # =========================================================================
     # TABLE MANAGEMENT METHODS
