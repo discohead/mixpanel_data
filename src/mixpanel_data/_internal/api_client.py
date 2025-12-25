@@ -441,20 +441,24 @@ class MixpanelAPIClient:
         form_data: dict[str, Any] | None = None,
         timeout: float | None = None,
         script: str | None = None,
+        inject_project_id: bool = True,
     ) -> Any:
-        """Make an authenticated request with automatic project_id injection.
+        """Make an authenticated request with optional project_id injection.
 
-        Used internally by API methods. Automatically adds project_id to all
-        requests and handles rate limiting with exponential backoff.
+        Used internally by API methods. Handles rate limiting with exponential
+        backoff.
 
         Args:
             method: HTTP method (GET, POST, etc.).
             url: Full URL to request.
-            params: Query parameters. project_id is automatically added.
+            params: Query parameters.
             data: Request body as JSON (for POST).
             form_data: Request body as form-encoded (for POST).
             timeout: Override default timeout (uses self._timeout if not specified).
             script: Optional JQL script for error context.
+            inject_project_id: If True (default), automatically adds project_id
+                to query params. Set to False for APIs where project_id is
+                already in the URL path (e.g., Lexicon Schemas API).
 
         Returns:
             Parsed JSON response.
@@ -469,7 +473,8 @@ class MixpanelAPIClient:
         """
         if params is None:
             params = {}
-        params["project_id"] = self._credentials.project_id
+        if inject_project_id:
+            params["project_id"] = self._credentials.project_id
 
         logger.debug(
             "_request - method: %s, url: %s, final params: %s",
@@ -1478,9 +1483,7 @@ class MixpanelAPIClient:
             entity_type,
         )
 
-        # Use request() instead of _request() to avoid adding redundant project_id
-        # query param (project_id is already in the URL path for app API endpoints)
-        result: dict[str, Any] = self.request("GET", url)
+        result: dict[str, Any] = self._request("GET", url, inject_project_id=False)
 
         schemas: list[dict[str, Any]] = result.get("results", [])
         entity_types_returned = {s.get("entityType") for s in schemas}
@@ -1528,9 +1531,9 @@ class MixpanelAPIClient:
             name,
         )
 
-        # Use request() instead of _request() to avoid adding redundant project_id
-        # query param (project_id is already in the URL path for app API endpoints)
-        result: dict[str, Any] = self.request("GET", url, params=params)
+        result: dict[str, Any] = self._request(
+            "GET", url, params=params, inject_project_id=False
+        )
 
         # Single schema response format is: {status: "ok", results: <schemaJson>}
         # Normalize to match list response format: {entityType, name, schemaJson}
