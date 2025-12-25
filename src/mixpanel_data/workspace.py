@@ -1447,9 +1447,11 @@ class Workspace:
             TableNotFoundError: If table doesn't exist.
 
         Example:
-            >>> ws = Workspace()
-            >>> ws.sample("events")  # 10 random rows
-            >>> ws.sample("events", n=5)  # 5 random rows
+            ```python
+            ws = Workspace()
+            ws.sample("events")  # 10 random rows
+            ws.sample("events", n=5)  # 5 random rows
+            ```
         """
         # Validate table exists
         self._storage.get_schema(table)
@@ -1474,10 +1476,12 @@ class Workspace:
             TableNotFoundError: If table doesn't exist.
 
         Example:
-            >>> result = ws.summarize("events")
-            >>> result.row_count         # 1234567
-            >>> result.columns[0].null_percentage  # 0.5
-            >>> result.df                # Full summary as DataFrame
+            ```python
+            result = ws.summarize("events")
+            result.row_count         # 1234567
+            result.columns[0].null_percentage  # 0.5
+            result.df                # Full summary as DataFrame
+            ```
         """
         # Validate table exists
         self._storage.get_schema(table)
@@ -1534,10 +1538,12 @@ class Workspace:
                        the specific missing columns.
 
         Example:
-            >>> breakdown = ws.event_breakdown("events")
-            >>> breakdown.total_events           # 1234567
-            >>> breakdown.events[0].event_name   # "Page View"
-            >>> breakdown.events[0].pct_of_total # 45.2
+            ```python
+            breakdown = ws.event_breakdown("events")
+            breakdown.total_events           # 1234567
+            breakdown.events[0].event_name   # "Page View"
+            breakdown.events[0].pct_of_total # 45.2
+            ```
         """
         # Validate table exists and get schema
         schema = self._storage.get_schema(table)
@@ -1647,13 +1653,19 @@ class Workspace:
             QueryError: If table lacks 'properties' column.
 
         Example:
-            >>> # All keys across all events
-            >>> ws.property_keys("events")
-            ['$browser', '$city', 'page', 'referrer', 'user_plan']
+            All keys across all events:
 
-            >>> # Keys for specific event type
-            >>> ws.property_keys("events", event="Purchase")
-            ['amount', 'currency', 'product_id', 'quantity']
+            ```python
+            ws.property_keys("events")
+            # ['$browser', '$city', 'page', 'referrer', 'user_plan']
+            ```
+
+            Keys for specific event type:
+
+            ```python
+            ws.property_keys("events", event="Purchase")
+            # ['amount', 'currency', 'product_id', 'quantity']
+            ```
         """
         # Validate table exists and get schema
         schema = self._storage.get_schema(table)
@@ -1722,13 +1734,19 @@ class Workspace:
             QueryError: If column expression is invalid.
 
         Example:
-            >>> # Analyze standard column
-            >>> stats = ws.column_stats("events", "event_name")
-            >>> stats.unique_count      # 47
-            >>> stats.top_values[:3]    # [('Page View', 45230), ...]
+            Analyze standard column:
 
-            >>> # Analyze JSON property
-            >>> stats = ws.column_stats("events", "properties->>'$.country'")
+            ```python
+            stats = ws.column_stats("events", "event_name")
+            stats.unique_count      # 47
+            stats.top_values[:3]    # [('Page View', 45230), ...]
+            ```
+
+            Analyze JSON property:
+
+            ```python
+            stats = ws.column_stats("events", "properties->>'$.country'")
+            ```
 
         Security:
             The column parameter is interpolated directly into SQL queries

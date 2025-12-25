@@ -217,14 +217,16 @@ class LiveQueryService:
     changes frequently and queries should return fresh data.
 
     Example:
-        >>> from mixpanel_data._internal.api_client import MixpanelAPIClient
-        >>> from mixpanel_data._internal.services.live_query import LiveQueryService
-        >>>
-        >>> client = MixpanelAPIClient(credentials)
-        >>> with client:
-        ...     live_query = LiveQueryService(client)
-        ...     result = live_query.segmentation("Sign Up", "2024-01-01", "2024-01-31")
-        ...     print(result.total)
+        ```python
+        from mixpanel_data._internal.api_client import MixpanelAPIClient
+        from mixpanel_data._internal.services.live_query import LiveQueryService
+
+        client = MixpanelAPIClient(credentials)
+        with client:
+            live_query = LiveQueryService(client)
+            result = live_query.segmentation("Sign Up", "2024-01-01", "2024-01-31")
+            print(result.total)
+        ```
     """
 
     def __init__(self, api_client: MixpanelAPIClient) -> None:
@@ -267,14 +269,16 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.segmentation(
-            ...     event="Sign Up",
-            ...     from_date="2024-01-01",
-            ...     to_date="2024-01-31",
-            ...     on='properties["country"]',
-            ... )
-            >>> print(f"Total: {result.total}")
-            >>> print(result.df.head())
+            ```python
+            result = live_query.segmentation(
+                event="Sign Up",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+                on='properties["country"]',
+            )
+            print(f"Total: {result.total}")
+            print(result.df.head())
+            ```
         """
         raw = self._api_client.segmentation(
             event=event,
@@ -317,14 +321,16 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.funnel(
-            ...     funnel_id=12345,
-            ...     from_date="2024-01-01",
-            ...     to_date="2024-01-31",
-            ... )
-            >>> print(f"Overall conversion: {result.conversion_rate:.1%}")
-            >>> for step in result.steps:
-            ...     print(f"{step.event}: {step.count}")
+            ```python
+            result = live_query.funnel(
+                funnel_id=12345,
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            print(f"Overall conversion: {result.conversion_rate:.1%}")
+            for step in result.steps:
+                print(f"{step.event}: {step.count}")
+            ```
         """
         raw = self._api_client.funnel(
             funnel_id=funnel_id,
@@ -373,14 +379,16 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.retention(
-            ...     born_event="Sign Up",
-            ...     return_event="Purchase",
-            ...     from_date="2024-01-01",
-            ...     to_date="2024-01-31",
-            ... )
-            >>> for cohort in result.cohorts:
-            ...     print(f"{cohort.date}: {cohort.retention}")
+            ```python
+            result = live_query.retention(
+                born_event="Sign Up",
+                return_event="Purchase",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            for cohort in result.cohorts:
+                print(f"{cohort.date}: {cohort.retention}")
+            ```
         """
         raw = self._api_client.retention(
             born_event=born_event,
@@ -420,17 +428,19 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.jql(
-            ...     script='''
-            ...     function main() {
-            ...       return Events({from_date: params.from, to_date: params.to})
-            ...         .groupBy(["name"], mixpanel.reducer.count())
-            ...     }
-            ...     ''',
-            ...     params={"from": "2024-01-01", "to": "2024-01-31"},
-            ... )
-            >>> print(result.raw)
-            >>> print(result.df)
+            ```python
+            result = live_query.jql(
+                script='''
+                function main() {
+                  return Events({from_date: params.from, to_date: params.to})
+                    .groupBy(["name"], mixpanel.reducer.count())
+                }
+                ''',
+                params={"from": "2024-01-01", "to": "2024-01-31"},
+            )
+            print(result.raw)
+            print(result.df)
+            ```
         """
         raw = self._api_client.jql(script=script, params=params)
         return JQLResult(_raw=raw)
@@ -465,13 +475,15 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.event_counts(
-            ...     events=["Sign Up", "Purchase"],
-            ...     from_date="2024-01-01",
-            ...     to_date="2024-01-31",
-            ... )
-            >>> print(result.series["Sign Up"])
-            >>> print(result.df.head())
+            ```python
+            result = live_query.event_counts(
+                events=["Sign Up", "Purchase"],
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            print(result.series["Sign Up"])
+            print(result.df.head())
+            ```
         """
         raw = self._api_client.event_counts(
             events=events,
@@ -525,14 +537,16 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.property_counts(
-            ...     event="Purchase",
-            ...     property_name="country",
-            ...     from_date="2024-01-01",
-            ...     to_date="2024-01-31",
-            ... )
-            >>> print(result.series["US"])
-            >>> print(result.df.head())
+            ```python
+            result = live_query.property_counts(
+                event="Purchase",
+                property_name="country",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            print(result.series["US"])
+            print(result.df.head())
+            ```
         """
         raw = self._api_client.property_counts(
             event=event,
@@ -584,13 +598,15 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.activity_feed(
-            ...     distinct_ids=["user_123", "user_456"],
-            ...     from_date="2024-01-01",
-            ...     to_date="2024-01-31",
-            ... )
-            >>> print(f"Found {len(result.events)} events")
-            >>> print(result.df.head())
+            ```python
+            result = live_query.activity_feed(
+                distinct_ids=["user_123", "user_456"],
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            print(f"Found {len(result.events)} events")
+            print(result.df.head())
+            ```
         """
         raw = self._api_client.activity_feed(
             distinct_ids=distinct_ids,
@@ -620,9 +636,11 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.insights(bookmark_id=12345678)
-            >>> print(f"Report computed at: {result.computed_at}")
-            >>> print(result.df.pivot(index='date', columns='event', values='count'))
+            ```python
+            result = live_query.insights(bookmark_id=12345678)
+            print(f"Report computed at: {result.computed_at}")
+            print(result.df.pivot(index='date', columns='event', values='count'))
+            ```
         """
         raw = self._api_client.insights(bookmark_id=bookmark_id)
         return _transform_insights(raw, bookmark_id)
@@ -659,14 +677,16 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.frequency(
-            ...     from_date="2024-01-01",
-            ...     to_date="2024-01-07",
-            ...     event="App Open",
-            ... )
-            >>> # counts[0] = users active 1+ hours, counts[1] = 2+ hours, etc.
-            >>> for date, counts in result.data.items():
-            ...     print(f"{date}: {counts[:3]}")
+            ```python
+            result = live_query.frequency(
+                from_date="2024-01-01",
+                to_date="2024-01-07",
+                event="App Open",
+            )
+            # counts[0] = users active 1+ hours, counts[1] = 2+ hours, etc.
+            for date, counts in result.data.items():
+                print(f"{date}: {counts[:3]}")
+            ```
         """
         raw = self._api_client.frequency(
             from_date=from_date,
@@ -714,14 +734,16 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.segmentation_numeric(
-            ...     event="Purchase",
-            ...     from_date="2024-01-01",
-            ...     to_date="2024-01-31",
-            ...     on='properties["amount"]',
-            ... )
-            >>> for bucket, series in result.series.items():
-            ...     print(f"{bucket}: {sum(series.values())} events")
+            ```python
+            result = live_query.segmentation_numeric(
+                event="Purchase",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+                on='properties["amount"]',
+            )
+            for bucket, series in result.series.items():
+                print(f"{bucket}: {sum(series.values())} events")
+            ```
         """
         raw = self._api_client.segmentation_numeric(
             event=event,
@@ -766,14 +788,16 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.segmentation_sum(
-            ...     event="Purchase",
-            ...     from_date="2024-01-01",
-            ...     to_date="2024-01-31",
-            ...     on='properties["amount"]',
-            ... )
-            >>> total = sum(result.results.values())
-            >>> print(f"Total revenue: ${total:,.2f}")
+            ```python
+            result = live_query.segmentation_sum(
+                event="Purchase",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+                on='properties["amount"]',
+            )
+            total = sum(result.results.values())
+            print(f"Total revenue: ${total:,.2f}")
+            ```
         """
         raw = self._api_client.segmentation_sum(
             event=event,
@@ -817,14 +841,16 @@ class LiveQueryService:
             RateLimitError: Rate limit exceeded.
 
         Example:
-            >>> result = live_query.segmentation_average(
-            ...     event="Purchase",
-            ...     from_date="2024-01-01",
-            ...     to_date="2024-01-31",
-            ...     on='properties["amount"]',
-            ... )
-            >>> avg = sum(result.results.values()) / len(result.results)
-            >>> print(f"Average order value: ${avg:.2f}")
+            ```python
+            result = live_query.segmentation_average(
+                event="Purchase",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+                on='properties["amount"]',
+            )
+            avg = sum(result.results.values()) / len(result.results)
+            print(f"Average order value: ${avg:.2f}")
+            ```
         """
         raw = self._api_client.segmentation_average(
             event=event,

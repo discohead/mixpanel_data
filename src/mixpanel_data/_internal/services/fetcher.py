@@ -88,20 +88,22 @@ class FetcherService:
     handling data transformation and progress reporting.
 
     Example:
-        >>> from mixpanel_data._internal.api_client import MixpanelAPIClient
-        >>> from mixpanel_data._internal.storage import StorageEngine
-        >>> from mixpanel_data._internal.services.fetcher import FetcherService
-        >>>
-        >>> client = MixpanelAPIClient(credentials)
-        >>> storage = StorageEngine(path)
-        >>> fetcher = FetcherService(client, storage)
-        >>>
-        >>> result = fetcher.fetch_events(
-        ...     name="events",
-        ...     from_date="2024-01-01",
-        ...     to_date="2024-01-31",
-        ... )
-        >>> print(f"Fetched {result.rows} events")
+        ```python
+        from mixpanel_data._internal.api_client import MixpanelAPIClient
+        from mixpanel_data._internal.storage import StorageEngine
+        from mixpanel_data._internal.services.fetcher import FetcherService
+
+        client = MixpanelAPIClient(credentials)
+        storage = StorageEngine(path)
+        fetcher = FetcherService(client, storage)
+
+        result = fetcher.fetch_events(
+            name="events",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+        print(f"Fetched {result.rows} events")
+        ```
     """
 
     def __init__(

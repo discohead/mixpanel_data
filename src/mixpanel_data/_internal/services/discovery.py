@@ -129,15 +129,17 @@ class DiscoveryService:
         Use clear_cache() to force fresh data on next request.
 
     Example:
-        >>> from mixpanel_data._internal.api_client import MixpanelAPIClient
-        >>> from mixpanel_data._internal.services.discovery import DiscoveryService
-        >>>
-        >>> client = MixpanelAPIClient(credentials)
-        >>> discovery = DiscoveryService(client)
-        >>> events = discovery.list_events()  # Fetches from API
-        >>> events = discovery.list_events()  # Returns cached result
-        >>> discovery.clear_cache()
-        >>> events = discovery.list_events()  # Fetches from API again
+        ```python
+        from mixpanel_data._internal.api_client import MixpanelAPIClient
+        from mixpanel_data._internal.services.discovery import DiscoveryService
+
+        client = MixpanelAPIClient(credentials)
+        discovery = DiscoveryService(client)
+        events = discovery.list_events()  # Fetches from API
+        events = discovery.list_events()  # Returns cached result
+        discovery.clear_cache()
+        events = discovery.list_events()  # Fetches from API again
+        ```
     """
 
     def __init__(self, api_client: MixpanelAPIClient) -> None:

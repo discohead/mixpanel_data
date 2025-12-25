@@ -51,16 +51,22 @@ class StorageEngine:
 
     Examples:
         Persistent storage:
-        >>> storage = StorageEngine(path=Path("~/data.db").expanduser())
-        >>> storage.create_events_table("events", data_iterator, metadata)
-        >>> df = storage.execute_df("SELECT * FROM events")
-        >>> storage.close()
+
+        ```python
+        storage = StorageEngine(path=Path("~/data.db").expanduser())
+        storage.create_events_table("events", data_iterator, metadata)
+        df = storage.execute_df("SELECT * FROM events")
+        storage.close()
+        ```
 
         Ephemeral storage:
-        >>> with StorageEngine.ephemeral() as storage:
-        ...     storage.create_events_table("events", data_iterator, metadata)
-        ...     df = storage.execute_df("SELECT * FROM events")
+
+        ```python
+        with StorageEngine.ephemeral() as storage:
+            storage.create_events_table("events", data_iterator, metadata)
+            df = storage.execute_df("SELECT * FROM events")
         # Database automatically cleaned up
+        ```
     """
 
     def __init__(
@@ -147,10 +153,12 @@ class StorageEngine:
             StorageEngine instance with temporary database.
 
         Example:
-            >>> with StorageEngine.ephemeral() as storage:
-            ...     storage.create_events_table("events", data_iter, metadata)
-            ...     result = storage.execute_df("SELECT * FROM events LIMIT 10")
+            ```python
+            with StorageEngine.ephemeral() as storage:
+                storage.create_events_table("events", data_iter, metadata)
+                result = storage.execute_df("SELECT * FROM events LIMIT 10")
             # Database automatically deleted here
+            ```
         """
         # Create temporary file (delete=False so we control when it's deleted)
         with tempfile.NamedTemporaryFile(suffix=".duckdb", delete=False) as temp_file:
@@ -184,10 +192,12 @@ class StorageEngine:
             StorageEngine instance with in-memory database.
 
         Example:
-            >>> with StorageEngine.memory() as storage:
-            ...     storage.create_events_table("events", data, metadata)
-            ...     df = storage.execute_df("SELECT * FROM events")
+            ```python
+            with StorageEngine.memory() as storage:
+                storage.create_events_table("events", data, metadata)
+                df = storage.execute_df("SELECT * FROM events")
             # Database gone - no cleanup needed
+            ```
         """
         return cls(path=None, _in_memory=True)
 
@@ -205,8 +215,10 @@ class StorageEngine:
             FileNotFoundError: If database file doesn't exist.
 
         Example:
-            >>> storage = StorageEngine.open_existing(Path("~/.mixpanel_data/12345.db"))
-            >>> tables = storage.list_tables()
+            ```python
+            storage = StorageEngine.open_existing(Path("~/.mixpanel_data/12345.db"))
+            tables = storage.list_tables()
+            ```
         """
         # Check if file exists
         if not path.exists():
@@ -302,12 +314,14 @@ class StorageEngine:
         the connection (no file cleanup needed).
 
         Example:
-            >>> storage = StorageEngine(path=Path("data.db"))
-            >>> try:
-            ...     # Use storage
-            ...     pass
-            ... finally:
-            ...     storage.close()
+            ```python
+            storage = StorageEngine(path=Path("data.db"))
+            try:
+                # Use storage
+                pass
+            finally:
+                storage.close()
+            ```
         """
         if self._is_in_memory:
             # In-memory database - just close connection, no file cleanup
@@ -342,8 +356,10 @@ class StorageEngine:
         when explicitly cleaning up ephemeral databases.
 
         Example:
-            >>> storage = StorageEngine.ephemeral()
-            >>> storage.cleanup()  # Same as storage.close()
+            ```python
+            storage = StorageEngine.ephemeral()
+            storage.cleanup()  # Same as storage.close()
+            ```
         """
         self.close()
 
@@ -735,19 +751,28 @@ class StorageEngine:
 
         Examples:
             Basic query:
-            >>> storage = StorageEngine(path=Path("data.db"))
-            >>> relation = storage.execute("SELECT * FROM events WHERE event_name = 'Page View'")
-            >>> results = relation.fetchall()
+
+            ```python
+            storage = StorageEngine(path=Path("data.db"))
+            relation = storage.execute("SELECT * FROM events WHERE event_name = 'Page View'")
+            results = relation.fetchall()
+            ```
 
             Method chaining:
-            >>> relation = storage.execute("SELECT * FROM events")
-            >>> filtered = relation.filter("event_name = 'Page View'")
-            >>> limited = filtered.limit(10)
-            >>> df = limited.df()
+
+            ```python
+            relation = storage.execute("SELECT * FROM events")
+            filtered = relation.filter("event_name = 'Page View'")
+            limited = filtered.limit(10)
+            df = limited.df()
+            ```
 
             Converting to DataFrame:
-            >>> relation = storage.execute("SELECT * FROM events")
-            >>> df = relation.df()  # DuckDB relation to pandas DataFrame
+
+            ```python
+            relation = storage.execute("SELECT * FROM events")
+            df = relation.df()  # DuckDB relation to pandas DataFrame
+            ```
         """
         try:
             return self.connection.sql(sql)
@@ -775,29 +800,38 @@ class StorageEngine:
 
         Examples:
             Basic query:
-            >>> storage = StorageEngine(path=Path("data.db"))
-            >>> df = storage.execute_df("SELECT * FROM events LIMIT 10")
-            >>> print(df.head())
+
+            ```python
+            storage = StorageEngine(path=Path("data.db"))
+            df = storage.execute_df("SELECT * FROM events LIMIT 10")
+            print(df.head())
+            ```
 
             Query with JSON extraction:
-            >>> df = storage.execute_df('''
-            ...     SELECT
-            ...         event_name,
-            ...         properties->>'$.page' as page,
-            ...         properties->>'$.country' as country
-            ...     FROM events
-            ...     WHERE event_name = 'Page View'
-            ... ''')
+
+            ```python
+            df = storage.execute_df('''
+                SELECT
+                    event_name,
+                    properties->>'$.page' as page,
+                    properties->>'$.country' as country
+                FROM events
+                WHERE event_name = 'Page View'
+            ''')
+            ```
 
             Aggregation query:
-            >>> df = storage.execute_df('''
-            ...     SELECT
-            ...         event_name,
-            ...         COUNT(*) as event_count
-            ...     FROM events
-            ...     GROUP BY event_name
-            ...     ORDER BY event_count DESC
-            ... ''')
+
+            ```python
+            df = storage.execute_df('''
+                SELECT
+                    event_name,
+                    COUNT(*) as event_count
+                FROM events
+                GROUP BY event_name
+                ORDER BY event_count DESC
+            ''')
+            ```
         """
         try:
             return self.connection.execute(sql).df()
@@ -824,19 +858,28 @@ class StorageEngine:
 
         Examples:
             Count rows:
-            >>> storage = StorageEngine(path=Path("data.db"))
-            >>> count = storage.execute_scalar("SELECT COUNT(*) FROM events")
-            >>> print(f"Total events: {count}")
+
+            ```python
+            storage = StorageEngine(path=Path("data.db"))
+            count = storage.execute_scalar("SELECT COUNT(*) FROM events")
+            print(f"Total events: {count}")
+            ```
 
             Get maximum value:
-            >>> max_time = storage.execute_scalar("SELECT MAX(event_time) FROM events")
+
+            ```python
+            max_time = storage.execute_scalar("SELECT MAX(event_time) FROM events")
+            ```
 
             Check existence:
-            >>> exists = storage.execute_scalar('''
-            ...     SELECT COUNT(*) > 0
-            ...     FROM events
-            ...     WHERE event_name = 'Purchase'
-            ... ''')
+
+            ```python
+            exists = storage.execute_scalar('''
+                SELECT COUNT(*) > 0
+                FROM events
+                WHERE event_name = 'Purchase'
+            ''')
+            ```
         """
         try:
             result = self.connection.execute(sql).fetchone()
@@ -867,20 +910,26 @@ class StorageEngine:
 
         Examples:
             Basic iteration:
-            >>> storage = StorageEngine(path=Path("data.db"))
-            >>> rows = storage.execute_rows("SELECT event_name, COUNT(*) FROM events GROUP BY event_name")
-            >>> for event_name, count in rows:
-            ...     print(f"{event_name}: {count}")
+
+            ```python
+            storage = StorageEngine(path=Path("data.db"))
+            rows = storage.execute_rows("SELECT event_name, COUNT(*) FROM events GROUP BY event_name")
+            for event_name, count in rows:
+                print(f"{event_name}: {count}")
+            ```
 
             Get specific rows:
-            >>> rows = storage.execute_rows('''
-            ...     SELECT distinct_id, event_name, event_time
-            ...     FROM events
-            ...     WHERE event_name = 'Page View'
-            ...     LIMIT 5
-            ... ''')
-            >>> for distinct_id, event_name, event_time in rows:
-            ...     print(f"{distinct_id} - {event_name} at {event_time}")
+
+            ```python
+            rows = storage.execute_rows('''
+                SELECT distinct_id, event_name, event_time
+                FROM events
+                WHERE event_name = 'Page View'
+                LIMIT 5
+            ''')
+            for distinct_id, event_name, event_time in rows:
+                print(f"{distinct_id} - {event_name} at {event_time}")
+            ```
         """
         try:
             return self.connection.execute(sql).fetchall()
@@ -899,10 +948,12 @@ class StorageEngine:
             sorted alphabetically by table name.
 
         Example:
-            >>> storage = StorageEngine(path=Path("data.db"))
-            >>> tables = storage.list_tables()
-            >>> for table in tables:
-            ...     print(f"{table.name}: {table.row_count} rows ({table.type})")
+            ```python
+            storage = StorageEngine(path=Path("data.db"))
+            tables = storage.list_tables()
+            for table in tables:
+                print(f"{table.name}: {table.row_count} rows ({table.type})")
+            ```
         """
         # Check if _metadata table exists
         metadata_exists = self.connection.execute(
@@ -966,9 +1017,11 @@ class StorageEngine:
             TableNotFoundError: If table doesn't exist.
 
         Example:
-            >>> schema = storage.get_schema("events")
-            >>> for col in schema.columns:
-            ...     print(f"{col.name}: {col.type} ({'NULL' if col.nullable else 'NOT NULL'})")
+            ```python
+            schema = storage.get_schema("events")
+            for col in schema.columns:
+                print(f"{col.name}: {col.type} ({'NULL' if col.nullable else 'NOT NULL'})")
+            ```
         """
         # Check if table exists
         if not self.table_exists(table_name):
@@ -1013,8 +1066,10 @@ class StorageEngine:
             TableNotFoundError: If table doesn't exist.
 
         Example:
-            >>> metadata = storage.get_metadata("events_jan")
-            >>> print(f"Fetched {metadata.type} from {metadata.from_date} to {metadata.to_date}")
+            ```python
+            metadata = storage.get_metadata("events_jan")
+            print(f"Fetched {metadata.type} from {metadata.from_date} to {metadata.to_date}")
+            ```
         """
         # Check if table exists
         if not self.table_exists(table_name):
@@ -1061,8 +1116,10 @@ class StorageEngine:
             True if table exists, False otherwise.
 
         Example:
-            >>> if storage.table_exists("events"):
-            ...     print("Table exists")
+            ```python
+            if storage.table_exists("events"):
+                print("Table exists")
+            ```
         """
         result = self.connection.execute(
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = ?",
@@ -1080,8 +1137,10 @@ class StorageEngine:
             TableNotFoundError: If table doesn't exist.
 
         Example:
-            >>> storage.drop_table("old_events")  # Explicitly remove before recreating
-            >>> storage.create_events_table("old_events", new_data, metadata)
+            ```python
+            storage.drop_table("old_events")  # Explicitly remove before recreating
+            storage.create_events_table("old_events", new_data, metadata)
+            ```
         """
         # Check if table exists
         if not self.table_exists(name):

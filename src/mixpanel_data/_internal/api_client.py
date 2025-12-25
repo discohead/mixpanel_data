@@ -68,15 +68,17 @@ class MixpanelAPIClient:
     won't use this directly—they'll use the Workspace class instead.
 
     Example:
-        >>> from mixpanel_data._internal.config import ConfigManager
-        >>> from mixpanel_data._internal.api_client import MixpanelAPIClient
-        >>>
-        >>> config = ConfigManager()
-        >>> credentials = config.resolve_credentials()
-        >>>
-        >>> with MixpanelAPIClient(credentials) as client:
-        ...     events = client.get_events()
-        ...     print(events)
+        ```python
+        from mixpanel_data._internal.config import ConfigManager
+        from mixpanel_data._internal.api_client import MixpanelAPIClient
+
+        config = ConfigManager()
+        credentials = config.resolve_credentials()
+
+        with MixpanelAPIClient(credentials) as client:
+            events = client.get_events()
+            print(events)
+        ```
     """
 
     def __init__(
