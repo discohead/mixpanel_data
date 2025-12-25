@@ -1468,9 +1468,9 @@ class Workspace:
         # Get column statistics using SUMMARIZE
         summary_df = self._storage.execute_df(f'SUMMARIZE "{table}"')
 
-        # Convert to ColumnSummary objects
+        # Convert to ColumnSummary objects (to_dict is more efficient than iterrows)
         columns: list[ColumnSummary] = []
-        for _, row in summary_df.iterrows():
+        for row in summary_df.to_dict("records"):
             columns.append(
                 ColumnSummary(
                     column_name=str(row["column_name"]),
@@ -1709,6 +1709,11 @@ class Workspace:
 
             >>> # Analyze JSON property
             >>> stats = ws.column_stats("events", "properties->>'$.country'")
+
+        Security:
+            The column parameter is interpolated directly into SQL queries
+            to allow expression syntax. Only use with trusted input from
+            developers or AI coding agents. Do not pass untrusted user input.
         """
         # Validate table exists
         self._storage.get_schema(table)
