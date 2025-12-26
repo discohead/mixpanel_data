@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -41,12 +43,12 @@ def mock_workspace() -> MagicMock:
             name="events",
             type="events",
             row_count=1000,
-            fetched_at="2024-01-01T00:00:00Z",
+            fetched_at=datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC),
         ),
     ]
 
     workspace.info.return_value = WorkspaceInfo(
-        path="/tmp/workspace.db",
+        path=Path("/tmp/workspace.db"),
         account="default",
         project_id="12345",
         region="us",
@@ -58,15 +60,13 @@ def mock_workspace() -> MagicMock:
     workspace.sql_rows.return_value = [{"count": 100}]
     workspace.sql_scalar.return_value = 100
 
-    from datetime import datetime
-
     workspace.fetch_events.return_value = FetchResult(
         table="events",
         rows=1000,
         type="events",
         date_range=("2024-01-01", "2024-01-31"),
         duration_seconds=5.0,
-        fetched_at=datetime.now(),
+        fetched_at=datetime(2024, 1, 31, 12, 0, 0, tzinfo=UTC),
     )
 
     workspace.segmentation.return_value = SegmentationResult(

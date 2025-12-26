@@ -283,9 +283,9 @@ def test_memory_usage_stays_constant_for_1m_events(tmp_path: Path) -> None:
         tracemalloc.stop()
 
         # Verify peak memory stayed under 500MB
-        assert peak_mb < 500, (
-            f"Peak memory usage {peak_mb:.2f} MB exceeded 500 MB limit"
-        )
+        assert (
+            peak_mb < 500
+        ), f"Peak memory usage {peak_mb:.2f} MB exceeded 500 MB limit"
 
         # Verify memory didn't grow linearly with dataset size
         # If memory grew linearly, 1M events would use ~10x more than 100K events
@@ -296,9 +296,9 @@ def test_memory_usage_stays_constant_for_1m_events(tmp_path: Path) -> None:
             memory_growth = last_snapshot["current_mb"] - first_snapshot["current_mb"]
 
             # Memory growth should be less than 100MB between first and last snapshot
-            assert memory_growth < 100, (
-                f"Memory grew by {memory_growth:.2f} MB, indicating non-constant usage"
-            )
+            assert (
+                memory_growth < 100
+            ), f"Memory grew by {memory_growth:.2f} MB, indicating non-constant usage"
 
         # Verify data in database
         result = storage.connection.execute(
@@ -1082,7 +1082,7 @@ class TestInMemoryIntegration:
 
         with StorageEngine.memory() as storage:
             # Create empty events table
-            events: list[dict] = []
+            events: list[dict[str, object]] = []
             metadata = TableMetadata(type="events", fetched_at=datetime.now(UTC))
             row_count = storage.create_events_table(
                 "empty_events", iter(events), metadata

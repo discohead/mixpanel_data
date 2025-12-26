@@ -46,7 +46,7 @@ class TestInterruptHandler:
         assert exc_info.value.code == ExitCode.INTERRUPTED
 
     def test_handle_interrupt_prints_message(
-        self, capsys: pytest.CaptureFixture
+        self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Test that interrupt handler prints interrupted message."""
         with pytest.raises(SystemExit):

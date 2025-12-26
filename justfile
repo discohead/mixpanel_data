@@ -34,7 +34,7 @@ fmt-check:
 
 # Type check with mypy
 typecheck:
-    uv run mypy src/
+    uv run mypy src/ tests/
 
 # Sync dependencies
 sync:

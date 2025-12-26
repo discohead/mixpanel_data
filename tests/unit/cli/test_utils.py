@@ -33,31 +33,31 @@ class TestExitCode:
 
     def test_success_is_zero(self) -> None:
         """Test that SUCCESS is 0."""
-        assert ExitCode.SUCCESS == 0
+        assert ExitCode.SUCCESS.value == 0
 
     def test_general_error_is_one(self) -> None:
         """Test that GENERAL_ERROR is 1."""
-        assert ExitCode.GENERAL_ERROR == 1
+        assert ExitCode.GENERAL_ERROR.value == 1
 
     def test_auth_error_is_two(self) -> None:
         """Test that AUTH_ERROR is 2."""
-        assert ExitCode.AUTH_ERROR == 2
+        assert ExitCode.AUTH_ERROR.value == 2
 
     def test_invalid_args_is_three(self) -> None:
         """Test that INVALID_ARGS is 3."""
-        assert ExitCode.INVALID_ARGS == 3
+        assert ExitCode.INVALID_ARGS.value == 3
 
     def test_not_found_is_four(self) -> None:
         """Test that NOT_FOUND is 4."""
-        assert ExitCode.NOT_FOUND == 4
+        assert ExitCode.NOT_FOUND.value == 4
 
     def test_rate_limit_is_five(self) -> None:
         """Test that RATE_LIMIT is 5."""
-        assert ExitCode.RATE_LIMIT == 5
+        assert ExitCode.RATE_LIMIT.value == 5
 
     def test_interrupted_is_130(self) -> None:
         """Test that INTERRUPTED is 130."""
-        assert ExitCode.INTERRUPTED == 130
+        assert ExitCode.INTERRUPTED.value == 130
 
 
 class TestHandleErrors:

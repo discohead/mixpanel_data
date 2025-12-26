@@ -327,7 +327,7 @@ class TestFormatPlain:
 
     def test_format_list_with_empty_dict(self) -> None:
         """Test formatting a list with an empty dict."""
-        data = [{}]
+        data: list[dict[str, str]] = [{}]
         result = format_plain(data)
 
         assert result == ""

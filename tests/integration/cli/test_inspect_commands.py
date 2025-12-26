@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -266,7 +268,7 @@ class TestInspectInfo:
     ) -> None:
         """Test showing workspace info in JSON format."""
         mock_workspace.info.return_value = WorkspaceInfo(
-            path="/tmp/test.db",
+            path=Path("/tmp/test.db"),
             account="production",
             project_id="12345",
             region="us",
@@ -300,13 +302,13 @@ class TestInspectTables:
                 name="events_jan",
                 type="events",
                 row_count=1000,
-                fetched_at="2024-01-31T12:00:00Z",
+                fetched_at=datetime(2024, 1, 31, 12, 0, 0, tzinfo=UTC),
             ),
             TableInfo(
                 name="profiles",
                 type="profiles",
                 row_count=500,
-                fetched_at="2024-01-30T10:00:00Z",
+                fetched_at=datetime(2024, 1, 30, 10, 0, 0, tzinfo=UTC),
             ),
         ]
 

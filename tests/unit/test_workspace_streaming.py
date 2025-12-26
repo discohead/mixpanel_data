@@ -71,7 +71,7 @@ def workspace_factory(
     """Factory for creating Workspace instances with mocked dependencies."""
 
     def factory(**kwargs: Any) -> Workspace:
-        defaults = {
+        defaults: dict[str, Any] = {
             "_config_manager": mock_config_manager,
             "_storage": mock_storage,
             "_api_client": mock_api_client,

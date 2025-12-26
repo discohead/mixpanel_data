@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from mixpanel_data.cli.main import app
@@ -84,7 +85,10 @@ class TestAuthAdd:
     """Tests for mp auth add command."""
 
     def test_add_account_with_env_var_secret(
-        self, cli_runner: CliRunner, mock_config_manager: MagicMock, monkeypatch
+        self,
+        cli_runner: CliRunner,
+        mock_config_manager: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Test adding account with secret from MP_SECRET env var."""
         monkeypatch.setenv("MP_SECRET", "test_secret")
@@ -118,7 +122,10 @@ class TestAuthAdd:
         )
 
     def test_add_account_with_secret_stdin(
-        self, cli_runner: CliRunner, mock_config_manager: MagicMock, monkeypatch
+        self,
+        cli_runner: CliRunner,
+        mock_config_manager: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Test adding account with secret from stdin."""
         # Clear MP_SECRET to avoid env var taking precedence
@@ -155,7 +162,10 @@ class TestAuthAdd:
         )
 
     def test_add_account_missing_username(
-        self, cli_runner: CliRunner, mock_config_manager: MagicMock, monkeypatch
+        self,
+        cli_runner: CliRunner,
+        mock_config_manager: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Test error when username is missing."""
         # Provide secret via env var so we can test username validation
@@ -175,7 +185,10 @@ class TestAuthAdd:
         assert "username" in result.stderr.lower() or "Error" in result.stderr
 
     def test_add_account_secret_stdin_without_pipe_fails(
-        self, cli_runner: CliRunner, mock_config_manager: MagicMock, monkeypatch
+        self,
+        cli_runner: CliRunner,
+        mock_config_manager: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Test that --secret-stdin fails when stdin is a tty."""
         monkeypatch.delenv("MP_SECRET", raising=False)

@@ -11,7 +11,7 @@ Tests cover:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
@@ -148,7 +148,7 @@ class TestParseLexiconProperty:
 
     def test_parse_property_defaults_to_string(self) -> None:
         """Should default to string type if not specified."""
-        data = {}
+        data: dict[str, Any] = {}
         result = _parse_lexicon_property(data)
         assert result.type == "string"
         assert result.description is None

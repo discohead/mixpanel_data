@@ -70,7 +70,7 @@ class TestTransformEvent:
 
     def test_transform_event_does_not_mutate_input(self) -> None:
         """_transform_event should not mutate the input dictionary."""
-        api_event = {
+        api_event: dict[str, Any] = {
             "event": "Test Event",
             "properties": {
                 "distinct_id": "user_789",
@@ -80,8 +80,8 @@ class TestTransformEvent:
             },
         }
 
-        # Make a deep copy for comparison
-        original_props = dict(api_event["properties"])
+        # Make a copy for comparison
+        original_props = api_event["properties"].copy()
 
         _transform_event(api_event)
 
@@ -176,7 +176,7 @@ class TestTransformProfile:
 
     def test_transform_profile_does_not_mutate_input(self) -> None:
         """_transform_profile should not mutate the input dictionary."""
-        api_profile = {
+        api_profile: dict[str, Any] = {
             "$distinct_id": "user_789",
             "$properties": {
                 "$last_seen": "2024-01-16T12:00:00",
@@ -184,8 +184,8 @@ class TestTransformProfile:
             },
         }
 
-        # Make a deep copy for comparison
-        original_props = dict(api_profile["$properties"])
+        # Make a copy for comparison
+        original_props = api_profile["$properties"].copy()
 
         _transform_profile(api_profile)
 

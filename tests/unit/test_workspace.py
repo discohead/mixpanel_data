@@ -93,7 +93,7 @@ def workspace_factory(
     """Factory for creating Workspace instances with mocked dependencies."""
 
     def factory(**kwargs: Any) -> Workspace:
-        defaults = {
+        defaults: dict[str, Any] = {
             "_config_manager": mock_config_manager,
             "_storage": mock_storage,
             "_api_client": mock_api_client,
@@ -214,6 +214,7 @@ class TestCredentialResolution:
             _storage=mock_storage,
         )
         try:
+            assert ws._credentials is not None
             assert ws._credentials.project_id == "override_project"
             # Original username should be preserved
             assert ws._credentials.username == "test_user"
@@ -232,6 +233,7 @@ class TestCredentialResolution:
             _storage=mock_storage,
         )
         try:
+            assert ws._credentials is not None
             assert ws._credentials.region == "eu"
             # Original project_id should be preserved
             assert ws._credentials.project_id == "12345"
@@ -251,6 +253,7 @@ class TestCredentialResolution:
             _storage=mock_storage,
         )
         try:
+            assert ws._credentials is not None
             assert ws._credentials.project_id == "new_project"
             assert ws._credentials.region == "in"
         finally:
@@ -442,6 +445,7 @@ class TestEphemeralWorkspace:
                 _api_client=mock_api_client,
             ) as ws:
                 path = ws._storage.path
+                assert path is not None
                 assert path.exists()
                 raise ValueError("Test exception")
         except ValueError:
@@ -1339,6 +1343,7 @@ class TestContextManager:
             _api_client=mock_api_client,
         ) as ws:
             path = ws._storage.path
+            assert path is not None
             assert path.exists()
 
         # Should be cleaned up
@@ -1585,6 +1590,7 @@ class TestMemoryWorkspace:
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
         ) as ws:
+            assert ws._credentials is not None
             assert ws._credentials.project_id == "override_project"
             assert ws._storage._is_in_memory is True
 

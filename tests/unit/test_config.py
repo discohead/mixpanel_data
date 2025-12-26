@@ -65,7 +65,7 @@ class TestCredentials:
                 username="user",
                 secret=SecretStr("secret"),
                 project_id="123",
-                region=123,  # type: ignore[arg-type]
+                region=123,  # pyright: ignore[reportArgumentType]
             )
 
     def test_empty_field_validation(self) -> None:
