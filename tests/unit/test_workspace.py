@@ -334,10 +334,10 @@ class TestBasicWorkflow:
         ws = workspace_factory()
         try:
             # Create a test table
-            ws._storage.connection.execute(
+            ws.storage.connection.execute(
                 "CREATE TABLE test_table (id INTEGER, name VARCHAR)"
             )
-            ws._storage.connection.execute(
+            ws.storage.connection.execute(
                 "INSERT INTO test_table VALUES (1, 'Alice'), (2, 'Bob')"
             )
 
@@ -357,8 +357,8 @@ class TestBasicWorkflow:
         ws = workspace_factory()
         try:
             # Create a test table
-            ws._storage.connection.execute("CREATE TABLE count_table (id INTEGER)")
-            ws._storage.connection.execute(
+            ws.storage.connection.execute("CREATE TABLE count_table (id INTEGER)")
+            ws.storage.connection.execute(
                 "INSERT INTO count_table VALUES (1), (2), (3)"
             )
 
@@ -376,10 +376,10 @@ class TestBasicWorkflow:
         ws = workspace_factory()
         try:
             # Create a test table
-            ws._storage.connection.execute(
+            ws.storage.connection.execute(
                 "CREATE TABLE rows_table (id INTEGER, name VARCHAR)"
             )
-            ws._storage.connection.execute(
+            ws.storage.connection.execute(
                 "INSERT INTO rows_table VALUES (1, 'A'), (2, 'B')"
             )
 
@@ -411,9 +411,8 @@ class TestEphemeralWorkspace:
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
         ) as ws:
-            assert ws._storage is not None
-            # Ephemeral storage should exist
-            assert ws._storage._is_ephemeral is True
+            # Ephemeral storage should exist and be marked ephemeral
+            assert ws.storage._is_ephemeral is True
 
     def test_ephemeral_cleanup_on_normal_exit(
         self,
@@ -425,7 +424,7 @@ class TestEphemeralWorkspace:
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
         ) as ws:
-            path = ws._storage.path
+            path = ws.storage.path
             assert path is not None
             assert path.exists()
 
@@ -444,7 +443,7 @@ class TestEphemeralWorkspace:
                 _config_manager=mock_config_manager,
                 _api_client=mock_api_client,
             ) as ws:
-                path = ws._storage.path
+                path = ws.storage.path
                 assert path is not None
                 assert path.exists()
                 raise ValueError("Test exception")
@@ -1170,7 +1169,7 @@ class TestIntrospection:
         ws = workspace_factory()
         try:
             # Create a table
-            ws._storage.connection.execute(
+            ws.storage.connection.execute(
                 "CREATE TABLE test_schema (id INTEGER, name VARCHAR)"
             )
 
@@ -1190,8 +1189,8 @@ class TestIntrospection:
         ws = workspace_factory()
         try:
             # Create and then drop a table (need metadata table for drop)
-            ws._storage.connection.execute("CREATE TABLE drop_test (id INTEGER)")
-            ws._storage.connection.execute(
+            ws.storage.connection.execute("CREATE TABLE drop_test (id INTEGER)")
+            ws.storage.connection.execute(
                 """CREATE TABLE IF NOT EXISTS _metadata (
                     table_name VARCHAR PRIMARY KEY,
                     type VARCHAR NOT NULL,
@@ -1201,14 +1200,14 @@ class TestIntrospection:
                     row_count INTEGER NOT NULL
                 )"""
             )
-            ws._storage.connection.execute(
+            ws.storage.connection.execute(
                 """INSERT INTO _metadata VALUES
                 ('drop_test', 'events', CURRENT_TIMESTAMP, NULL, NULL, 0)"""
             )
 
             ws.drop("drop_test")
 
-            assert not ws._storage.table_exists("drop_test")
+            assert not ws.storage.table_exists("drop_test")
         finally:
             ws.close()
 
@@ -1220,9 +1219,9 @@ class TestIntrospection:
         ws = workspace_factory()
         try:
             # Create tables with metadata
-            ws._storage.connection.execute("CREATE TABLE events1 (id INTEGER)")
-            ws._storage.connection.execute("CREATE TABLE profiles1 (id INTEGER)")
-            ws._storage.connection.execute(
+            ws.storage.connection.execute("CREATE TABLE events1 (id INTEGER)")
+            ws.storage.connection.execute("CREATE TABLE profiles1 (id INTEGER)")
+            ws.storage.connection.execute(
                 """CREATE TABLE IF NOT EXISTS _metadata (
                     table_name VARCHAR PRIMARY KEY,
                     type VARCHAR NOT NULL,
@@ -1232,7 +1231,7 @@ class TestIntrospection:
                     row_count INTEGER NOT NULL
                 )"""
             )
-            ws._storage.connection.execute(
+            ws.storage.connection.execute(
                 """INSERT INTO _metadata VALUES
                 ('events1', 'events', CURRENT_TIMESTAMP, NULL, NULL, 0),
                 ('profiles1', 'profiles', CURRENT_TIMESTAMP, NULL, NULL, 0)"""
@@ -1241,8 +1240,8 @@ class TestIntrospection:
             ws.drop_all(type="events")
 
             # events1 should be dropped, profiles1 should remain
-            assert not ws._storage.table_exists("events1")
-            assert ws._storage.table_exists("profiles1")
+            assert not ws.storage.table_exists("events1")
+            assert ws.storage.table_exists("profiles1")
         finally:
             ws.close()
 
@@ -1342,7 +1341,7 @@ class TestContextManager:
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
         ) as ws:
-            path = ws._storage.path
+            path = ws.storage.path
             assert path is not None
             assert path.exists()
 
@@ -1501,8 +1500,8 @@ class TestMemoryWorkspace:
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
         ) as ws:
-            assert ws._storage._is_in_memory is True
-            assert ws._storage.path is None
+            assert ws.storage._is_in_memory is True
+            assert ws.storage.path is None
 
     def test_memory_info_reflects_in_memory(
         self,
@@ -1549,10 +1548,13 @@ class TestMemoryWorkspace:
         ) as ws:
             ws_ref = ws
             # Connection should be active
-            assert ws._storage._conn is not None
+            assert ws.storage._conn is not None
 
-        # After exit, connection should be closed
-        assert ws_ref._storage._conn is None
+        # After exit, connection should be closed (storage accessed before close)
+        assert ws_ref is not None
+        storage = ws_ref._storage
+        assert storage is not None
+        assert storage._conn is None
 
     def test_memory_with_account_parameter(
         self,
@@ -1577,7 +1579,7 @@ class TestMemoryWorkspace:
             _api_client=mock_api_client,
         ) as ws:
             assert ws._account_name == "test_account"
-            assert ws._storage._is_in_memory is True
+            assert ws.storage._is_in_memory is True
 
     def test_memory_with_project_override(
         self,
@@ -1592,7 +1594,7 @@ class TestMemoryWorkspace:
         ) as ws:
             assert ws._credentials is not None
             assert ws._credentials.project_id == "override_project"
-            assert ws._storage._is_in_memory is True
+            assert ws.storage._is_in_memory is True
 
     def test_memory_tables_method_works(
         self,
@@ -1613,4 +1615,199 @@ class TestMemoryWorkspace:
 
             # tables() won't show it because it uses _metadata table
             # But this confirms the introspection methods work
-            assert ws._storage.list_tables() == []
+            assert ws.storage.list_tables() == []
+
+
+class TestLazyStorageInitialization:
+    """Tests for lazy storage initialization (Phase 2).
+
+    Verify that storage is not created until actually needed,
+    allowing API-only commands to run without touching the database.
+    """
+
+    def test_storage_not_initialized_at_construction(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Storage should be None after construction when not injected."""
+        ws = Workspace(
+            path=tmp_path / "test.db",
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            # Storage should not be created yet
+            assert ws._storage is None
+            # Database file should not exist yet
+            assert not (tmp_path / "test.db").exists()
+        finally:
+            ws.close()
+
+    def test_api_only_method_does_not_initialize_storage(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Calling API-only methods should not create storage connection."""
+        from mixpanel_data._internal.services.discovery import DiscoveryService
+
+        ws = Workspace(
+            path=tmp_path / "test.db",
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            # Mock the discovery service
+            mock_discovery = MagicMock(spec=DiscoveryService)
+            mock_discovery.list_events.return_value = ["Event1", "Event2"]
+            ws._discovery = mock_discovery
+
+            # Call API-only method
+            result = ws.events()
+
+            # Storage should still be None
+            assert ws._storage is None
+            assert result == ["Event1", "Event2"]
+        finally:
+            ws.close()
+
+    def test_storage_method_initializes_storage_lazily(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Calling storage method should initialize storage on first access."""
+        ws = Workspace(
+            path=tmp_path / "test.db",
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            # Storage should not exist yet
+            assert ws._storage is None
+
+            # Access storage via property
+            storage = ws.storage
+
+            # Now storage should exist
+            assert ws._storage is not None
+            assert storage is ws._storage
+            # Database file should now exist
+            assert (tmp_path / "test.db").exists()
+        finally:
+            ws.close()
+
+    def test_storage_property_returns_same_instance(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Storage property should return same instance on repeated access."""
+        ws = Workspace(
+            path=tmp_path / "test.db",
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            storage1 = ws.storage
+            storage2 = ws.storage
+
+            assert storage1 is storage2
+        finally:
+            ws.close()
+
+    def test_injected_storage_used_directly(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+    ) -> None:
+        """Injected storage should be used directly without lazy initialization."""
+        injected_storage = StorageEngine.ephemeral()
+        try:
+            ws = Workspace(
+                _config_manager=mock_config_manager,
+                _storage=injected_storage,
+                _api_client=mock_api_client,
+            )
+            try:
+                # Storage should be the injected instance
+                assert ws._storage is injected_storage
+                assert ws.storage is injected_storage
+            finally:
+                ws.close()
+        finally:
+            injected_storage.close()
+
+    def test_close_handles_uninitialized_storage(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """close() should work when storage was never initialized."""
+        ws = Workspace(
+            path=tmp_path / "test.db",
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+
+        # Storage never accessed
+        assert ws._storage is None
+
+        # close() should not raise
+        ws.close()
+
+    def test_multiple_api_calls_never_touch_storage(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Multiple API-only calls should never initialize storage."""
+        from mixpanel_data._internal.services.discovery import DiscoveryService
+        from mixpanel_data._internal.services.live_query import LiveQueryService
+
+        ws = Workspace(
+            path=tmp_path / "test.db",
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            # Mock services
+            mock_discovery = MagicMock(spec=DiscoveryService)
+            mock_discovery.list_events.return_value = ["Event1"]
+            mock_discovery.list_properties.return_value = ["prop1"]
+            mock_discovery.list_funnels.return_value = []
+            mock_discovery.list_cohorts.return_value = []
+            ws._discovery = mock_discovery
+
+            mock_live = MagicMock(spec=LiveQueryService)
+            mock_live.segmentation.return_value = SegmentationResult(
+                event="Event1",
+                from_date="2024-01-01",
+                to_date="2024-01-02",
+                unit="day",
+                segment_property=None,
+                total=100,
+                series={"2024-01-01": {"Event1": 100}},
+            )
+            ws._live_query = mock_live
+
+            # Call multiple API-only methods
+            ws.events()
+            ws.properties("event")
+            ws.funnels()
+            ws.cohorts()
+            ws.segmentation(
+                event="Event1", from_date="2024-01-01", to_date="2024-01-02"
+            )
+
+            # Storage should still be None
+            assert ws._storage is None
+        finally:
+            ws.close()

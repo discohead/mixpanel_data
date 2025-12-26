@@ -12,6 +12,7 @@ from mixpanel_data.exceptions import (
     APIError,
     AuthenticationError,
     ConfigError,
+    DatabaseLockedError,
     JQLSyntaxError,
     MixpanelDataError,
     QueryError,
@@ -85,6 +86,7 @@ __all__ = [
     "ServerError",
     "TableExistsError",
     "TableNotFoundError",
+    "DatabaseLockedError",
     # Result types
     "FetchResult",
     "SegmentationResult",

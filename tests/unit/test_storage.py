@@ -2324,3 +2324,303 @@ class TestInMemoryMode:
         """Test that _in_memory and _ephemeral flags cannot both be True."""
         with pytest.raises(ValueError, match="Cannot use both"):
             StorageEngine(path=None, _ephemeral=True, _in_memory=True)
+
+
+# =============================================================================
+# Database Locking Tests
+# =============================================================================
+
+
+class TestDatabaseLocking:
+    """Tests for database lock conflict handling."""
+
+    def test_lock_conflict_raises_database_locked_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """IOException with 'Could not set lock' raises DatabaseLockedError."""
+        import duckdb
+
+        from mixpanel_data.exceptions import DatabaseLockedError
+
+        db_path = tmp_path / "test.db"
+
+        # Mock duckdb.connect to raise IOException with lock message
+        def mock_connect(*_args: Any, **_kwargs: Any) -> Any:
+            raise duckdb.IOException(
+                "IO Error: Could not set lock on file "
+                f'"{db_path}": Conflicting lock is held in /usr/bin/python (PID 12345).'
+            )
+
+        monkeypatch.setattr(duckdb, "connect", mock_connect)
+
+        # Should raise DatabaseLockedError
+        with pytest.raises(DatabaseLockedError) as exc_info:
+            StorageEngine(path=db_path)
+
+        # Error should contain the database path
+        assert str(db_path) in str(exc_info.value.message)
+        assert exc_info.value.db_path == str(db_path)
+
+    def test_database_locked_error_includes_pid(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """DatabaseLockedError extracts PID from error message."""
+        import duckdb
+
+        from mixpanel_data.exceptions import DatabaseLockedError
+
+        db_path = tmp_path / "locked.db"
+
+        def mock_connect(*_args: Any, **_kwargs: Any) -> Any:
+            raise duckdb.IOException(
+                "IO Error: Could not set lock on file "
+                f'"{db_path}": Conflicting lock is held in /usr/bin/python (PID 99999).'
+            )
+
+        monkeypatch.setattr(duckdb, "connect", mock_connect)
+
+        with pytest.raises(DatabaseLockedError) as exc_info:
+            StorageEngine(path=db_path)
+
+        assert exc_info.value.details["db_path"] == str(db_path)
+        assert exc_info.value.holding_pid == 99999
+
+    def test_database_locked_error_without_pid(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """DatabaseLockedError works when PID is not in error message."""
+        import duckdb
+
+        from mixpanel_data.exceptions import DatabaseLockedError
+
+        db_path = tmp_path / "locked.db"
+
+        # Error message without PID
+        def mock_connect(*_args: Any, **_kwargs: Any) -> Any:
+            raise duckdb.IOException(
+                f'IO Error: Could not set lock on file "{db_path}"'
+            )
+
+        monkeypatch.setattr(duckdb, "connect", mock_connect)
+
+        with pytest.raises(DatabaseLockedError) as exc_info:
+            StorageEngine(path=db_path)
+
+        assert exc_info.value.holding_pid is None
+
+    def test_other_ioexception_raises_oserror(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """IOException without lock message raises OSError."""
+        import duckdb
+
+        db_path = tmp_path / "test.db"
+
+        def mock_connect(*_args: Any, **_kwargs: Any) -> Any:
+            raise duckdb.IOException("IO Error: Permission denied")
+
+        monkeypatch.setattr(duckdb, "connect", mock_connect)
+
+        with pytest.raises(OSError, match="Failed to create database"):
+            StorageEngine(path=db_path)
+
+    def test_lock_released_after_close(self, tmp_path: Path) -> None:
+        """Database can be opened after previous connection is closed."""
+        db_path = tmp_path / "test.db"
+
+        # Open and close first connection
+        storage1 = StorageEngine(path=db_path)
+        storage1.close()
+
+        # Second connection should succeed
+        storage2 = StorageEngine(path=db_path)
+        try:
+            assert storage2.connection is not None
+        finally:
+            storage2.close()
+
+    def test_lock_released_after_context_manager_exit(self, tmp_path: Path) -> None:
+        """Database can be opened after context manager exits."""
+        db_path = tmp_path / "test.db"
+
+        # Use context manager
+        with StorageEngine(path=db_path):
+            pass  # Lock held during context
+
+        # After context exits, should be able to open
+        with StorageEngine(path=db_path) as storage:
+            assert storage.connection is not None
+
+    def test_memory_databases_dont_conflict(self) -> None:
+        """In-memory databases don't have lock conflicts."""
+        # Multiple in-memory databases can coexist
+        storage1 = StorageEngine.memory()
+        storage2 = StorageEngine.memory()
+
+        try:
+            assert storage1.connection is not None
+            assert storage2.connection is not None
+        finally:
+            storage1.close()
+            storage2.close()
+
+
+# =============================================================================
+# Read-Only Mode Tests
+# =============================================================================
+
+
+class TestReadOnlyMode:
+    """Tests for read-only database access mode."""
+
+    def test_read_only_allows_select_queries(self, tmp_path: Path) -> None:
+        """Read-only connection can execute SELECT queries."""
+        db_path = tmp_path / "test.db"
+
+        # Create database with write connection
+        with StorageEngine(path=db_path) as writer:
+            writer.connection.execute("CREATE TABLE test (id INTEGER)")
+            writer.connection.execute("INSERT INTO test VALUES (1), (2), (3)")
+
+        # Open read-only and query
+        with StorageEngine(path=db_path, read_only=True) as reader:
+            result = reader.connection.execute("SELECT COUNT(*) FROM test").fetchone()
+            assert result is not None
+            assert result[0] == 3
+
+    def test_read_only_blocks_insert(self, tmp_path: Path) -> None:
+        """Read-only connection cannot INSERT data."""
+        import duckdb
+
+        db_path = tmp_path / "test.db"
+
+        # Create database
+        with StorageEngine(path=db_path) as writer:
+            writer.connection.execute("CREATE TABLE test (id INTEGER)")
+
+        # Try to insert via read-only connection
+        with (
+            StorageEngine(path=db_path, read_only=True) as reader,
+            pytest.raises(duckdb.InvalidInputException),
+        ):
+            reader.connection.execute("INSERT INTO test VALUES (1)")
+
+    def test_read_only_blocks_update(self, tmp_path: Path) -> None:
+        """Read-only connection cannot UPDATE data."""
+        import duckdb
+
+        db_path = tmp_path / "test.db"
+
+        # Create database with data
+        with StorageEngine(path=db_path) as writer:
+            writer.connection.execute("CREATE TABLE test (id INTEGER)")
+            writer.connection.execute("INSERT INTO test VALUES (1)")
+
+        # Try to update via read-only connection
+        with (
+            StorageEngine(path=db_path, read_only=True) as reader,
+            pytest.raises(duckdb.InvalidInputException),
+        ):
+            reader.connection.execute("UPDATE test SET id = 2")
+
+    def test_read_only_blocks_delete(self, tmp_path: Path) -> None:
+        """Read-only connection cannot DELETE data."""
+        import duckdb
+
+        db_path = tmp_path / "test.db"
+
+        # Create database with data
+        with StorageEngine(path=db_path) as writer:
+            writer.connection.execute("CREATE TABLE test (id INTEGER)")
+            writer.connection.execute("INSERT INTO test VALUES (1)")
+
+        # Try to delete via read-only connection
+        with (
+            StorageEngine(path=db_path, read_only=True) as reader,
+            pytest.raises(duckdb.InvalidInputException),
+        ):
+            reader.connection.execute("DELETE FROM test")
+
+    def test_read_only_blocks_create_table(self, tmp_path: Path) -> None:
+        """Read-only connection cannot CREATE TABLE."""
+        import duckdb
+
+        db_path = tmp_path / "test.db"
+
+        # Create empty database
+        with StorageEngine(path=db_path):
+            pass
+
+        # Try to create table via read-only connection
+        with (
+            StorageEngine(path=db_path, read_only=True) as reader,
+            pytest.raises(duckdb.InvalidInputException),
+        ):
+            reader.connection.execute("CREATE TABLE test (id INTEGER)")
+
+    def test_multiple_read_only_connections_coexist(self, tmp_path: Path) -> None:
+        """Multiple read-only connections can access the same database."""
+        db_path = tmp_path / "test.db"
+
+        # Create database with data
+        with StorageEngine(path=db_path) as writer:
+            writer.connection.execute("CREATE TABLE test (id INTEGER)")
+            writer.connection.execute("INSERT INTO test VALUES (1), (2)")
+
+        # Open multiple read-only connections
+        reader1 = StorageEngine(path=db_path, read_only=True)
+        reader2 = StorageEngine(path=db_path, read_only=True)
+
+        try:
+            # Both can query
+            result1 = reader1.connection.execute("SELECT COUNT(*) FROM test").fetchone()
+            result2 = reader2.connection.execute("SELECT COUNT(*) FROM test").fetchone()
+
+            assert result1 is not None and result1[0] == 2
+            assert result2 is not None and result2[0] == 2
+        finally:
+            reader1.close()
+            reader2.close()
+
+    def test_read_only_opens_after_write_closed(self, tmp_path: Path) -> None:
+        """Read-only connection can open after write connection is closed.
+
+        Note: DuckDB does not allow mixing read-only and read-write connections
+        to the same file within the same process. However, read-only connections
+        from different processes can access a database while a writer has the lock.
+        This test verifies the basic read-only functionality after writer closes.
+        """
+        db_path = tmp_path / "test.db"
+
+        # Create database with data
+        with StorageEngine(path=db_path) as writer:
+            writer.connection.execute("CREATE TABLE test (id INTEGER)")
+            writer.connection.execute("INSERT INTO test VALUES (1)")
+
+        # Open read-only after writer is closed
+        with StorageEngine(path=db_path, read_only=True) as reader:
+            result = reader.connection.execute("SELECT COUNT(*) FROM test").fetchone()
+            assert result is not None
+            assert result[0] == 1
+
+    def test_read_only_property_is_set(self, tmp_path: Path) -> None:
+        """Read-only flag is accessible via property."""
+        db_path = tmp_path / "test.db"
+
+        # Create database
+        with StorageEngine(path=db_path):
+            pass
+
+        # Check property on both modes
+        with StorageEngine(path=db_path, read_only=False) as writer:
+            assert writer.read_only is False
+
+        with StorageEngine(path=db_path, read_only=True) as reader:
+            assert reader.read_only is True
+
+    def test_read_only_default_is_false(self, tmp_path: Path) -> None:
+        """Default read_only value is False."""
+        db_path = tmp_path / "test.db"
+
+        with StorageEngine(path=db_path) as storage:
+            assert storage.read_only is False

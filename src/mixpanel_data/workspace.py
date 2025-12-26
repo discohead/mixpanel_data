@@ -182,19 +182,24 @@ class Workspace:
                 region=cast(RegionType, resolved_region),
             )
 
-        # Initialize storage
+        # Initialize storage lazily
+        # Store path for lazy initialization, or use injected storage directly
+        self._db_path: Path | None = None
+        self._storage: StorageEngine | None = None
+
         if _storage is not None:
+            # Injected storage - use directly
             self._storage = _storage
         else:
-            # Determine database path
+            # Determine database path for lazy initialization
             if path is not None:
-                db_path = Path(path) if isinstance(path, str) else path
+                self._db_path = Path(path) if isinstance(path, str) else path
             else:
                 # Default path: ~/.mp/data/{project_id}.db
-                db_path = (
+                self._db_path = (
                     Path.home() / ".mp" / "data" / f"{self._credentials.project_id}.db"
                 )
-            self._storage = StorageEngine(path=db_path)
+            # NOTE: StorageEngine is NOT created here - see storage property
 
         # Lazy-initialized services (None until first use)
         self._api_client: MixpanelAPIClient | None = _api_client
@@ -505,12 +510,33 @@ class Workspace:
         return self._discovery
 
     @property
+    def storage(self) -> StorageEngine:
+        """Get or create storage engine (lazy initialization).
+
+        Only connects to database when first accessed. API-only operations
+        (discovery, live queries, streaming) don't touch the database.
+
+        Returns:
+            StorageEngine instance.
+
+        Raises:
+            DatabaseLockedError: If database is locked by another process.
+            RuntimeError: If no database path configured (shouldn't happen
+                in normal use).
+        """
+        if self._storage is None:
+            if self._db_path is None:
+                raise RuntimeError("No database path configured")
+            self._storage = StorageEngine(path=self._db_path)
+        return self._storage
+
+    @property
     def _fetcher_service(self) -> FetcherService:
         """Get or create fetcher service (lazy initialization)."""
         if self._fetcher is None:
             self._fetcher = FetcherService(
                 self._require_api_client(),
-                self._storage,
+                self.storage,  # Uses lazy storage property
             )
         return self._fetcher
 
@@ -982,7 +1008,7 @@ class Workspace:
         Raises:
             QueryError: If query is invalid.
         """
-        return self._storage.execute_df(query)
+        return self.storage.execute_df(query)
 
     def sql_scalar(self, query: str) -> Any:
         """Execute SQL query and return single scalar value.
@@ -996,7 +1022,7 @@ class Workspace:
         Raises:
             QueryError: If query is invalid or returns multiple values.
         """
-        return self._storage.execute_scalar(query)
+        return self.storage.execute_scalar(query)
 
     def sql_rows(self, query: str) -> list[tuple[Any, ...]]:
         """Execute SQL query and return results as list of tuples.
@@ -1010,7 +1036,7 @@ class Workspace:
         Raises:
             QueryError: If query is invalid.
         """
-        return self._storage.execute_rows(query)
+        return self.storage.execute_rows(query)
 
     # =========================================================================
     # LIVE QUERY METHODS
@@ -1431,8 +1457,8 @@ class Workspace:
         Returns:
             WorkspaceInfo with path, project_id, region, account, tables, size.
         """
-        path = self._storage.path
-        tables = [t.name for t in self._storage.list_tables()]
+        path = self.storage.path
+        tables = [t.name for t in self.storage.list_tables()]
 
         # Calculate database size and creation time
         size_mb = 0.0
@@ -1462,7 +1488,7 @@ class Workspace:
         Returns:
             List of TableInfo objects (name, type, row_count, fetched_at).
         """
-        return self._storage.list_tables()
+        return self.storage.list_tables()
 
     def table_schema(self, table: str) -> TableSchema:
         """Get schema for a table in the local database.
@@ -1476,7 +1502,7 @@ class Workspace:
         Raises:
             TableNotFoundError: If table doesn't exist.
         """
-        return self._storage.get_schema(table)
+        return self.storage.get_schema(table)
 
     def sample(self, table: str, n: int = 10) -> pd.DataFrame:
         """Return random sample rows from a table.
@@ -1503,11 +1529,11 @@ class Workspace:
             ```
         """
         # Validate table exists
-        self._storage.get_schema(table)
+        self.storage.get_schema(table)
 
         # Use DuckDB's reservoir sampling
         sql = f'SELECT * FROM "{table}" USING SAMPLE {n}'
-        return self._storage.execute_df(sql)
+        return self.storage.execute_df(sql)
 
     def summarize(self, table: str) -> SummaryResult:
         """Get statistical summary of all columns in a table.
@@ -1533,13 +1559,13 @@ class Workspace:
             ```
         """
         # Validate table exists
-        self._storage.get_schema(table)
+        self.storage.get_schema(table)
 
         # Get row count
-        row_count = self._storage.execute_scalar(f'SELECT COUNT(*) FROM "{table}"')
+        row_count = self.storage.execute_scalar(f'SELECT COUNT(*) FROM "{table}"')
 
         # Get column statistics using SUMMARIZE
-        summary_df = self._storage.execute_df(f'SUMMARIZE "{table}"')
+        summary_df = self.storage.execute_df(f'SUMMARIZE "{table}"')
 
         # Convert to ColumnSummary objects (to_dict is more efficient than iterrows)
         columns: list[ColumnSummary] = []
@@ -1595,7 +1621,7 @@ class Workspace:
             ```
         """
         # Validate table exists and get schema
-        schema = self._storage.get_schema(table)
+        schema = self.storage.get_schema(table)
         column_names = {col.name for col in schema.columns}
 
         # Check for required columns
@@ -1617,7 +1643,7 @@ class Workspace:
                 MAX(event_time) as max_time
             FROM "{table}"
         """
-        agg_result = self._storage.execute_rows(agg_sql)
+        agg_result = self.storage.execute_rows(agg_sql)
         total_events, total_users, min_time, max_time = agg_result[0]
 
         # Handle empty table
@@ -1643,7 +1669,7 @@ class Workspace:
             GROUP BY event_name
             ORDER BY count DESC
         """
-        breakdown_rows = self._storage.execute_rows(breakdown_sql)
+        breakdown_rows = self.storage.execute_rows(breakdown_sql)
 
         events: list[EventStats] = []
         for row in breakdown_rows:
@@ -1717,7 +1743,7 @@ class Workspace:
             ```
         """
         # Validate table exists and get schema
-        schema = self._storage.get_schema(table)
+        schema = self.storage.get_schema(table)
         column_names = {col.name for col in schema.columns}
 
         # Check for required column
@@ -1742,14 +1768,14 @@ class Workspace:
                 WHERE event_name = ?
                 ORDER BY key
             """
-            rows = self._storage.connection.execute(sql, [event]).fetchall()
+            rows = self.storage.connection.execute(sql, [event]).fetchall()
         else:
             sql = f"""
                 SELECT DISTINCT unnest(json_keys(properties)) as key
                 FROM "{table}"
                 ORDER BY key
             """
-            rows = self._storage.execute_rows(sql)
+            rows = self.storage.execute_rows(sql)
 
         return [str(row[0]) for row in rows]
 
@@ -1803,10 +1829,10 @@ class Workspace:
             developers or AI coding agents. Do not pass untrusted user input.
         """
         # Validate table exists
-        self._storage.get_schema(table)
+        self.storage.get_schema(table)
 
         # Get total row count
-        total_rows = self._storage.execute_scalar(f'SELECT COUNT(*) FROM "{table}"')
+        total_rows = self.storage.execute_scalar(f'SELECT COUNT(*) FROM "{table}"')
 
         # Get basic stats: count, null_count, approx unique
         stats_sql = f"""
@@ -1817,7 +1843,7 @@ class Workspace:
             FROM "{table}"
         """
         try:
-            stats_result = self._storage.execute_rows(stats_sql)
+            stats_result = self.storage.execute_rows(stats_sql)
         except Exception as e:
             raise QueryError(
                 f"Invalid column expression: {column}. Error: {e}",
@@ -1839,7 +1865,7 @@ class Workspace:
             ORDER BY cnt DESC
             LIMIT {top_n}
         """
-        top_rows = self._storage.execute_rows(top_sql)
+        top_rows = self.storage.execute_rows(top_sql)
         top_values: list[tuple[Any, int]] = [(row[0], int(row[1])) for row in top_rows]
 
         # Detect column type to determine if numeric stats apply
@@ -1847,7 +1873,7 @@ class Workspace:
             f'SELECT typeof({column}) FROM "{table}" WHERE {column} IS NOT NULL LIMIT 1'
         )
         try:
-            type_result = self._storage.execute_rows(type_sql)
+            type_result = self.storage.execute_rows(type_sql)
             dtype = str(type_result[0][0]) if type_result else "UNKNOWN"
         except Exception:
             dtype = "UNKNOWN"
@@ -1882,7 +1908,7 @@ class Workspace:
                 FROM "{table}"
             """
             try:
-                numeric_result = self._storage.execute_rows(numeric_sql)
+                numeric_result = self.storage.execute_rows(numeric_sql)
                 if numeric_result:
                     min_val = (
                         float(numeric_result[0][0])
@@ -1938,7 +1964,7 @@ class Workspace:
             TableNotFoundError: If any table doesn't exist.
         """
         for name in names:
-            self._storage.drop_table(name)
+            self.storage.drop_table(name)
 
     def drop_all(self, type: Literal["events", "profiles"] | None = None) -> None:
         """Drop all tables, optionally filtered by type.
@@ -1946,10 +1972,10 @@ class Workspace:
         Args:
             type: If specified, only drop tables of this type.
         """
-        tables = self._storage.list_tables()
+        tables = self.storage.list_tables()
         for table in tables:
             if type is None or table.type == type:
-                self._storage.drop_table(table.name)
+                self.storage.drop_table(table.name)
 
     # =========================================================================
     # ESCAPE HATCHES
@@ -1964,7 +1990,7 @@ class Workspace:
         Returns:
             The underlying DuckDB connection.
         """
-        return self._storage.connection
+        return self.storage.connection
 
     @property
     def api(self) -> MixpanelAPIClient:

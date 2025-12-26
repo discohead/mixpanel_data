@@ -214,7 +214,7 @@ class TestEphemeralWorkflow:
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
         ) as ws:
-            db_path = ws._storage.path
+            db_path = ws.storage.path
             assert db_path is not None
             assert db_path.exists()
 

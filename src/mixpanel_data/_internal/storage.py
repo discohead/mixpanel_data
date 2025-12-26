@@ -19,7 +19,12 @@ from typing import Any
 import duckdb
 import pandas as pd
 
-from mixpanel_data.exceptions import QueryError, TableExistsError, TableNotFoundError
+from mixpanel_data.exceptions import (
+    DatabaseLockedError,
+    QueryError,
+    TableExistsError,
+    TableNotFoundError,
+)
 from mixpanel_data.types import ColumnInfo, TableInfo, TableMetadata, TableSchema
 
 # Module-level logger for cleanup operations
@@ -73,6 +78,7 @@ class StorageEngine:
         self,
         path: Path | None = None,
         *,
+        read_only: bool = False,
         _ephemeral: bool = False,
         _in_memory: bool = False,
     ) -> None:
@@ -80,6 +86,10 @@ class StorageEngine:
 
         Args:
             path: Path to database file. Required unless _in_memory=True.
+            read_only: Open database in read-only mode. When True, the
+                connection allows SELECT queries but blocks INSERT, UPDATE,
+                DELETE, and DDL operations. Read-only connections can be
+                opened even when a write lock is held by another process.
             _ephemeral: Internal flag to mark database as ephemeral.
                 DO NOT USE DIRECTLY - use StorageEngine.ephemeral() instead.
                 This parameter is keyword-only and prefixed with underscore
@@ -90,11 +100,13 @@ class StorageEngine:
         Raises:
             OSError: If path is invalid or lacks write permissions.
             ValueError: If _ephemeral or _in_memory is used incorrectly.
+            DatabaseLockedError: If database is locked and read_only=False.
         """
         self._path: Path | None = None
         self._conn: duckdb.DuckDBPyConnection | None = None
         self._is_ephemeral = _ephemeral
         self._is_in_memory = _in_memory
+        self._read_only = read_only
         self._closed = False  # Track if close() was explicitly called
 
         # Validate mutually exclusive flags
@@ -130,13 +142,24 @@ class StorageEngine:
                 self._path = path
 
                 # Connect to database (creates file if doesn't exist)
-                self._conn = duckdb.connect(database=str(path), read_only=False)
+                self._conn = duckdb.connect(database=str(path), read_only=read_only)
 
                 # Register atexit handler for ephemeral databases
                 if self._is_ephemeral:
                     atexit.register(self._cleanup_ephemeral)
+            except duckdb.IOException as e:
+                # Check for database lock conflict
+                error_str = str(e)
+                if "Could not set lock" in error_str:
+                    # Extract PID if available from error message
+                    # Example: "Conflicting lock is held in ... (PID 12345)"
+                    pid_match = re.search(r"PID (\d+)", error_str)
+                    holding_pid = int(pid_match.group(1)) if pid_match else None
+                    raise DatabaseLockedError(str(path), holding_pid) from None
+                # Other IO errors - wrap as OSError
+                raise OSError(f"Failed to create database at {path}: {e}") from e
             except Exception as e:
-                # Wrap any error as OSError for consistency
+                # Wrap any other error as OSError for consistency
                 raise OSError(f"Failed to create database at {path}: {e}") from e
         else:
             # No path provided - should use ephemeral() or memory() classmethod
@@ -235,6 +258,19 @@ class StorageEngine:
             Path to database file, or None if not yet initialized.
         """
         return self._path
+
+    @property
+    def read_only(self) -> bool:
+        """Whether the database was opened in read-only mode.
+
+        Read-only connections allow SELECT queries but block INSERT, UPDATE,
+        DELETE, and DDL operations. Multiple read-only connections can access
+        the same database concurrently.
+
+        Returns:
+            True if opened with read_only=True, False otherwise.
+        """
+        return self._read_only
 
     @property
     def connection(self) -> duckdb.DuckDBPyConnection:

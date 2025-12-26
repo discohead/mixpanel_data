@@ -559,6 +559,61 @@ class TableNotFoundError(MixpanelDataError):
         return str(self._details.get("table_name", ""))
 
 
+class DatabaseLockedError(MixpanelDataError):
+    """Database is locked by another process.
+
+    Raised when attempting to access a DuckDB database that is locked
+    by another process. DuckDB uses single-writer, multiple-reader
+    concurrency - only one process can have write access at a time.
+
+    Example:
+        ```python
+        try:
+            ws = Workspace()
+        except DatabaseLockedError as e:
+            print(f"Database {e.db_path} is locked")
+            if e.holding_pid:
+                print(f"Held by PID {e.holding_pid}")
+        ```
+    """
+
+    def __init__(
+        self,
+        db_path: str,
+        holding_pid: int | None = None,
+    ) -> None:
+        """Initialize DatabaseLockedError.
+
+        Args:
+            db_path: Path to the locked database file.
+            holding_pid: Process ID holding the lock, if available.
+        """
+        message = f"Database '{db_path}' is locked by another process"
+        if holding_pid is not None:
+            message += f" (PID {holding_pid})"
+        message += ". Wait for the other operation to complete and try again."
+
+        details: dict[str, str | int] = {
+            "db_path": db_path,
+            "suggestion": "Wait for the other operation to complete and try again.",
+        }
+        if holding_pid is not None:
+            details["holding_pid"] = holding_pid
+
+        super().__init__(message, code="DATABASE_LOCKED", details=details)
+
+    @property
+    def db_path(self) -> str:
+        """Path to the locked database."""
+        return str(self._details.get("db_path", ""))
+
+    @property
+    def holding_pid(self) -> int | None:
+        """Process ID holding the lock, if available."""
+        pid = self._details.get("holding_pid")
+        return int(pid) if pid is not None else None
+
+
 # JQL Exceptions
 
 
