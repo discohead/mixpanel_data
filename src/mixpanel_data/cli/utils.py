@@ -5,13 +5,15 @@ This module provides shared utilities for the CLI:
 - handle_errors decorator for exception-to-exit-code mapping
 - Console instances for stdout/stderr separation
 - Lazy workspace/config initialization helpers
+- status_spinner context manager for long-running operations
 """
 
 from __future__ import annotations
 
 import functools
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from enum import IntEnum
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -210,3 +212,30 @@ def output_result(
         # Default to JSON for unknown formats
         output = format_json(data)
         console.print(output, highlight=False)
+
+
+@contextmanager
+def status_spinner(ctx: typer.Context, message: str) -> Generator[None, None, None]:
+    """Context manager to show a spinner for long-running operations.
+
+    Shows an animated spinner on stderr while the wrapped operation runs.
+    Respects the --quiet flag to suppress the spinner.
+
+    Args:
+        ctx: Typer context with global options in obj dict.
+        message: Status message to display (e.g., "Fetching data...").
+
+    Yields:
+        None - the wrapped code block executes.
+
+    Example:
+        with status_spinner(ctx, "Fetching bookmarks..."):
+            bookmarks = workspace.list_bookmarks()
+    """
+    quiet = ctx.obj.get("quiet", False) if ctx.obj else False
+
+    if quiet:
+        yield
+    else:
+        with err_console.status(message):
+            yield

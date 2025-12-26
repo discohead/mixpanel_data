@@ -26,6 +26,7 @@ from mixpanel_data.cli.utils import (
     get_workspace,
     handle_errors,
     output_result,
+    status_spinner,
 )
 from mixpanel_data.cli.validators import validate_count_type, validate_entity_type
 
@@ -56,7 +57,8 @@ def inspect_events(ctx: typer.Context, format: FormatOption = "json") -> None:
         mp inspect events --format table
     """
     workspace = get_workspace(ctx)
-    events = workspace.events()
+    with status_spinner(ctx, "Fetching events..."):
+        events = workspace.events()
     output_result(ctx, events, format=format)
 
 
@@ -81,7 +83,8 @@ def inspect_properties(
         mp inspect properties -e "Purchase" --format table
     """
     workspace = get_workspace(ctx)
-    properties = workspace.properties(event)
+    with status_spinner(ctx, "Fetching properties..."):
+        properties = workspace.properties(event)
     output_result(ctx, properties, format=format)
 
 
@@ -115,11 +118,12 @@ def inspect_values(
         mp inspect values -p browser --format table
     """
     workspace = get_workspace(ctx)
-    values = workspace.property_values(
-        property_name=property_name,
-        event=event,
-        limit=limit,
-    )
+    with status_spinner(ctx, "Fetching values..."):
+        values = workspace.property_values(
+            property_name=property_name,
+            event=event,
+            limit=limit,
+        )
     output_result(ctx, values, format=format)
 
 
@@ -137,7 +141,8 @@ def inspect_funnels(ctx: typer.Context, format: FormatOption = "json") -> None:
         mp inspect funnels --format table
     """
     workspace = get_workspace(ctx)
-    funnels = workspace.funnels()
+    with status_spinner(ctx, "Fetching funnels..."):
+        funnels = workspace.funnels()
     data = [{"funnel_id": f.funnel_id, "name": f.name} for f in funnels]
     output_result(ctx, data, columns=["funnel_id", "name"], format=format)
 
@@ -156,7 +161,8 @@ def inspect_cohorts(ctx: typer.Context, format: FormatOption = "json") -> None:
         mp inspect cohorts --format table
     """
     workspace = get_workspace(ctx)
-    cohorts = workspace.cohorts()
+    with status_spinner(ctx, "Fetching cohorts..."):
+        cohorts = workspace.cohorts()
     data = [
         {
             "id": c.id,
@@ -198,7 +204,8 @@ def inspect_top_events(
     """
     validated_type = validate_count_type(type_)
     workspace = get_workspace(ctx)
-    events = workspace.top_events(type=validated_type, limit=limit)
+    with status_spinner(ctx, "Fetching top events..."):
+        events = workspace.top_events(type=validated_type, limit=limit)
     data = [
         {
             "event": e.event,
@@ -238,7 +245,9 @@ def inspect_bookmarks(
         mp inspect bookmarks --type funnels --format table
     """
     workspace = get_workspace(ctx)
-    bookmarks = workspace.list_bookmarks(bookmark_type=type_)  # type: ignore[arg-type]
+
+    with status_spinner(ctx, "Fetching bookmarks..."):
+        bookmarks = workspace.list_bookmarks(bookmark_type=type_)  # type: ignore[arg-type]
     data = [
         {
             "id": b.id,
@@ -404,7 +413,8 @@ def inspect_lexicon_schemas(
     """
     validated_type = validate_entity_type(type_) if type_ is not None else None
     workspace = get_workspace(ctx)
-    schemas = workspace.lexicon_schemas(entity_type=validated_type)
+    with status_spinner(ctx, "Fetching schemas..."):
+        schemas = workspace.lexicon_schemas(entity_type=validated_type)
     data = [
         {
             "entity_type": s.entity_type,
@@ -451,7 +461,8 @@ def inspect_lexicon_schema(
     """
     validated_type = validate_entity_type(type_)
     workspace = get_workspace(ctx)
-    schema = workspace.lexicon_schema(validated_type, name)
+    with status_spinner(ctx, "Fetching schema..."):
+        schema = workspace.lexicon_schema(validated_type, name)
     output_result(ctx, schema.to_dict(), format=format)
 
 
