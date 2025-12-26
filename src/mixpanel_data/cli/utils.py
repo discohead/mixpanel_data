@@ -219,7 +219,9 @@ def status_spinner(ctx: typer.Context, message: str) -> Generator[None, None, No
     """Context manager to show a spinner for long-running operations.
 
     Shows an animated spinner on stderr while the wrapped operation runs.
-    Respects the --quiet flag to suppress the spinner.
+    Respects the --quiet flag to suppress the spinner. Also skips the
+    spinner in non-TTY environments (e.g., CI/CD pipelines) to avoid
+    cluttering logs with escape sequences.
 
     Args:
         ctx: Typer context with global options in obj dict.
@@ -232,9 +234,12 @@ def status_spinner(ctx: typer.Context, message: str) -> Generator[None, None, No
         with status_spinner(ctx, "Fetching bookmarks..."):
             bookmarks = workspace.list_bookmarks()
     """
+    import sys
+
     quiet = ctx.obj.get("quiet", False) if ctx.obj else False
 
-    if quiet:
+    # Skip spinner if quiet mode or non-interactive (e.g., CI/CD, pipes)
+    if quiet or not sys.stderr.isatty():
         yield
     else:
         with err_console.status(message):

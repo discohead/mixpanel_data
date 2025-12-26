@@ -914,7 +914,10 @@ class SavedReportResult:
                 else pd.DataFrame(columns=["date", "event", "count"])
             )
         else:
-            # For retention and funnel, convert series to records
+            # Retention and funnel reports have complex nested structures that vary
+            # by report configuration. We preserve the full structure for direct
+            # access via .series property. Users can navigate the nested dict as
+            # needed for their specific report type.
             result_df = pd.DataFrame([{"series": self.series}])
 
         object.__setattr__(self, "_df_cache", result_df)
