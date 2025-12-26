@@ -151,6 +151,8 @@ Design documents in `context/`:
 - N/A (read-only API operations, no local persistence) (012-lexicon-schemas)
 - Python 3.11+ + DuckDB (analytical queries), pandas (DataFrame conversion), Typer (CLI), Rich (output formatting) (014-introspection-api)
 - DuckDB (existing `StorageEngine` class) (014-introspection-api)
+- Python 3.11+ with full type hints (mypy --strict compliant) + httpx (HTTP client), Typer (CLI), Rich (output formatting), Pydantic v2 (validation), pandas (DataFrame conversion) (015-bookmarks-api)
+- N/A (live queries only - no local persistence for bookmark operations) (015-bookmarks-api)
 
 ## Recent Changes
 - 011-streaming-api: Added Python 3.11+ + Typer (CLI), httpx (HTTP), Rich (progress to stderr)

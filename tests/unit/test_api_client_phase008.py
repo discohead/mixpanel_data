@@ -339,11 +339,11 @@ class TestSegmentationNumeric:
 # =============================================================================
 
 
-class TestInsights:
-    """Tests for MixpanelAPIClient.insights()."""
+class TestQuerySavedReport:
+    """Tests for MixpanelAPIClient.query_saved_report()."""
 
-    def test_insights_basic(self, test_credentials: Credentials) -> None:
-        """insights() should return report data."""
+    def test_query_saved_report_basic(self, test_credentials: Credentials) -> None:
+        """query_saved_report() should return report data."""
 
         def handler(request: httpx.Request) -> httpx.Response:
             assert "/insights" in str(request.url)
@@ -364,21 +364,23 @@ class TestInsights:
             )
 
         with create_mock_client(test_credentials, handler) as client:
-            result = client.insights(bookmark_id=12345678)
+            result = client.query_saved_report(bookmark_id=12345678)
 
         assert "computed_at" in result
         assert "series" in result
         assert "Sign Up" in result["series"]
 
-    def test_insights_passes_bookmark_id(self, test_credentials: Credentials) -> None:
-        """insights() should pass bookmark_id in request."""
+    def test_query_saved_report_passes_bookmark_id(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report() should pass bookmark_id in request."""
 
         def handler(request: httpx.Request) -> httpx.Response:
             assert "bookmark_id=99887766" in str(request.url)
             return httpx.Response(200, json={"series": {}})
 
         with create_mock_client(test_credentials, handler) as client:
-            result = client.insights(bookmark_id=99887766)
+            result = client.query_saved_report(bookmark_id=99887766)
 
         assert "series" in result
 
@@ -708,11 +710,13 @@ class TestPhase008ErrorHandling:
         assert exc_info.value.retry_after == 0
 
     # -------------------------------------------------------------------------
-    # Insights Error Handling
+    # query_saved_report Error Handling
     # -------------------------------------------------------------------------
 
-    def test_insights_auth_error_on_401(self, test_credentials: Credentials) -> None:
-        """insights() should raise AuthenticationError on 401."""
+    def test_query_saved_report_auth_error_on_401(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report() should raise AuthenticationError on 401."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(401, json={"error": "Invalid credentials"})
@@ -721,10 +725,12 @@ class TestPhase008ErrorHandling:
             create_mock_client(test_credentials, handler) as client,
             pytest.raises(AuthenticationError),
         ):
-            client.insights(bookmark_id=12345678)
+            client.query_saved_report(bookmark_id=12345678)
 
-    def test_insights_query_error_on_400(self, test_credentials: Credentials) -> None:
-        """insights() should raise QueryError on 400."""
+    def test_query_saved_report_query_error_on_400(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report() should raise QueryError on 400."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(400, json={"error": "Invalid bookmark_id"})
@@ -733,12 +739,14 @@ class TestPhase008ErrorHandling:
             create_mock_client(test_credentials, handler) as client,
             pytest.raises(QueryError) as exc_info,
         ):
-            client.insights(bookmark_id=99999999)
+            client.query_saved_report(bookmark_id=99999999)
 
         assert "Invalid bookmark_id" in str(exc_info.value)
 
-    def test_insights_rate_limit_on_429(self, test_credentials: Credentials) -> None:
-        """insights() should raise RateLimitError on 429."""
+    def test_query_saved_report_rate_limit_on_429(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report() should raise RateLimitError on 429."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(429, headers={"Retry-After": "0"})
@@ -749,6 +757,6 @@ class TestPhase008ErrorHandling:
         )
 
         with client, pytest.raises(RateLimitError) as exc_info:
-            client.insights(bookmark_id=12345678)
+            client.query_saved_report(bookmark_id=12345678)
 
         assert exc_info.value.retry_after == 0

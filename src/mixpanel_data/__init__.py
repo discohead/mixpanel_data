@@ -22,6 +22,8 @@ from mixpanel_data.exceptions import (
 )
 from mixpanel_data.types import (
     ActivityFeedResult,
+    BookmarkInfo,
+    BookmarkType,
     CohortInfo,
     ColumnInfo,
     ColumnStatsResult,
@@ -31,6 +33,7 @@ from mixpanel_data.types import (
     EventCountsResult,
     EventStats,
     FetchResult,
+    FlowsResult,
     FrequencyResult,
     FunnelInfo,
     FunnelResult,
@@ -47,6 +50,8 @@ from mixpanel_data.types import (
     PropertyCountsResult,
     RetentionResult,
     SavedCohort,
+    SavedReportResult,
+    SavedReportType,
     SegmentationResult,
     SummaryResult,
     TableInfo,
@@ -94,10 +99,16 @@ __all__ = [
     "TopEvent",
     "EventCountsResult",
     "PropertyCountsResult",
+    # Bookmark types (Phase 015)
+    "BookmarkInfo",
+    "BookmarkType",
+    "SavedReportResult",
+    "SavedReportType",
+    "FlowsResult",
     # Phase 008: Query Service Enhancement types
     "UserEvent",
     "ActivityFeedResult",
-    "InsightsResult",
+    "InsightsResult",  # Backward compatibility alias for SavedReportResult
     "FrequencyResult",
     "NumericBucketResult",
     "NumericSumResult",

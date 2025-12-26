@@ -20,10 +20,10 @@ from mixpanel_data.exceptions import (
 from mixpanel_data.types import (
     ActivityFeedResult,
     FrequencyResult,
-    InsightsResult,
     NumericAverageResult,
     NumericBucketResult,
     NumericSumResult,
+    SavedReportResult,
     UserEvent,
 )
 
@@ -532,16 +532,16 @@ class TestNumericBucketService:
 # =============================================================================
 
 
-class TestInsightsService:
-    """Tests for LiveQueryService.insights()."""
+class TestQuerySavedReportService:
+    """Tests for LiveQueryService.query_saved_report()."""
 
-    def test_insights_returns_typed_result(
+    def test_query_saved_report_returns_typed_result(
         self,
         live_query_factory: Callable[
             [Callable[[httpx.Request], httpx.Response]], LiveQueryService
         ],
     ) -> None:
-        """insights() should return InsightsResult."""
+        """query_saved_report() should return SavedReportResult."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(
@@ -561,21 +561,21 @@ class TestInsightsService:
             )
 
         live_query = live_query_factory(handler)
-        result = live_query.insights(bookmark_id=12345678)
+        result = live_query.query_saved_report(bookmark_id=12345678)
 
-        assert isinstance(result, InsightsResult)
+        assert isinstance(result, SavedReportResult)
         assert result.bookmark_id == 12345678
         assert result.computed_at == "2024-01-15T10:30:00.252314+00:00"
         assert "Sign Up" in result.series
         assert "Purchase" in result.series
 
-    def test_insights_preserves_metadata(
+    def test_query_saved_report_preserves_metadata(
         self,
         live_query_factory: Callable[
             [Callable[[httpx.Request], httpx.Response]], LiveQueryService
         ],
     ) -> None:
-        """insights() should preserve date range and headers."""
+        """query_saved_report() should preserve date range and headers."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(
@@ -592,19 +592,19 @@ class TestInsightsService:
             )
 
         live_query = live_query_factory(handler)
-        result = live_query.insights(bookmark_id=12345678)
+        result = live_query.query_saved_report(bookmark_id=12345678)
 
         assert result.from_date == "2024-01-01T00:00:00-08:00"
         assert result.to_date == "2024-01-07T00:00:00-08:00"
         assert result.headers == ["$event", "country"]
 
-    def test_insights_df_conversion(
+    def test_query_saved_report_df_conversion(
         self,
         live_query_factory: Callable[
             [Callable[[httpx.Request], httpx.Response]], LiveQueryService
         ],
     ) -> None:
-        """insights() result should support DataFrame conversion."""
+        """query_saved_report() result should support DataFrame conversion."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(
@@ -624,7 +624,7 @@ class TestInsightsService:
             )
 
         live_query = live_query_factory(handler)
-        result = live_query.insights(bookmark_id=12345678)
+        result = live_query.query_saved_report(bookmark_id=12345678)
         df = result.df
 
         assert "event" in df.columns
@@ -858,16 +858,16 @@ class TestPhase008ServiceErrorHandling:
             )
 
     # -------------------------------------------------------------------------
-    # Insights Error Propagation
+    # query_saved_report Error Propagation
     # -------------------------------------------------------------------------
 
-    def test_insights_propagates_auth_error(
+    def test_query_saved_report_propagates_auth_error(
         self,
         live_query_factory: Callable[
             [Callable[[httpx.Request], httpx.Response]], LiveQueryService
         ],
     ) -> None:
-        """insights() should propagate AuthenticationError from API."""
+        """query_saved_report() should propagate AuthenticationError from API."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(401, json={"error": "Invalid credentials"})
@@ -875,15 +875,15 @@ class TestPhase008ServiceErrorHandling:
         live_query = live_query_factory(handler)
 
         with pytest.raises(AuthenticationError):
-            live_query.insights(bookmark_id=12345678)
+            live_query.query_saved_report(bookmark_id=12345678)
 
-    def test_insights_propagates_query_error(
+    def test_query_saved_report_propagates_query_error(
         self,
         live_query_factory: Callable[
             [Callable[[httpx.Request], httpx.Response]], LiveQueryService
         ],
     ) -> None:
-        """insights() should propagate QueryError from API."""
+        """query_saved_report() should propagate QueryError from API."""
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(400, json={"error": "Invalid bookmark_id"})
@@ -891,7 +891,7 @@ class TestPhase008ServiceErrorHandling:
         live_query = live_query_factory(handler)
 
         with pytest.raises(QueryError):
-            live_query.insights(bookmark_id=99999999)
+            live_query.query_saved_report(bookmark_id=99999999)
 
 
 # =============================================================================

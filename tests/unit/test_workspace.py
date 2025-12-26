@@ -25,7 +25,6 @@ from mixpanel_data.types import (
     FrequencyResult,
     FunnelInfo,
     FunnelResult,
-    InsightsResult,
     JQLResult,
     LexiconDefinition,
     LexiconSchema,
@@ -35,6 +34,7 @@ from mixpanel_data.types import (
     PropertyCountsResult,
     RetentionResult,
     SavedCohort,
+    SavedReportResult,
     SegmentationResult,
     TableSchema,
     TopEvent,
@@ -650,15 +650,15 @@ class TestLiveQueries:
         finally:
             ws.close()
 
-    def test_insights_delegation(
+    def test_query_saved_report_delegation(
         self,
         workspace_factory: Callable[..., Workspace],
     ) -> None:
-        """T050: Test insights() delegation."""
+        """Test query_saved_report() delegation."""
         ws = workspace_factory()
         try:
             mock_live_query = MagicMock()
-            mock_live_query.insights.return_value = InsightsResult(
+            mock_live_query.query_saved_report.return_value = SavedReportResult(
                 bookmark_id=12345,
                 computed_at="2024-01-01",
                 from_date="2024-01-01",
@@ -668,10 +668,10 @@ class TestLiveQueries:
             )
             ws._live_query = mock_live_query
 
-            result = ws.insights(12345)
+            result = ws.query_saved_report(12345)
 
             assert result.bookmark_id == 12345
-            mock_live_query.insights.assert_called_once()
+            mock_live_query.query_saved_report.assert_called_once()
         finally:
             ws.close()
 

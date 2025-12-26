@@ -55,6 +55,8 @@ from mixpanel_data._internal.storage import StorageEngine
 from mixpanel_data.exceptions import ConfigError, QueryError
 from mixpanel_data.types import (
     ActivityFeedResult,
+    BookmarkInfo,
+    BookmarkType,
     ColumnStatsResult,
     ColumnSummary,
     EntityType,
@@ -62,10 +64,10 @@ from mixpanel_data.types import (
     EventCountsResult,
     EventStats,
     FetchResult,
+    FlowsResult,
     FrequencyResult,
     FunnelInfo,
     FunnelResult,
-    InsightsResult,
     JQLResult,
     LexiconSchema,
     NumericAverageResult,
@@ -74,6 +76,7 @@ from mixpanel_data.types import (
     PropertyCountsResult,
     RetentionResult,
     SavedCohort,
+    SavedReportResult,
     SegmentationResult,
     SummaryResult,
     TableInfo,
@@ -603,6 +606,30 @@ class Workspace:
             ConfigError: If API credentials not available.
         """
         return self._discovery_service.list_cohorts()
+
+    def list_bookmarks(
+        self,
+        bookmark_type: BookmarkType | None = None,
+    ) -> list[BookmarkInfo]:
+        """List all saved reports (bookmarks) in the project.
+
+        Retrieves metadata for all saved Insights, Funnel, Retention, and
+        Flows reports in the project.
+
+        Args:
+            bookmark_type: Optional filter by report type. Valid values are
+                'insights', 'funnels', 'retention', 'flows', 'launch-analysis'.
+                If None, returns all bookmark types.
+
+        Returns:
+            List of BookmarkInfo objects with report metadata.
+            Empty list if no bookmarks exist.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            QueryError: Permission denied or invalid type parameter.
+        """
+        return self._discovery_service.list_bookmarks(bookmark_type=bookmark_type)
 
     def top_events(
         self,
@@ -1215,19 +1242,41 @@ class Workspace:
             to_date=to_date,
         )
 
-    def insights(self, bookmark_id: int) -> InsightsResult:
-        """Query a saved Insights report.
+    def query_saved_report(self, bookmark_id: int) -> SavedReportResult:
+        """Query a saved report (Insights, Retention, or Funnel).
+
+        Executes a saved report by its bookmark ID. The report type is
+        automatically detected from the response headers.
 
         Args:
-            bookmark_id: ID of saved report.
+            bookmark_id: ID of saved report (from list_bookmarks or Mixpanel URL).
 
         Returns:
-            InsightsResult with report data.
+            SavedReportResult with report data and report_type property.
 
         Raises:
             ConfigError: If API credentials not available.
+            QueryError: If bookmark_id is invalid or report not found.
         """
-        return self._live_query_service.insights(bookmark_id=bookmark_id)
+        return self._live_query_service.query_saved_report(bookmark_id=bookmark_id)
+
+    def query_flows(self, bookmark_id: int) -> FlowsResult:
+        """Query a saved Flows report.
+
+        Executes a saved Flows report by its bookmark ID, returning
+        step data, breakdowns, and conversion rates.
+
+        Args:
+            bookmark_id: ID of saved flows report (from list_bookmarks or Mixpanel URL).
+
+        Returns:
+            FlowsResult with steps, breakdowns, and conversion rate.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            QueryError: If bookmark_id is invalid or report not found.
+        """
+        return self._live_query_service.query_flows(bookmark_id=bookmark_id)
 
     def frequency(
         self,

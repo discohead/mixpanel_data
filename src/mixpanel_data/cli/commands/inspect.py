@@ -7,6 +7,7 @@ This module provides commands for inspecting data:
 - funnels: List saved funnels
 - cohorts: List saved cohorts
 - top-events: List today's top events
+- bookmarks: List saved reports (bookmarks)
 - info: Show workspace information
 - tables: List local tables
 - schema: Show table schema
@@ -32,7 +33,7 @@ inspect_app = typer.Typer(
     name="inspect",
     help="Inspect schema and local database.",
     epilog="""Live (calls Mixpanel API):
-  events, properties, values, funnels, cohorts, top-events
+  events, properties, values, funnels, cohorts, top-events, bookmarks
 
 Local (uses DuckDB):
   info, tables, schema, drop""",
@@ -209,6 +210,45 @@ def inspect_top_events(
     output_result(
         ctx, data, columns=["event", "count", "percent_change"], format=format
     )
+
+
+@inspect_app.command("bookmarks")
+@handle_errors
+def inspect_bookmarks(
+    ctx: typer.Context,
+    type_: Annotated[
+        str | None,
+        typer.Option(
+            "--type",
+            "-t",
+            help="Filter by type: insights, funnels, retention, flows, launch-analysis.",
+        ),
+    ] = None,
+    format: FormatOption = "json",
+) -> None:
+    """List saved reports (bookmarks) in Mixpanel project.
+
+    Calls the Mixpanel API to retrieve saved report definitions.
+    Use the bookmark ID with 'mp query saved-report' or 'mp query flows'.
+
+    Examples:
+
+        mp inspect bookmarks
+        mp inspect bookmarks --type insights
+        mp inspect bookmarks --type funnels --format table
+    """
+    workspace = get_workspace(ctx)
+    bookmarks = workspace.list_bookmarks(bookmark_type=type_)  # type: ignore[arg-type]
+    data = [
+        {
+            "id": b.id,
+            "name": b.name,
+            "type": b.type,
+            "modified": b.modified,
+        }
+        for b in bookmarks
+    ]
+    output_result(ctx, data, columns=["id", "name", "type", "modified"], format=format)
 
 
 @inspect_app.command("info")

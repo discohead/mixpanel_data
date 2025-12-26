@@ -23,6 +23,30 @@ from typing import Any, Literal
 
 import pandas as pd
 
+# =============================================================================
+# Bookmark Type Aliases (Phase 015)
+# =============================================================================
+
+BookmarkType = Literal["insights", "funnels", "retention", "flows", "launch-analysis"]
+"""Bookmark type values from the Mixpanel Bookmarks API.
+
+Valid values:
+    - insights: Standard metrics/events reports
+    - funnels: Funnel conversion reports
+    - retention: Cohort retention reports
+    - flows: User path/navigation reports
+    - launch-analysis: Impact/experiment reports
+"""
+
+SavedReportType = Literal["insights", "retention", "funnel"]
+"""Report type detected from saved report query results.
+
+Derived from headers array in the API response:
+    - retention: Headers contain "$retention"
+    - funnel: Headers contain "$funnel"
+    - insights: Default when no special headers present
+"""
+
 
 @dataclass(frozen=True)
 class FetchResult:
@@ -451,6 +475,87 @@ class SavedCohort:
 
 
 @dataclass(frozen=True)
+class BookmarkInfo:
+    """Metadata for a saved report (bookmark) from the Mixpanel Bookmarks API.
+
+    Represents a saved Insights, Funnel, Retention, or Flows report
+    that can be queried using query_saved_report() or query_flows().
+
+    Attributes:
+        id: Unique bookmark identifier.
+        name: User-defined report name.
+        type: Report type (insights, funnels, retention, flows, launch-analysis).
+        project_id: Parent Mixpanel project ID.
+        created: Creation timestamp (ISO format).
+        modified: Last modification timestamp (ISO format).
+        workspace_id: Optional workspace ID if scoped to a workspace.
+        dashboard_id: Optional parent dashboard ID if linked to a dashboard.
+        description: Optional user-provided description.
+        creator_id: Optional creator's user ID.
+        creator_name: Optional creator's display name.
+    """
+
+    id: int
+    """Unique bookmark identifier."""
+
+    name: str
+    """User-defined report name."""
+
+    type: BookmarkType
+    """Report type."""
+
+    project_id: int
+    """Parent Mixpanel project ID."""
+
+    created: str
+    """Creation timestamp (ISO format)."""
+
+    modified: str
+    """Last modification timestamp (ISO format)."""
+
+    workspace_id: int | None = None
+    """Workspace ID if scoped to a workspace."""
+
+    dashboard_id: int | None = None
+    """Parent dashboard ID if linked to a dashboard."""
+
+    description: str | None = None
+    """User-provided description."""
+
+    creator_id: int | None = None
+    """Creator's user ID."""
+
+    creator_name: str | None = None
+    """Creator's display name."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all bookmark metadata fields.
+        """
+        result: dict[str, Any] = {
+            "id": self.id,
+            "name": self.name,
+            "type": self.type,
+            "project_id": self.project_id,
+            "created": self.created,
+            "modified": self.modified,
+        }
+        if self.workspace_id is not None:
+            result["workspace_id"] = self.workspace_id
+        if self.dashboard_id is not None:
+            result["dashboard_id"] = self.dashboard_id
+        if self.description is not None:
+            result["description"] = self.description
+        if self.creator_id is not None:
+            result["creator_id"] = self.creator_id
+        if self.creator_name is not None:
+            result["creator_name"] = self.creator_name
+        return result
+
+
+@dataclass(frozen=True)
 class TopEvent:
     """Today's event activity data.
 
@@ -716,11 +821,23 @@ class ActivityFeedResult:
 
 
 @dataclass(frozen=True)
-class InsightsResult:
-    """Data from a saved Insights report.
+class SavedReportResult:
+    """Data from a saved report (Insights, Retention, or Funnel).
 
-    Contains time-series data from a pre-configured Insights report
-    with lazy DataFrame conversion support.
+    Contains data from a pre-configured saved report with automatic
+    report type detection and lazy DataFrame conversion support.
+
+    The report_type property automatically detects the report type based on
+    headers: "$retention" indicates retention, "$funnel" indicates funnel,
+    otherwise it's an insights report.
+
+    Attributes:
+        bookmark_id: Saved report identifier.
+        computed_at: When report was computed (ISO format).
+        from_date: Report start date.
+        to_date: Report end date.
+        headers: Report column headers (used for type detection).
+        series: Report data (structure varies by report type).
     """
 
     bookmark_id: int
@@ -736,16 +853,40 @@ class InsightsResult:
     """Report end date."""
 
     headers: list[str] = field(default_factory=list)
-    """Report column headers."""
+    """Report column headers (used for type detection)."""
 
-    series: dict[str, dict[str, int]] = field(default_factory=dict)
-    """Time-series data: {event_name: {date: count}}."""
+    series: dict[str, Any] = field(default_factory=dict)
+    """Report data (structure varies by report type).
+
+    For Insights reports: {event_name: {date: count}}
+    For Retention reports: {series_name: {date: {segment: {first, counts, rates}}}}
+    For Funnel reports: {count: {...}, overall_conv_ratio: {...}, ...}
+    """
 
     _df_cache: pd.DataFrame | None = field(default=None, repr=False)
 
     @property
+    def report_type(self) -> SavedReportType:
+        """Detect the report type from headers.
+
+        Returns:
+            'retention' if headers contain '$retention',
+            'funnel' if headers contain '$funnel',
+            'insights' otherwise.
+        """
+        for header in self.headers:
+            if "$retention" in header.lower():
+                return "retention"
+            if "$funnel" in header.lower():
+                return "funnel"
+        return "insights"
+
+    @property
     def df(self) -> pd.DataFrame:
-        """Convert to DataFrame with columns: date, event, count.
+        """Convert to DataFrame.
+
+        For Insights reports: columns are date, event, count.
+        For Retention/Funnel reports: flattens the nested structure.
 
         Conversion is lazy - computed on first access and cached.
         """
@@ -753,27 +894,38 @@ class InsightsResult:
             return self._df_cache
 
         rows: list[dict[str, Any]] = []
-        for event_name, date_counts in self.series.items():
-            for date_str, count in date_counts.items():
-                rows.append(
-                    {
-                        "date": date_str,
-                        "event": event_name,
-                        "count": count,
-                    }
-                )
+        report_type = self.report_type
 
-        result_df = (
-            pd.DataFrame(rows)
-            if rows
-            else pd.DataFrame(columns=["date", "event", "count"])
-        )
+        if report_type == "insights":
+            # Insights: {event_name: {date: count}}
+            for event_name, date_counts in self.series.items():
+                if isinstance(date_counts, dict):
+                    for date_str, count in date_counts.items():
+                        rows.append(
+                            {
+                                "date": date_str,
+                                "event": event_name,
+                                "count": count,
+                            }
+                        )
+            result_df = (
+                pd.DataFrame(rows)
+                if rows
+                else pd.DataFrame(columns=["date", "event", "count"])
+            )
+        else:
+            # For retention and funnel, convert series to records
+            result_df = pd.DataFrame([{"series": self.series}])
 
         object.__setattr__(self, "_df_cache", result_df)
         return result_df
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize for JSON output."""
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all report fields including detected report_type.
+        """
         return {
             "bookmark_id": self.bookmark_id,
             "computed_at": self.computed_at,
@@ -781,6 +933,78 @@ class InsightsResult:
             "to_date": self.to_date,
             "headers": self.headers,
             "series": self.series,
+            "report_type": self.report_type,
+        }
+
+
+# Backward compatibility alias (will be removed in future version)
+InsightsResult = SavedReportResult
+
+
+@dataclass(frozen=True)
+class FlowsResult:
+    """Data from a saved Flows report.
+
+    Contains user path/navigation data from a pre-configured Flows report
+    with lazy DataFrame conversion support.
+
+    Attributes:
+        bookmark_id: Saved report identifier.
+        computed_at: When report was computed (ISO format).
+        steps: Flow step data with event sequences and counts.
+        breakdowns: Path breakdown data showing user flow distribution.
+        overall_conversion_rate: End-to-end conversion rate (0.0 to 1.0).
+        metadata: Additional API metadata from the response.
+    """
+
+    bookmark_id: int
+    """Saved report identifier."""
+
+    computed_at: str
+    """When report was computed (ISO format)."""
+
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    """Flow step data with event sequences and counts."""
+
+    breakdowns: list[dict[str, Any]] = field(default_factory=list)
+    """Path breakdown data showing user flow distribution."""
+
+    overall_conversion_rate: float = 0.0
+    """End-to-end conversion rate (0.0 to 1.0)."""
+
+    metadata: dict[str, Any] = field(default_factory=dict)
+    """Additional API metadata from the response."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert steps to DataFrame.
+
+        Returns DataFrame with columns derived from step data structure.
+        Conversion is lazy - computed on first access and cached.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        result_df = pd.DataFrame(self.steps) if self.steps else pd.DataFrame()
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all flows report fields.
+        """
+        return {
+            "bookmark_id": self.bookmark_id,
+            "computed_at": self.computed_at,
+            "steps": self.steps,
+            "breakdowns": self.breakdowns,
+            "overall_conversion_rate": self.overall_conversion_rate,
+            "metadata": self.metadata,
         }
 
 

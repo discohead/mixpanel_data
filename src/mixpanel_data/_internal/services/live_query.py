@@ -17,16 +17,17 @@ from mixpanel_data.types import (
     ActivityFeedResult,
     CohortInfo,
     EventCountsResult,
+    FlowsResult,
     FrequencyResult,
     FunnelResult,
     FunnelStep,
-    InsightsResult,
     JQLResult,
     NumericAverageResult,
     NumericBucketResult,
     NumericSumResult,
     PropertyCountsResult,
     RetentionResult,
+    SavedReportResult,
     SegmentationResult,
     UserEvent,
 )
@@ -615,20 +616,21 @@ class LiveQueryService:
         )
         return _transform_activity_feed(raw, distinct_ids, from_date, to_date)
 
-    def insights(
+    def query_saved_report(
         self,
         bookmark_id: int,
-    ) -> InsightsResult:
-        """Query a saved Insights report.
+    ) -> SavedReportResult:
+        """Query a saved report (Insights, Retention, or Funnel).
 
-        Retrieves data from a pre-configured Insights report by its
-        bookmark ID, returning a typed result with lazy DataFrame conversion.
+        Retrieves data from a pre-configured saved report by its
+        bookmark ID, returning a typed result with automatic report type
+        detection and lazy DataFrame conversion.
 
         Args:
-            bookmark_id: Saved report identifier (from Mixpanel URL).
+            bookmark_id: Saved report identifier (from Mixpanel URL or list_bookmarks).
 
         Returns:
-            InsightsResult with time-series data and metadata.
+            SavedReportResult with time-series data, metadata, and report_type.
 
         Raises:
             AuthenticationError: Invalid credentials.
@@ -637,13 +639,44 @@ class LiveQueryService:
 
         Example:
             ```python
-            result = live_query.insights(bookmark_id=12345678)
+            result = live_query.query_saved_report(bookmark_id=12345678)
+            print(f"Report type: {result.report_type}")
             print(f"Report computed at: {result.computed_at}")
-            print(result.df.pivot(index='date', columns='event', values='count'))
+            print(result.df.head())
             ```
         """
-        raw = self._api_client.insights(bookmark_id=bookmark_id)
-        return _transform_insights(raw, bookmark_id)
+        raw = self._api_client.query_saved_report(bookmark_id=bookmark_id)
+        return _transform_saved_report(raw, bookmark_id)
+
+    def query_flows(
+        self,
+        bookmark_id: int,
+    ) -> FlowsResult:
+        """Query a saved Flows report.
+
+        Retrieves data from a saved Flows report by its bookmark ID,
+        returning step data, breakdowns, and conversion rates.
+
+        Args:
+            bookmark_id: Saved flows report identifier.
+
+        Returns:
+            FlowsResult with steps, breakdowns, and conversion rate.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid bookmark_id or report not found.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            ```python
+            result = live_query.query_flows(bookmark_id=12345678)
+            print(f"Conversion rate: {result.overall_conversion_rate:.1%}")
+            print(result.df.head())
+            ```
+        """
+        raw = self._api_client.query_flows(bookmark_id=bookmark_id)
+        return _transform_flows(raw, bookmark_id)
 
     def frequency(
         self,
@@ -921,20 +954,22 @@ def _transform_activity_feed(
     )
 
 
-def _transform_insights(
+def _transform_saved_report(
     raw: dict[str, Any],
     bookmark_id: int,
-) -> InsightsResult:
-    """Transform raw insights API response into InsightsResult.
+) -> SavedReportResult:
+    """Transform raw saved report API response into SavedReportResult.
 
     Extracts date range and time-series data from the response.
+    The report type (insights, retention, funnel) is automatically
+    detected from headers by the SavedReportResult.report_type property.
 
     Args:
         raw: Raw API response dictionary.
         bookmark_id: Saved report identifier.
 
     Returns:
-        Typed InsightsResult with metadata and time-series.
+        Typed SavedReportResult with metadata, time-series, and report_type.
     """
     computed_at = raw.get("computed_at", "")
     date_range = raw.get("date_range", {})
@@ -943,13 +978,44 @@ def _transform_insights(
     headers = raw.get("headers", [])
     series = raw.get("series", {})
 
-    return InsightsResult(
+    return SavedReportResult(
         bookmark_id=bookmark_id,
         computed_at=computed_at,
         from_date=from_date,
         to_date=to_date,
         headers=headers,
         series=series,
+    )
+
+
+def _transform_flows(
+    raw: dict[str, Any],
+    bookmark_id: int,
+) -> FlowsResult:
+    """Transform raw flows API response into FlowsResult.
+
+    Extracts steps, breakdowns, and conversion rate from the response.
+
+    Args:
+        raw: Raw API response dictionary.
+        bookmark_id: Saved flows report identifier.
+
+    Returns:
+        Typed FlowsResult with steps, breakdowns, and conversion rate.
+    """
+    computed_at = raw.get("computed_at", "")
+    steps = raw.get("steps", [])
+    breakdowns = raw.get("breakdowns", [])
+    overall_conversion_rate = raw.get("overallConversionRate", 0.0)
+    metadata = raw.get("metadata", {})
+
+    return FlowsResult(
+        bookmark_id=bookmark_id,
+        computed_at=computed_at,
+        steps=steps,
+        breakdowns=breakdowns,
+        overall_conversion_rate=overall_conversion_rate,
+        metadata=metadata,
     )
 
 

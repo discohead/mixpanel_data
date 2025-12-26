@@ -186,6 +186,7 @@ class MixpanelAPIClient:
             - 200-299: Parse and return JSON response
             - 400: QueryError with error message from response body
             - 401: AuthenticationError (invalid credentials)
+            - 403: QueryError (permission denied)
             - 404: QueryError (resource not found)
             - 412: JQLSyntaxError (JQL script errors with parsed details)
             - 5xx: ServerError with status code and error details
@@ -224,6 +225,21 @@ class MixpanelAPIClient:
                 request_method=request_method,
                 request_url=request_url,
                 request_params=request_params,
+            )
+        if response.status_code == 403:
+            error_msg = "Permission denied"
+            if isinstance(response_body, dict):
+                error_msg = response_body.get("error", "Permission denied")
+            elif isinstance(response_body, str):
+                error_msg = response_body[:200] or "Permission denied"
+            raise QueryError(
+                error_msg,
+                status_code=response.status_code,
+                response_body=response_body,
+                request_method=request_method,
+                request_url=request_url,
+                request_params=request_params,
+                request_body=request_body,
             )
         if response.status_code == 400:
             error_msg = "Unknown error"
@@ -1244,17 +1260,21 @@ class MixpanelAPIClient:
         result: dict[str, Any] = self._request("GET", url, params=params)
         return result
 
-    def insights(
+    def query_saved_report(
         self,
         bookmark_id: int,
     ) -> dict[str, Any]:
-        """Query a saved Insights report.
+        """Query a saved report (Insights, Retention, or Funnel).
+
+        Executes a saved report by its bookmark ID. The report type is
+        automatically detected from the response headers.
 
         Args:
-            bookmark_id: Saved report identifier (from Mixpanel URL).
+            bookmark_id: Saved report identifier (from Mixpanel URL or list_bookmarks).
 
         Returns:
             Raw API response with time-series data and metadata.
+            The response structure varies by report type.
 
         Raises:
             AuthenticationError: Invalid credentials.
@@ -1263,6 +1283,66 @@ class MixpanelAPIClient:
         """
         url = self._build_url("query", "/insights")
         params: dict[str, Any] = {"bookmark_id": bookmark_id}
+        result: dict[str, Any] = self._request("GET", url, params=params)
+        return result
+
+    def list_bookmarks(
+        self,
+        bookmark_type: str | None = None,
+    ) -> dict[str, Any]:
+        """List all saved reports (bookmarks) in the project.
+
+        Retrieves metadata for all saved Insights, Funnel, Retention, and
+        Flows reports in the project.
+
+        Args:
+            bookmark_type: Optional filter by report type. Valid values are
+                'insights', 'funnels', 'retention', 'flows', 'launch-analysis'.
+                If None, returns all bookmark types.
+
+        Returns:
+            Raw API response with 'results' array containing bookmark metadata.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Permission denied or invalid parameters.
+            RateLimitError: Rate limit exceeded.
+        """
+        url = self._build_url(
+            "app",
+            f"/projects/{self._credentials.project_id}/bookmarks",
+        )
+        params: dict[str, Any] = {"v": "2"}
+        if bookmark_type is not None:
+            params["type"] = bookmark_type
+        result: dict[str, Any] = self._request("GET", url, params=params)
+        return result
+
+    def query_flows(
+        self,
+        bookmark_id: int,
+    ) -> dict[str, Any]:
+        """Query a saved flows report by bookmark ID.
+
+        Retrieves data from a saved Flows report using the arb_funnels
+        endpoint with flows_sankey query type.
+
+        Args:
+            bookmark_id: Saved flows report identifier.
+
+        Returns:
+            Raw API response with steps, breakdowns, and conversion rate.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid bookmark_id or report not found.
+            RateLimitError: Rate limit exceeded.
+        """
+        url = self._build_url("query", "/arb_funnels")
+        params: dict[str, Any] = {
+            "bookmark_id": bookmark_id,
+            "query_type": "flows_sankey",
+        }
         result: dict[str, Any] = self._request("GET", url, params=params)
         return result
 

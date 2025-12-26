@@ -16,13 +16,13 @@ from mixpanel_data.types import (
     FrequencyResult,
     FunnelResult,
     FunnelStep,
-    InsightsResult,
     JQLResult,
     NumericAverageResult,
     NumericBucketResult,
     NumericSumResult,
     PropertyCountsResult,
     RetentionResult,
+    SavedReportResult,
     SegmentationResult,
     UserEvent,
 )
@@ -536,14 +536,14 @@ class TestQueryActivityFeed:
         assert data["distinct_ids"] == ["user1", "user2"]
 
 
-class TestQueryInsights:
-    """Tests for mp query insights command."""
+class TestQuerySavedReport:
+    """Tests for mp query saved-report command."""
 
-    def test_insights_happy_path(
+    def test_saved_report_happy_path(
         self, cli_runner: CliRunner, mock_workspace: MagicMock
     ) -> None:
-        """Test insights with bookmark ID."""
-        mock_workspace.insights.return_value = InsightsResult(
+        """Test saved-report with bookmark ID."""
+        mock_workspace.query_saved_report.return_value = SavedReportResult(
             bookmark_id=12345,
             computed_at="2024-02-01T00:00:00Z",
             from_date="2024-01-01",
@@ -558,7 +558,7 @@ class TestQueryInsights:
         ):
             result = cli_runner.invoke(
                 app,
-                ["query", "insights", "12345", "--format", "json"],
+                ["query", "saved-report", "12345", "--format", "json"],
             )
 
         assert result.exit_code == 0

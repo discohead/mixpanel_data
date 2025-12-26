@@ -10,6 +10,8 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from mixpanel_data.types import (
+    BookmarkInfo,
+    BookmarkType,
     FunnelInfo,
     LexiconDefinition,
     LexiconMetadata,
@@ -105,6 +107,30 @@ def _parse_lexicon_schema(data: dict[str, Any]) -> LexiconSchema:
         entity_type=data["entityType"],
         name=data["name"],
         schema_json=_parse_lexicon_definition(data["schemaJson"]),
+    )
+
+
+def _parse_bookmark_info(data: dict[str, Any]) -> BookmarkInfo:
+    """Parse a bookmark from API response into BookmarkInfo.
+
+    Args:
+        data: Raw bookmark dictionary from API response.
+
+    Returns:
+        BookmarkInfo with all available metadata fields.
+    """
+    return BookmarkInfo(
+        id=data["id"],
+        name=data["name"],
+        type=data["type"],
+        project_id=data["project_id"],
+        created=data["created"],
+        modified=data["modified"],
+        workspace_id=data.get("workspace_id"),
+        dashboard_id=data.get("dashboard_id"),
+        description=data.get("description"),
+        creator_id=data.get("creator_id"),
+        creator_name=data.get("creator_name"),
     )
 
 
@@ -294,6 +320,35 @@ class DiscoveryService:
         )
         self._cache[cache_key] = cohorts
         return list(cohorts)
+
+    def list_bookmarks(
+        self,
+        bookmark_type: BookmarkType | None = None,
+    ) -> list[BookmarkInfo]:
+        """List all saved reports (bookmarks) in the project.
+
+        Retrieves metadata for all saved Insights, Funnel, Retention, and
+        Flows reports in the project.
+
+        Args:
+            bookmark_type: Optional filter by report type. Valid values are
+                'insights', 'funnels', 'retention', 'flows', 'launch-analysis'.
+                If None, returns all bookmark types.
+
+        Returns:
+            List of BookmarkInfo objects with report metadata.
+            Empty list if no bookmarks exist.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Permission denied or invalid type parameter.
+
+        Note:
+            Results are NOT cached because bookmarks may change frequently.
+        """
+        raw = self._api_client.list_bookmarks(bookmark_type=bookmark_type)
+        results = raw.get("results", [])
+        return [_parse_bookmark_info(bm) for bm in results]
 
     def list_top_events(
         self,
