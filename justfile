@@ -87,6 +87,10 @@ mp *args:
 
 # === Documentation ===
 
+# Generate man pages for the CLI
+man:
+    uv run python -c "from typer.main import get_command; from mixpanel_data.cli.main import app; from click_man.core import write_man_pages; write_man_pages('mp', get_command(app), target_dir='./man')"
+
 # Build documentation
 docs:
     uv run mkdocs build
