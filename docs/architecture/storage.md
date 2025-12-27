@@ -183,14 +183,16 @@ ws = Workspace(path="data.db", read_only=True)
 
 Read-only connections:
 
-- Allow concurrent reads while a write lock is held (by another process)
+- Allow multiple reader processes to access the database concurrently (when no write lock is held)
 - Cannot execute INSERT, UPDATE, DELETE, or DDL statements
-- Useful for query-only workflows
+- Still blocked by an active write lock (DuckDB write locks are exclusive)
 
 The CLI uses this automatically:
 
 - **Read commands** (`mp query`, `mp inspect tables`, etc.) use `read_only=True`
 - **Write commands** (`mp fetch`, `mp inspect drop`) use `read_only=False`
+
+**Note:** If a `mp fetch` is running, other commands will still be blocked until it completes. The benefit of read-only mode is enabling multiple concurrent read operations (e.g., two `mp query` commands).
 
 ## See Also
 
