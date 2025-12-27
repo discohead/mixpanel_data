@@ -32,6 +32,44 @@ test-pbt-dev *args:
 test-pbt-ci *args:
     HYPOTHESIS_PROFILE=ci uv run pytest -k "_pbt" {{ args }}
 
+# === Mutation Testing ===
+
+# Run mutation testing on entire codebase
+mutate *args:
+    uv run mutmut run {{ args }}
+
+# Show mutation testing results
+mutate-results:
+    uv run mutmut results
+
+# Show details for a specific mutant (e.g., just mutate-show 1)
+mutate-show id:
+    uv run mutmut show {{ id }}
+
+# Apply a mutant to see the change (use 0 to reset)
+mutate-apply id:
+    uv run mutmut apply {{ id }}
+
+# Check mutation score meets threshold (default 80%)
+mutate-check threshold="80":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    RESULTS=$(uv run mutmut results 2>/dev/null | tail -1)
+    KILLED=$(echo "$RESULTS" | grep -oP 'Killed \K\d+' || echo 0)
+    SURVIVED=$(echo "$RESULTS" | grep -oP 'Survived \K\d+' || echo 0)
+    TOTAL=$((KILLED + SURVIVED))
+    if [ "$TOTAL" -eq 0 ]; then
+        echo "No mutants found"
+        exit 1
+    fi
+    SCORE=$((KILLED * 100 / TOTAL))
+    echo "Mutation score: $SCORE% (killed $KILLED/$TOTAL, threshold {{ threshold }}%)"
+    if [ "$SCORE" -lt {{ threshold }} ]; then
+        echo "FAIL: Mutation score below threshold"
+        exit 1
+    fi
+    echo "PASS: Mutation score meets threshold"
+
 # Run tests with coverage (fails if below 90%)
 test-cov:
     uv run pytest --cov=src/mixpanel_data --cov-report=term-missing --cov-fail-under=90

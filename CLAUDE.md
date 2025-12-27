@@ -127,6 +127,23 @@ This project uses [Hypothesis](https://hypothesis.works) for property-based test
 - `dev`: 10 examples (fast iteration)
 - `ci`: 200 examples, deterministic (CI/CD)
 
+### Mutation Testing
+
+This project uses [mutmut](https://mutmut.readthedocs.io/) for mutation testing. Mutation testing evaluates test quality by introducing small code changes (mutations) and verifying tests detect them:
+- **Killed mutant**: Test fails when mutation introduced (good - test catches bugs)
+- **Survived mutant**: Test passes despite mutation (test gap - needs improvement)
+- **Mutation score**: Percentage of mutants killed (target: 80%+)
+
+Run mutation testing:
+```bash
+just mutate              # Run on entire codebase (slow)
+just mutate-results      # View results summary
+just mutate-show 1       # Inspect specific mutant
+just mutate-apply 1      # Apply mutation to see the change
+just mutate-apply 0      # Reset to original code
+just mutate-check        # Check score meets 80% threshold
+```
+
 ## Key Design Decisions
 
 - **Explicit table management**: Tables never implicitly overwritten; `TableExistsError` if exists
@@ -163,6 +180,10 @@ This project uses [just](https://github.com/casey/just) as a command runner:
 | `just test-pbt` | Run property-based tests only |
 | `just test-pbt-dev` | Run PBT tests with dev profile |
 | `just test-cov` | Run tests with coverage (fails if below 90%) |
+| `just mutate` | Run mutation testing on entire codebase |
+| `just mutate-results` | Show mutation testing results |
+| `just mutate-show ID` | Show details for specific mutant |
+| `just mutate-check` | Check mutation score meets 80% threshold |
 | `just hypo-codemod` | Refactor deprecated Hypothesis code |
 | `just hypo-write` | Generate property-based tests for a module |
 | `just lint` | Lint code with ruff |
@@ -187,7 +208,7 @@ just test-pbt-dev
 - Typer (CLI) + Rich (output formatting)
 - DuckDB (embedded analytical database)
 - httpx (HTTP client), Pydantic (validation)
-- Hypothesis (property-based testing)
+- Hypothesis (property-based testing), mutmut (mutation testing)
 - uv (package manager), just (command runner)
 
 ## Reference Documentation

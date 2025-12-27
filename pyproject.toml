@@ -43,6 +43,7 @@ dev = [
     "ruff>=0.1",
     "mypy>=1.0",
     "pandas-stubs>=2.0",
+    "mutmut>=3.0",
 ]
 docs = [
     "mkdocs>=1.5",
@@ -114,6 +115,10 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
 ]
+
+[tool.mutmut]
+paths_to_mutate = ["src/mixpanel_data/"]
+pytest_add_cli_args_test_selection = ["tests/"]
 
 [dependency-groups]
 dev = [

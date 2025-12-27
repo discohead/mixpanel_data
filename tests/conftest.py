@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import httpx
 import pytest
-from hypothesis import Phase, Verbosity, settings
+from hypothesis import HealthCheck, Phase, Verbosity, settings
 from pydantic import SecretStr
 
 # =============================================================================
@@ -18,11 +18,14 @@ from pydantic import SecretStr
 # =============================================================================
 
 # Register Hypothesis profiles for different environments
+# All profiles suppress differing_executors health check to support mutation testing,
+# which runs tests from a copied mutants/ directory
 settings.register_profile(
     "default",
     max_examples=100,
     verbosity=Verbosity.normal,
     phases=[Phase.explicit, Phase.reuse, Phase.generate, Phase.target, Phase.shrink],
+    suppress_health_check=[HealthCheck.differing_executors],
 )
 
 settings.register_profile(
@@ -31,6 +34,7 @@ settings.register_profile(
     verbosity=Verbosity.normal,
     phases=[Phase.explicit, Phase.reuse, Phase.generate, Phase.target, Phase.shrink],
     derandomize=True,  # Reproducible in CI
+    suppress_health_check=[HealthCheck.differing_executors],
 )
 
 settings.register_profile(
@@ -38,6 +42,7 @@ settings.register_profile(
     max_examples=10,
     verbosity=Verbosity.verbose,
     phases=[Phase.explicit, Phase.reuse, Phase.generate, Phase.target, Phase.shrink],
+    suppress_health_check=[HealthCheck.differing_executors],
 )
 
 settings.register_profile(
@@ -46,6 +51,7 @@ settings.register_profile(
     verbosity=Verbosity.verbose,
     phases=[Phase.explicit, Phase.reuse, Phase.generate, Phase.target, Phase.shrink],
     report_multiple_bugs=False,
+    suppress_health_check=[HealthCheck.differing_executors],
 )
 
 # Load profile from HYPOTHESIS_PROFILE env var, default to "default"
