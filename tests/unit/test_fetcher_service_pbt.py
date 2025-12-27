@@ -19,6 +19,7 @@ from hypothesis import strategies as st
 
 from mixpanel_data._internal.services.fetcher import (
     _RESERVED_EVENT_KEYS,
+    _RESERVED_PROFILE_KEYS,
     _transform_event,
     _transform_profile,
 )
@@ -55,6 +56,14 @@ event_property_keys = st.text().filter(lambda k: k not in _RESERVED_EVENT_KEYS)
 # Reserved keys (distinct_id, time, $insert_id) are excluded since they're
 # handled separately as standard fields in _transform_event
 event_properties = st.dictionaries(event_property_keys, json_values, max_size=10)
+
+# Strategy for profile property keys (excluding reserved keys)
+profile_property_keys = st.text().filter(lambda k: k not in _RESERVED_PROFILE_KEYS)
+
+# Strategy for profile properties dict
+# Reserved keys ($last_seen) are excluded since they're handled separately
+# as standard fields in _transform_profile
+profile_properties = st.dictionaries(profile_property_keys, json_values, max_size=10)
 
 # Strategy for Unix timestamps (valid range for Mixpanel events)
 # Mixpanel uses seconds since epoch
@@ -138,7 +147,7 @@ def api_profiles(draw: st.DrawFn) -> dict[str, Any]:
     )
 
     # Build properties with optional $last_seen
-    properties: dict[str, Any] = draw(event_properties)
+    properties: dict[str, Any] = draw(profile_properties)
     if last_seen is not None:
         properties["$last_seen"] = last_seen
 
