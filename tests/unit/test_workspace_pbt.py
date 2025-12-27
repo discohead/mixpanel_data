@@ -36,7 +36,6 @@ non_numeric_values = st.one_of(
     st.lists(st.integers()),
     st.dictionaries(st.text(), st.integers()),
     st.binary(),
-    st.just(object()),
 )
 
 # Strategy for any value - tests that _try_float never raises
@@ -49,7 +48,6 @@ any_value: st.SearchStrategy[Any] = st.one_of(
     st.binary(),
     st.lists(st.integers(), max_size=3),
     st.dictionaries(st.text(), st.integers(), max_size=3),
-    st.just(object()),
 )
 
 

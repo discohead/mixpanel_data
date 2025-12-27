@@ -299,7 +299,7 @@ class TestParseLexiconMetadataProperties:
     @given(data=lexicon_metadata_input())
     @settings(max_examples=100)
     def test_null_handling_invariant(self, data: dict[str, Any] | None) -> None:
-        """_parse_lexicon_metadata returns None iff input lacks valid com.mixpanel.
+        """_parse_lexicon_metadata returns None if and only if input lacks valid com.mixpanel.
 
         This invariant ensures the parser correctly distinguishes between
         "no metadata" and "has metadata" states.

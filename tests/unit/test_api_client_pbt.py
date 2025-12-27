@@ -54,10 +54,11 @@ project_ids = st.text(
 ).filter(lambda s: s.strip())
 
 # Strategy for URL paths
-# Paths can contain any characters valid in URLs
+# Paths can contain letters, numbers, and common path characters
+# Excludes category "P" (Punctuation) which includes ?, #, & that break URLs
 url_paths = st.text(
     alphabet=st.characters(
-        categories=("L", "N", "P"),
+        categories=("L", "N"),
         include_characters="/-_.",
     ),
     min_size=1,

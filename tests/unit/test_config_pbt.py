@@ -25,14 +25,14 @@ from mixpanel_data._internal.config import ConfigManager, Credentials
 # Custom Strategies
 # =============================================================================
 
-# Fixed field values used in tests - secrets must not be substrings of these
+# Fixed field values used in tests - secrets must not equal these
 _FIXED_USERNAME = "test_user"
 _FIXED_PROJECT_ID = "12345"
 _FIXED_REGION = "us"
-_FIXED_VALUES = f"{_FIXED_USERNAME}{_FIXED_PROJECT_ID}{_FIXED_REGION}"
+_FIXED_VALUES = {_FIXED_USERNAME, _FIXED_PROJECT_ID, _FIXED_REGION}
 
 # Strategy for secrets that are long enough to not match by coincidence,
-# don't contain the redaction placeholder, and aren't substrings of fixed field values
+# don't contain the redaction placeholder, and don't equal fixed field values
 secrets = st.text(min_size=4).filter(
     lambda s: "***" not in s and s.strip() and s not in _FIXED_VALUES
 )

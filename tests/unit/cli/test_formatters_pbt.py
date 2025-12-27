@@ -260,7 +260,7 @@ class TestFormatCsvProperties:
         reader = csv.reader(io.StringIO(formatted))
         rows = list(reader)
 
-        # Filter out truly empty rows (no cells at all), but keep rows with empty values
+        # Filter out completely empty rows (empty lists from CSV reader)
         rows = [r for r in rows if r]
 
         assert len(rows) == len(data) + 1  # header + data rows
