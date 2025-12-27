@@ -24,13 +24,32 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from mixpanel_data.types import (
+    ActivityFeedResult,
+    BookmarkInfo,
     CohortInfo,
+    ColumnStatsResult,
+    ColumnSummary,
+    EventBreakdownResult,
+    EventCountsResult,
+    EventStats,
     FetchResult,
+    FlowsResult,
+    FrequencyResult,
+    FunnelInfo,
     FunnelResult,
     FunnelStep,
     JQLResult,
+    NumericAverageResult,
+    NumericBucketResult,
+    NumericSumResult,
+    PropertyCountsResult,
     RetentionResult,
+    SavedCohort,
+    SavedReportResult,
     SegmentationResult,
+    SummaryResult,
+    TopEvent,
+    UserEvent,
 )
 
 # =============================================================================
@@ -469,3 +488,976 @@ class TestCrossTypeInvariants:
             df = r.df  # type: ignore[attr-defined]
             assert df is not None
             assert len(df) >= 0
+
+
+# =============================================================================
+# EventCountsResult Property Tests
+# =============================================================================
+
+
+class TestEventCountsResultProperties:
+    """Property-based tests for EventCountsResult."""
+
+    @given(
+        events=st.lists(event_names, min_size=1, max_size=5),
+        from_date=date_strings,
+        to_date=date_strings,
+        unit=time_units,
+        count_type=st.sampled_from(["general", "unique", "average"]),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        events: list[str],
+        from_date: str,
+        to_date: str,
+        unit: str,
+        count_type: str,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = EventCountsResult(
+            events=events,
+            from_date=from_date,
+            to_date=to_date,
+            unit=unit,  # type: ignore[arg-type]
+            type=count_type,  # type: ignore[arg-type]
+            series={},
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        series=st.dictionaries(
+            keys=event_names,
+            values=st.dictionaries(
+                keys=date_strings,
+                values=st.integers(min_value=0, max_value=10000),
+                min_size=0,
+                max_size=5,
+            ),
+            min_size=0,
+            max_size=3,
+        ),
+    )
+    def test_df_row_count_matches_series_structure(
+        self, series: dict[str, dict[str, int]]
+    ) -> None:
+        """DataFrame row count should equal sum of all date entries."""
+        result = EventCountsResult(
+            events=list(series.keys()),
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            unit="day",
+            type="general",
+            series=series,
+        )
+
+        expected_rows = sum(len(dates) for dates in series.values())
+        assert len(result.df) == expected_rows
+
+    @given(events=st.lists(event_names, min_size=1, max_size=3))
+    def test_df_has_required_columns(self, events: list[str]) -> None:
+        """DataFrame should always have date, event, count columns."""
+        result = EventCountsResult(
+            events=events,
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            unit="day",
+            type="general",
+            series={},
+        )
+
+        df = result.df
+        assert "date" in df.columns
+        assert "event" in df.columns
+        assert "count" in df.columns
+
+
+# =============================================================================
+# PropertyCountsResult Property Tests
+# =============================================================================
+
+
+class TestPropertyCountsResultProperties:
+    """Property-based tests for PropertyCountsResult."""
+
+    @given(
+        event=event_names,
+        property_name=st.text(min_size=1, max_size=30),
+        from_date=date_strings,
+        to_date=date_strings,
+        unit=time_units,
+        count_type=st.sampled_from(["general", "unique", "average"]),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        event: str,
+        property_name: str,
+        from_date: str,
+        to_date: str,
+        unit: str,
+        count_type: str,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = PropertyCountsResult(
+            event=event,
+            property_name=property_name,
+            from_date=from_date,
+            to_date=to_date,
+            unit=unit,  # type: ignore[arg-type]
+            type=count_type,  # type: ignore[arg-type]
+            series={},
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        series=st.dictionaries(
+            keys=st.text(min_size=1, max_size=20),
+            values=st.dictionaries(
+                keys=date_strings,
+                values=st.integers(min_value=0, max_value=10000),
+                min_size=0,
+                max_size=5,
+            ),
+            min_size=0,
+            max_size=5,
+        ),
+    )
+    def test_df_row_count_matches_series_structure(
+        self, series: dict[str, dict[str, int]]
+    ) -> None:
+        """DataFrame row count should equal sum of all date entries."""
+        result = PropertyCountsResult(
+            event="test_event",
+            property_name="test_property",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            unit="day",
+            type="general",
+            series=series,
+        )
+
+        expected_rows = sum(len(dates) for dates in series.values())
+        assert len(result.df) == expected_rows
+
+
+# =============================================================================
+# NumericBucketResult Property Tests
+# =============================================================================
+
+
+class TestNumericBucketResultProperties:
+    """Property-based tests for NumericBucketResult."""
+
+    @given(
+        event=event_names,
+        from_date=date_strings,
+        to_date=date_strings,
+        property_expr=st.text(min_size=1, max_size=50),
+        unit=st.sampled_from(["hour", "day"]),
+    )
+    def test_to_dict_always_json_serializable(
+        self, event: str, from_date: str, to_date: str, property_expr: str, unit: str
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = NumericBucketResult(
+            event=event,
+            from_date=from_date,
+            to_date=to_date,
+            property_expr=property_expr,
+            unit=unit,  # type: ignore[arg-type]
+            series={},
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        series=st.dictionaries(
+            keys=st.text(min_size=1, max_size=20),  # bucket ranges like "0-10"
+            values=st.dictionaries(
+                keys=date_strings,
+                values=st.integers(min_value=0, max_value=10000),
+                min_size=0,
+                max_size=5,
+            ),
+            min_size=0,
+            max_size=5,
+        ),
+    )
+    def test_df_row_count_matches_series_structure(
+        self, series: dict[str, dict[str, int]]
+    ) -> None:
+        """DataFrame row count should equal sum of all date entries."""
+        result = NumericBucketResult(
+            event="test_event",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            property_expr="properties.amount",
+            unit="day",
+            series=series,
+        )
+
+        expected_rows = sum(len(dates) for dates in series.values())
+        assert len(result.df) == expected_rows
+
+    def test_df_has_required_columns(self) -> None:
+        """DataFrame should always have date, bucket, count columns."""
+        result = NumericBucketResult(
+            event="test_event",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            property_expr="properties.amount",
+            unit="day",
+            series={},
+        )
+
+        df = result.df
+        assert "date" in df.columns
+        assert "bucket" in df.columns
+        assert "count" in df.columns
+
+
+# =============================================================================
+# NumericSumResult Property Tests
+# =============================================================================
+
+
+class TestNumericSumResultProperties:
+    """Property-based tests for NumericSumResult."""
+
+    @given(
+        event=event_names,
+        from_date=date_strings,
+        to_date=date_strings,
+        property_expr=st.text(min_size=1, max_size=50),
+        unit=st.sampled_from(["hour", "day"]),
+        results=st.dictionaries(
+            keys=date_strings,
+            values=st.floats(min_value=-1e6, max_value=1e6, allow_nan=False),
+            min_size=0,
+            max_size=10,
+        ),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        property_expr: str,
+        unit: str,
+        results: dict[str, float],
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = NumericSumResult(
+            event=event,
+            from_date=from_date,
+            to_date=to_date,
+            property_expr=property_expr,
+            unit=unit,  # type: ignore[arg-type]
+            results=results,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        results=st.dictionaries(
+            keys=date_strings,
+            values=st.floats(min_value=-1e6, max_value=1e6, allow_nan=False),
+            min_size=0,
+            max_size=10,
+        ),
+    )
+    def test_df_row_count_matches_results(self, results: dict[str, float]) -> None:
+        """DataFrame row count should equal number of date entries."""
+        result = NumericSumResult(
+            event="test_event",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            property_expr="properties.amount",
+            unit="day",
+            results=results,
+        )
+
+        assert len(result.df) == len(results)
+
+    def test_df_has_required_columns(self) -> None:
+        """DataFrame should always have date, sum columns."""
+        result = NumericSumResult(
+            event="test_event",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            property_expr="properties.amount",
+            unit="day",
+            results={},
+        )
+
+        df = result.df
+        assert "date" in df.columns
+        assert "sum" in df.columns
+
+
+# =============================================================================
+# NumericAverageResult Property Tests
+# =============================================================================
+
+
+class TestNumericAverageResultProperties:
+    """Property-based tests for NumericAverageResult."""
+
+    @given(
+        event=event_names,
+        from_date=date_strings,
+        to_date=date_strings,
+        property_expr=st.text(min_size=1, max_size=50),
+        unit=st.sampled_from(["hour", "day"]),
+        results=st.dictionaries(
+            keys=date_strings,
+            values=st.floats(min_value=-1e6, max_value=1e6, allow_nan=False),
+            min_size=0,
+            max_size=10,
+        ),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        property_expr: str,
+        unit: str,
+        results: dict[str, float],
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = NumericAverageResult(
+            event=event,
+            from_date=from_date,
+            to_date=to_date,
+            property_expr=property_expr,
+            unit=unit,  # type: ignore[arg-type]
+            results=results,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        results=st.dictionaries(
+            keys=date_strings,
+            values=st.floats(min_value=-1e6, max_value=1e6, allow_nan=False),
+            min_size=0,
+            max_size=10,
+        ),
+    )
+    def test_df_row_count_matches_results(self, results: dict[str, float]) -> None:
+        """DataFrame row count should equal number of date entries."""
+        result = NumericAverageResult(
+            event="test_event",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            property_expr="properties.amount",
+            unit="day",
+            results=results,
+        )
+
+        assert len(result.df) == len(results)
+
+    def test_df_has_required_columns(self) -> None:
+        """DataFrame should always have date, average columns."""
+        result = NumericAverageResult(
+            event="test_event",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            property_expr="properties.amount",
+            unit="day",
+            results={},
+        )
+
+        df = result.df
+        assert "date" in df.columns
+        assert "average" in df.columns
+
+
+# =============================================================================
+# FrequencyResult Property Tests
+# =============================================================================
+
+
+class TestFrequencyResultProperties:
+    """Property-based tests for FrequencyResult."""
+
+    @given(
+        event=st.one_of(st.none(), event_names),
+        from_date=date_strings,
+        to_date=date_strings,
+        unit=time_units,
+        addiction_unit=st.sampled_from(["hour", "day"]),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        event: str | None,
+        from_date: str,
+        to_date: str,
+        unit: str,
+        addiction_unit: str,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = FrequencyResult(
+            event=event,
+            from_date=from_date,
+            to_date=to_date,
+            unit=unit,  # type: ignore[arg-type]
+            addiction_unit=addiction_unit,  # type: ignore[arg-type]
+            data={},
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        data=st.dictionaries(
+            keys=date_strings,
+            values=st.lists(
+                st.integers(min_value=0, max_value=1000), min_size=1, max_size=10
+            ),
+            min_size=0,
+            max_size=5,
+        ),
+    )
+    def test_df_row_count_matches_data(self, data: dict[str, list[int]]) -> None:
+        """DataFrame row count should equal number of date entries."""
+        result = FrequencyResult(
+            event="test_event",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            unit="day",
+            addiction_unit="hour",
+            data=data,
+        )
+
+        assert len(result.df) == len(data)
+
+
+# =============================================================================
+# ActivityFeedResult Property Tests
+# =============================================================================
+
+
+class TestActivityFeedResultProperties:
+    """Property-based tests for ActivityFeedResult."""
+
+    @given(
+        distinct_ids=st.lists(st.text(min_size=1, max_size=20), min_size=1, max_size=5),
+        from_date=st.one_of(st.none(), date_strings),
+        to_date=st.one_of(st.none(), date_strings),
+        event_count=st.integers(min_value=0, max_value=10),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        distinct_ids: list[str],
+        from_date: str | None,
+        to_date: str | None,
+        event_count: int,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        events = [
+            UserEvent(
+                event=f"Event_{i}",
+                time=datetime.now(),
+                properties={"$distinct_id": distinct_ids[0]},
+            )
+            for i in range(event_count)
+        ]
+
+        result = ActivityFeedResult(
+            distinct_ids=distinct_ids,
+            from_date=from_date,
+            to_date=to_date,
+            events=events,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert data["event_count"] == event_count
+
+    @given(event_count=st.integers(min_value=0, max_value=20))
+    def test_df_row_count_matches_events(self, event_count: int) -> None:
+        """DataFrame row count should equal number of events."""
+        events = [
+            UserEvent(
+                event=f"Event_{i}",
+                time=datetime.now(),
+                properties={"$distinct_id": "user_1"},
+            )
+            for i in range(event_count)
+        ]
+
+        result = ActivityFeedResult(
+            distinct_ids=["user_1"],
+            from_date=None,
+            to_date=None,
+            events=events,
+        )
+
+        assert len(result.df) == event_count
+
+
+# =============================================================================
+# SavedReportResult Property Tests
+# =============================================================================
+
+
+class TestSavedReportResultProperties:
+    """Property-based tests for SavedReportResult."""
+
+    @given(
+        bookmark_id=st.integers(min_value=1, max_value=10_000_000),
+        computed_at=st.text(min_size=1, max_size=30),
+        from_date=date_strings,
+        to_date=date_strings,
+    )
+    def test_to_dict_always_json_serializable(
+        self, bookmark_id: int, computed_at: str, from_date: str, to_date: str
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = SavedReportResult(
+            bookmark_id=bookmark_id,
+            computed_at=computed_at,
+            from_date=from_date,
+            to_date=to_date,
+            headers=[],
+            series={},
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        headers=st.lists(st.text(min_size=1, max_size=30), min_size=0, max_size=5),
+    )
+    def test_report_type_detection(self, headers: list[str]) -> None:
+        """report_type should be correctly detected from headers."""
+        result = SavedReportResult(
+            bookmark_id=1,
+            computed_at="2024-01-01T00:00:00",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            headers=headers,
+            series={},
+        )
+
+        report_type = result.report_type
+        assert report_type in ("insights", "retention", "funnel")
+
+        # Verify detection logic
+        has_retention = any("$retention" in h.lower() for h in headers)
+        has_funnel = any("$funnel" in h.lower() for h in headers)
+
+        if has_retention:
+            assert report_type == "retention"
+        elif has_funnel:
+            assert report_type == "funnel"
+        else:
+            assert report_type == "insights"
+
+
+# =============================================================================
+# FlowsResult Property Tests
+# =============================================================================
+
+
+class TestFlowsResultProperties:
+    """Property-based tests for FlowsResult."""
+
+    @given(
+        bookmark_id=st.integers(min_value=1, max_value=10_000_000),
+        computed_at=st.text(min_size=1, max_size=30),
+        overall_conversion_rate=conversion_rates,
+        step_count=st.integers(min_value=0, max_value=10),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        bookmark_id: int,
+        computed_at: str,
+        overall_conversion_rate: float,
+        step_count: int,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        steps = [
+            {"event": f"Step_{i}", "count": 100 - i * 10} for i in range(step_count)
+        ]
+
+        result = FlowsResult(
+            bookmark_id=bookmark_id,
+            computed_at=computed_at,
+            steps=steps,
+            breakdowns=[],
+            overall_conversion_rate=overall_conversion_rate,
+            metadata={},
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert len(data["steps"]) == step_count
+
+    @given(step_count=st.integers(min_value=0, max_value=20))
+    def test_df_row_count_matches_steps(self, step_count: int) -> None:
+        """DataFrame row count should equal number of steps."""
+        steps = [{"event": f"Step_{i}", "count": 100} for i in range(step_count)]
+
+        result = FlowsResult(
+            bookmark_id=1,
+            computed_at="2024-01-01T00:00:00",
+            steps=steps,
+            breakdowns=[],
+            overall_conversion_rate=0.5,
+            metadata={},
+        )
+
+        assert len(result.df) == step_count
+
+
+# =============================================================================
+# SummaryResult Property Tests
+# =============================================================================
+
+
+class TestSummaryResultProperties:
+    """Property-based tests for SummaryResult."""
+
+    @given(
+        table=table_names,
+        row_count=st.integers(min_value=0, max_value=10_000_000),
+        column_count=st.integers(min_value=0, max_value=10),
+    )
+    def test_to_dict_always_json_serializable(
+        self, table: str, row_count: int, column_count: int
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        columns = [
+            ColumnSummary(
+                column_name=f"col_{i}",
+                column_type="VARCHAR",
+                min=None,
+                max=None,
+                approx_unique=100,
+                avg=None,
+                std=None,
+                q25=None,
+                q50=None,
+                q75=None,
+                count=row_count,
+                null_percentage=0.0,
+            )
+            for i in range(column_count)
+        ]
+
+        result = SummaryResult(
+            table=table,
+            row_count=row_count,
+            columns=columns,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert len(data["columns"]) == column_count
+
+    @given(column_count=st.integers(min_value=0, max_value=20))
+    def test_df_row_count_matches_columns(self, column_count: int) -> None:
+        """DataFrame row count should equal number of columns."""
+        columns = [
+            ColumnSummary(
+                column_name=f"col_{i}",
+                column_type="VARCHAR",
+                min=None,
+                max=None,
+                approx_unique=100,
+                avg=None,
+                std=None,
+                q25=None,
+                q50=None,
+                q75=None,
+                count=100,
+                null_percentage=0.0,
+            )
+            for i in range(column_count)
+        ]
+
+        result = SummaryResult(
+            table="test_table",
+            row_count=100,
+            columns=columns,
+        )
+
+        assert len(result.df) == column_count
+
+
+# =============================================================================
+# EventBreakdownResult Property Tests
+# =============================================================================
+
+
+class TestEventBreakdownResultProperties:
+    """Property-based tests for EventBreakdownResult."""
+
+    @given(
+        table=table_names,
+        total_events=st.integers(min_value=0, max_value=10_000_000),
+        total_users=st.integers(min_value=0, max_value=1_000_000),
+        event_count=st.integers(min_value=0, max_value=10),
+    )
+    def test_to_dict_always_json_serializable(
+        self, table: str, total_events: int, total_users: int, event_count: int
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        now = datetime.now()
+        events = [
+            EventStats(
+                event_name=f"Event_{i}",
+                count=total_events // max(1, event_count),
+                unique_users=total_users // max(1, event_count),
+                first_seen=now,
+                last_seen=now,
+                pct_of_total=100.0 / max(1, event_count),
+            )
+            for i in range(event_count)
+        ]
+
+        result = EventBreakdownResult(
+            table=table,
+            total_events=total_events,
+            total_users=total_users,
+            date_range=(now, now),
+            events=events,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert len(data["events"]) == event_count
+
+    @given(event_count=st.integers(min_value=0, max_value=20))
+    def test_df_row_count_matches_events(self, event_count: int) -> None:
+        """DataFrame row count should equal number of event types."""
+        now = datetime.now()
+        events = [
+            EventStats(
+                event_name=f"Event_{i}",
+                count=100,
+                unique_users=50,
+                first_seen=now,
+                last_seen=now,
+                pct_of_total=10.0,
+            )
+            for i in range(event_count)
+        ]
+
+        result = EventBreakdownResult(
+            table="test_table",
+            total_events=1000,
+            total_users=100,
+            date_range=(now, now),
+            events=events,
+        )
+
+        assert len(result.df) == event_count
+
+
+# =============================================================================
+# ColumnStatsResult Property Tests
+# =============================================================================
+
+
+class TestColumnStatsResultProperties:
+    """Property-based tests for ColumnStatsResult."""
+
+    @given(
+        table=table_names,
+        column=st.text(min_size=1, max_size=30),
+        dtype=st.sampled_from(["VARCHAR", "INTEGER", "DOUBLE", "TIMESTAMP", "JSON"]),
+        count=st.integers(min_value=0, max_value=10_000_000),
+        null_count=st.integers(min_value=0, max_value=10_000_000),
+        unique_count=st.integers(min_value=0, max_value=10_000_000),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        table: str,
+        column: str,
+        dtype: str,
+        count: int,
+        null_count: int,
+        unique_count: int,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        total = count + null_count
+        null_pct = (null_count / total * 100) if total > 0 else 0.0
+        unique_pct = (unique_count / count * 100) if count > 0 else 0.0
+
+        result = ColumnStatsResult(
+            table=table,
+            column=column,
+            dtype=dtype,
+            count=count,
+            null_count=null_count,
+            null_pct=null_pct,
+            unique_count=unique_count,
+            unique_pct=unique_pct,
+            top_values=[],
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(top_value_count=st.integers(min_value=0, max_value=20))
+    def test_df_row_count_matches_top_values(self, top_value_count: int) -> None:
+        """DataFrame row count should equal number of top values."""
+        top_values = [(f"value_{i}", 100 - i) for i in range(top_value_count)]
+
+        result = ColumnStatsResult(
+            table="test_table",
+            column="test_column",
+            dtype="VARCHAR",
+            count=1000,
+            null_count=0,
+            null_pct=0.0,
+            unique_count=100,
+            unique_pct=10.0,
+            top_values=top_values,
+        )
+
+        assert len(result.df) == top_value_count
+
+
+# =============================================================================
+# Helper Type Property Tests
+# =============================================================================
+
+
+class TestHelperTypeProperties:
+    """Property-based tests for helper types (no df property)."""
+
+    @given(
+        funnel_id=st.integers(min_value=1, max_value=10_000_000),
+        name=st.text(min_size=1, max_size=100),
+    )
+    def test_funnel_info_to_dict_json_serializable(
+        self, funnel_id: int, name: str
+    ) -> None:
+        """FunnelInfo.to_dict() should always be JSON-serializable."""
+        result = FunnelInfo(funnel_id=funnel_id, name=name)
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        id=st.integers(min_value=1, max_value=10_000_000),
+        name=st.text(min_size=1, max_size=100),
+        count=st.integers(min_value=0, max_value=10_000_000),
+        description=st.text(max_size=200),
+        created=st.text(min_size=1, max_size=30),
+        is_visible=st.booleans(),
+    )
+    def test_saved_cohort_to_dict_json_serializable(
+        self,
+        id: int,
+        name: str,
+        count: int,
+        description: str,
+        created: str,
+        is_visible: bool,
+    ) -> None:
+        """SavedCohort.to_dict() should always be JSON-serializable."""
+        result = SavedCohort(
+            id=id,
+            name=name,
+            count=count,
+            description=description,
+            created=created,
+            is_visible=is_visible,
+        )
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        id=st.integers(min_value=1, max_value=10_000_000),
+        name=st.text(min_size=1, max_size=100),
+        bookmark_type=st.sampled_from(
+            ["insights", "funnels", "retention", "flows", "launch-analysis"]
+        ),
+        project_id=st.integers(min_value=1, max_value=10_000_000),
+        created=st.text(min_size=1, max_size=30),
+        modified=st.text(min_size=1, max_size=30),
+    )
+    def test_bookmark_info_to_dict_json_serializable(
+        self,
+        id: int,
+        name: str,
+        bookmark_type: str,
+        project_id: int,
+        created: str,
+        modified: str,
+    ) -> None:
+        """BookmarkInfo.to_dict() should always be JSON-serializable."""
+        result = BookmarkInfo(
+            id=id,
+            name=name,
+            type=bookmark_type,  # type: ignore[arg-type]
+            project_id=project_id,
+            created=created,
+            modified=modified,
+        )
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        event=event_names,
+        count=st.integers(min_value=0, max_value=10_000_000),
+        percent_change=st.floats(min_value=-1.0, max_value=100.0, allow_nan=False),
+    )
+    def test_top_event_to_dict_json_serializable(
+        self, event: str, count: int, percent_change: float
+    ) -> None:
+        """TopEvent.to_dict() should always be JSON-serializable."""
+        result = TopEvent(event=event, count=count, percent_change=percent_change)
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    @given(
+        event=event_names,
+        properties=st.dictionaries(
+            keys=st.text(min_size=1, max_size=20),
+            values=st.one_of(
+                st.integers(),
+                st.floats(allow_nan=False, allow_infinity=False),
+                st.text(max_size=50),
+                st.booleans(),
+                st.none(),
+            ),
+            min_size=0,
+            max_size=5,
+        ),
+    )
+    def test_user_event_to_dict_json_serializable(
+        self, event: str, properties: dict[str, object]
+    ) -> None:
+        """UserEvent.to_dict() should always be JSON-serializable."""
+        result = UserEvent(event=event, time=datetime.now(), properties=properties)
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)

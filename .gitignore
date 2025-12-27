@@ -42,6 +42,7 @@ coverage.xml
 htmlcov/
 .tox/
 .nox/
+.hypothesis/
 
 # Type checking
 .mypy_cache/
@@ -58,4 +59,4 @@ htmlcov/
 *.log
 
 # Documentation
-site/.hypothesis/
+site/
