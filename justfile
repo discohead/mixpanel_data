@@ -36,6 +36,16 @@ test-pbt-ci *args:
 test-cov:
     uv run pytest --cov=src/mixpanel_data --cov-report=term-missing --cov-fail-under=90
 
+# === Hypothesis CLI ===
+
+# Refactor deprecated Hypothesis code (e.g., just hypo-codemod src/)
+hypo-codemod *args:
+    uv run hypothesis codemod {{ args }}
+
+# Generate property-based tests for a module (e.g., just hypo-write mixpanel_data.types)
+hypo-write *args:
+    uv run hypothesis write {{ args }}
+
 # Lint code with ruff
 lint *args:
     uv run ruff check src/ tests/ {{ args }}

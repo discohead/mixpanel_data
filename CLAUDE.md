@@ -163,6 +163,8 @@ This project uses [just](https://github.com/casey/just) as a command runner:
 | `just test-pbt` | Run property-based tests only |
 | `just test-pbt-dev` | Run PBT tests with dev profile |
 | `just test-cov` | Run tests with coverage (fails if below 90%) |
+| `just hypo-codemod` | Refactor deprecated Hypothesis code |
+| `just hypo-write` | Generate property-based tests for a module |
 | `just lint` | Lint code with ruff |
 | `just fmt` | Format code with ruff |
 | `just typecheck` | Type check with mypy |
