@@ -2627,3 +2627,37 @@ class TestReadOnlyMode:
 
         with StorageEngine(path=db_path, read_only=False) as storage:
             assert storage.read_only is False
+
+    def test_read_only_raises_not_found_for_missing_file(self, tmp_path: Path) -> None:
+        """Read-only access to non-existent file raises DatabaseNotFoundError."""
+        from mixpanel_data.exceptions import DatabaseNotFoundError
+
+        db_path = tmp_path / "nonexistent.db"
+        assert not db_path.exists()
+
+        with pytest.raises(DatabaseNotFoundError) as exc_info:
+            StorageEngine(path=db_path, read_only=True)
+
+        assert exc_info.value.db_path == str(db_path)
+        assert "does not exist" in str(exc_info.value).lower()
+
+    def test_read_only_not_found_includes_suggestion(self, tmp_path: Path) -> None:
+        """DatabaseNotFoundError includes helpful suggestion."""
+        from mixpanel_data.exceptions import DatabaseNotFoundError
+
+        db_path = tmp_path / "missing.db"
+
+        with pytest.raises(DatabaseNotFoundError) as exc_info:
+            StorageEngine(path=db_path, read_only=True)
+
+        assert "suggestion" in exc_info.value.details
+        assert "fetch" in exc_info.value.details["suggestion"].lower()
+
+    def test_write_mode_creates_missing_file(self, tmp_path: Path) -> None:
+        """Write mode creates file if it doesn't exist (no error)."""
+        db_path = tmp_path / "new.db"
+        assert not db_path.exists()
+
+        with StorageEngine(path=db_path, read_only=False) as storage:
+            assert db_path.exists()
+            assert storage.connection is not None

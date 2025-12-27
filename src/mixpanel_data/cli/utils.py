@@ -26,6 +26,7 @@ from mixpanel_data.exceptions import (
     AuthenticationError,
     ConfigError,
     DatabaseLockedError,
+    DatabaseNotFoundError,
     MixpanelDataError,
     QueryError,
     RateLimitError,
@@ -106,6 +107,12 @@ def handle_errors(func: F) -> F:
             err_console.print(f"[yellow]Database locked:[/yellow] {e.db_path}")
             err_console.print("Another mp command may be running. Try again shortly.")
             raise typer.Exit(ExitCode.GENERAL_ERROR) from None
+        except DatabaseNotFoundError as e:
+            err_console.print(f"[yellow]No data yet:[/yellow] {e.db_path}")
+            err_console.print(
+                "Run 'mp fetch events' or 'mp fetch profiles' to create the database."
+            )
+            raise typer.Exit(ExitCode.NOT_FOUND) from None
         except RateLimitError as e:
             err_console.print(f"[yellow]Rate limited:[/yellow] {e.message}")
             if e.retry_after:

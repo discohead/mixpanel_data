@@ -614,6 +614,49 @@ class DatabaseLockedError(MixpanelDataError):
         return int(pid) if pid is not None else None
 
 
+class DatabaseNotFoundError(MixpanelDataError):
+    """Database file does not exist.
+
+    Raised when attempting to open a non-existent database file in read-only
+    mode. DuckDB cannot create a new database file when opened read-only.
+
+    This typically happens when running read-only commands (like `mp query`
+    or `mp inspect tables`) before any data has been fetched.
+
+    Example:
+        ```python
+        try:
+            ws = Workspace(read_only=True)
+        except DatabaseNotFoundError as e:
+            print(f"No data yet: {e.db_path}")
+            print("Run 'mp fetch events' first to create the database.")
+        ```
+    """
+
+    def __init__(self, db_path: str) -> None:
+        """Initialize DatabaseNotFoundError.
+
+        Args:
+            db_path: Path to the database file that doesn't exist.
+        """
+        message = (
+            f"Database '{db_path}' does not exist. "
+            "Run 'mp fetch events' first to create it."
+        )
+
+        details: dict[str, str] = {
+            "db_path": db_path,
+            "suggestion": "Run 'mp fetch events' or 'mp fetch profiles' to create the database.",
+        }
+
+        super().__init__(message, code="DATABASE_NOT_FOUND", details=details)
+
+    @property
+    def db_path(self) -> str:
+        """Path to the database file that doesn't exist."""
+        return str(self._details.get("db_path", ""))
+
+
 # JQL Exceptions
 
 

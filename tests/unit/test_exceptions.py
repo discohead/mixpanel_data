@@ -13,6 +13,7 @@ from mixpanel_data.exceptions import (
     AuthenticationError,
     ConfigError,
     DatabaseLockedError,
+    DatabaseNotFoundError,
     JQLSyntaxError,
     MixpanelDataError,
     QueryError,
@@ -230,6 +231,37 @@ class TestStorageExceptions:
         assert "DATABASE_LOCKED" in json_str
         assert "99999" in json_str
 
+    def test_database_not_found_error_basic(self) -> None:
+        """DatabaseNotFoundError should have correct code and message."""
+        exc = DatabaseNotFoundError("/path/to/missing.db")
+
+        assert exc.code == "DATABASE_NOT_FOUND"
+        assert exc.db_path == "/path/to/missing.db"
+        assert "/path/to/missing.db" in str(exc)
+        assert "does not exist" in str(exc).lower()
+
+    def test_database_not_found_error_includes_suggestion(self) -> None:
+        """DatabaseNotFoundError should include a helpful suggestion."""
+        exc = DatabaseNotFoundError("/path/to/missing.db")
+
+        assert "suggestion" in exc.details
+        assert "fetch" in exc.details["suggestion"].lower()
+
+    def test_database_not_found_error_to_dict(self) -> None:
+        """DatabaseNotFoundError to_dict should be JSON serializable."""
+        exc = DatabaseNotFoundError("/home/user/.mp/data/12345.db")
+
+        result = exc.to_dict()
+
+        assert result["code"] == "DATABASE_NOT_FOUND"
+        assert result["details"]["db_path"] == "/home/user/.mp/data/12345.db"
+        assert "suggestion" in result["details"]
+
+        # Verify JSON serializable
+        json_str = json.dumps(result)
+        assert "DATABASE_NOT_FOUND" in json_str
+        assert "12345.db" in json_str
+
 
 class TestExceptionHierarchy:
     """Tests for exception inheritance."""
@@ -247,6 +279,7 @@ class TestExceptionHierarchy:
             TableExistsError("test"),
             TableNotFoundError("test"),
             DatabaseLockedError("/path/to/db"),
+            DatabaseNotFoundError("/path/to/db"),
         ]
 
         for exc in exceptions:
@@ -289,6 +322,7 @@ class TestExceptionHierarchy:
             TableExistsError: "TABLE_EXISTS",
             TableNotFoundError: "TABLE_NOT_FOUND",
             DatabaseLockedError: "DATABASE_LOCKED",
+            DatabaseNotFoundError: "DATABASE_NOT_FOUND",
         }
 
         for exc_class, expected_code in expected_codes.items():
@@ -296,7 +330,7 @@ class TestExceptionHierarchy:
                 exc = exc_class("test")
             elif exc_class in (TableExistsError, TableNotFoundError):
                 exc = exc_class("test_table")
-            elif exc_class == DatabaseLockedError:
+            elif exc_class in (DatabaseLockedError, DatabaseNotFoundError):
                 exc = exc_class("/path/to/db")
             else:
                 exc = exc_class("test message")

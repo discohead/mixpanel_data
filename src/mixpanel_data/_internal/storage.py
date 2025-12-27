@@ -21,6 +21,7 @@ import pandas as pd
 
 from mixpanel_data.exceptions import (
     DatabaseLockedError,
+    DatabaseNotFoundError,
     QueryError,
     TableExistsError,
     TableNotFoundError,
@@ -101,6 +102,7 @@ class StorageEngine:
             OSError: If path is invalid or lacks write permissions.
             ValueError: If _ephemeral or _in_memory is used incorrectly.
             DatabaseLockedError: If database is locked and read_only=False.
+            DatabaseNotFoundError: If read_only=True and database file doesn't exist.
         """
         self._path: Path | None = None
         self._conn: duckdb.DuckDBPyConnection | None = None
@@ -133,6 +135,11 @@ class StorageEngine:
                 ) from None
 
         if path is not None:
+            # Check for read-only access to non-existent file
+            # DuckDB cannot create a new file in read-only mode
+            if read_only and not path.exists():
+                raise DatabaseNotFoundError(str(path))
+
             # Persistent mode: create database at specified path
             try:
                 # Create parent directories if they don't exist

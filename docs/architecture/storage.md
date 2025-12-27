@@ -61,6 +61,17 @@ Database locked: /home/user/.mp/data/12345.db
 Another mp command may be running. Try again shortly.
 ```
 
+## Database Not Found
+
+When opening a database in read-only mode, the file must already exist. If you run a read command (like `mp query` or `mp inspect tables`) before fetching any data, you'll get a `DatabaseNotFoundError`:
+
+```
+No data yet: /home/user/.mp/data/12345.db
+Run 'mp fetch events' or 'mp fetch profiles' to create the database.
+```
+
+This is different from write mode, which creates the database file automatically.
+
 ### Common Causes
 
 1. **Long-running fetch** — Large date ranges take time; other commands must wait
