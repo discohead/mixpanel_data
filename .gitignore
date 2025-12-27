@@ -58,4 +58,4 @@ htmlcov/
 *.log
 
 # Documentation
-site/
+site/.hypothesis/

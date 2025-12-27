@@ -49,10 +49,14 @@ jobs:
       - name: Run tests with pytest
         if: matrix.python-version != '3.12'
         run: uv run pytest
+        env:
+          HYPOTHESIS_PROFILE: ci
 
       - name: Run tests with coverage (Python 3.12 only)
         if: matrix.python-version == '3.12'
-        run: uv run pytest --cov=src/mixpanel_data --cov-report=term-missing --cov-report=xml
+        run: uv run pytest --cov=src/mixpanel_data --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+        env:
+          HYPOTHESIS_PROFILE: ci
 
       - name: Upload coverage to codecov
         if: matrix.python-version == '3.12'

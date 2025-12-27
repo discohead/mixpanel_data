@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from collections.abc import Callable, Generator
 from pathlib import Path
@@ -9,7 +10,46 @@ from typing import TYPE_CHECKING
 
 import httpx
 import pytest
+from hypothesis import Phase, Verbosity, settings
 from pydantic import SecretStr
+
+# =============================================================================
+# Hypothesis Configuration
+# =============================================================================
+
+# Register Hypothesis profiles for different environments
+settings.register_profile(
+    "default",
+    max_examples=100,
+    verbosity=Verbosity.normal,
+    phases=[Phase.explicit, Phase.reuse, Phase.generate, Phase.target, Phase.shrink],
+)
+
+settings.register_profile(
+    "ci",
+    max_examples=200,
+    verbosity=Verbosity.normal,
+    phases=[Phase.explicit, Phase.reuse, Phase.generate, Phase.target, Phase.shrink],
+    derandomize=True,  # Reproducible in CI
+)
+
+settings.register_profile(
+    "dev",
+    max_examples=10,
+    verbosity=Verbosity.verbose,
+    phases=[Phase.explicit, Phase.reuse, Phase.generate, Phase.target, Phase.shrink],
+)
+
+settings.register_profile(
+    "debug",
+    max_examples=10,
+    verbosity=Verbosity.verbose,
+    phases=[Phase.explicit, Phase.reuse, Phase.generate, Phase.target, Phase.shrink],
+    report_multiple_bugs=False,
+)
+
+# Load profile from HYPOTHESIS_PROFILE env var, default to "default"
+settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "default"))
 
 if TYPE_CHECKING:
     from mixpanel_data._internal.api_client import MixpanelAPIClient
