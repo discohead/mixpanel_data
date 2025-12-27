@@ -139,7 +139,9 @@ def get_workspace(ctx: typer.Context, *, read_only: bool = False) -> Workspace:
 
     Note: The read_only parameter only applies when creating a new workspace.
     If a workspace already exists in context, that instance is returned
-    regardless of the read_only parameter.
+    regardless of the read_only parameter. This is safe because each CLI
+    command runs in a separate process, so caching within a single command
+    invocation doesn't cause read_only mismatches across commands.
 
     Args:
         ctx: Typer context with global options in obj dict.

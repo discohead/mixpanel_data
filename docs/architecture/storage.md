@@ -49,7 +49,7 @@ This differs from client-server databases (PostgreSQL, MySQL) where a server pro
 | One `mp fetch` command | Works normally |
 | Two `mp fetch` commands to same database | Second command gets `DatabaseLockedError` |
 | `mp fetch` + `mp query` to same database | Query command gets `DatabaseLockedError` |
-| Two `mp query` commands to same database | Both work (concurrent reads allowed) |
+| Two `mp query` commands to same database | Both work (when no write lock is held) |
 | Two `mp inspect` commands (API-only) | Both work (no database access) |
 
 ## Lock Conflicts

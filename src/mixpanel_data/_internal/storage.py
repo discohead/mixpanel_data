@@ -158,15 +158,17 @@ class StorageEngine:
                 # Check for database lock conflict
                 error_str = str(e)
                 if "Could not set lock" in error_str:
-                    # Extract PID if available from error message
+                    # Best-effort PID extraction from DuckDB error message.
+                    # Format may change across DuckDB versions; we silently
+                    # fall back to None if parsing fails.
                     # Example: "Conflicting lock is held in ... (PID 12345)"
                     pid_match = re.search(r"PID (\d+)", error_str)
                     holding_pid = int(pid_match.group(1)) if pid_match else None
                     raise DatabaseLockedError(str(path), holding_pid) from e
                 # Other IO errors - wrap as OSError
                 raise OSError(f"Failed to create database at {path}: {e}") from e
-            except Exception as e:
-                # Wrap any other error as OSError for consistency
+            except OSError as e:
+                # Filesystem errors (permissions, disk full, etc.)
                 raise OSError(f"Failed to create database at {path}: {e}") from e
         else:
             # No path provided - should use ephemeral() or memory() classmethod
