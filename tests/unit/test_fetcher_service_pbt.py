@@ -46,9 +46,18 @@ json_values: st.SearchStrategy[Any] = st.recursive(
     max_leaves=15,
 )
 
+# Reserved keys that _transform_event extracts from properties
+# These should not be randomly generated in property dicts
+_RESERVED_EVENT_KEYS = frozenset({"distinct_id", "time", "$insert_id"})
+
+# Strategy for event property keys (excluding reserved keys)
+event_property_keys = st.text().filter(lambda k: k not in _RESERVED_EVENT_KEYS)
+
 # Strategy for event properties dict
 # These are properties that might come from Mixpanel's Export API
-event_properties = st.dictionaries(st.text(), json_values, max_size=10)
+# Reserved keys (distinct_id, time, $insert_id) are excluded since they're
+# handled separately as standard fields in _transform_event
+event_properties = st.dictionaries(event_property_keys, json_values, max_size=10)
 
 # Strategy for Unix timestamps (valid range for Mixpanel events)
 # Mixpanel uses seconds since epoch
