@@ -1541,20 +1541,18 @@ class TestMemoryWorkspace:
         mock_api_client: MagicMock,
     ) -> None:
         """Test memory() context manager closes resources on exit."""
-        ws_ref = None
+        storage_ref = None
         with Workspace.memory(
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
         ) as ws:
-            ws_ref = ws
-            # Connection should be active
-            assert ws.storage._conn is not None
+            # Capture storage reference while connection is active
+            storage_ref = ws.storage
+            assert storage_ref._conn is not None
 
-        # After exit, connection should be closed (storage accessed before close)
-        assert ws_ref is not None
-        storage = ws_ref._storage
-        assert storage is not None
-        assert storage._conn is None
+        # After exit, connection should be closed
+        assert storage_ref is not None
+        assert storage_ref._conn is None
 
     def test_memory_with_account_parameter(
         self,
