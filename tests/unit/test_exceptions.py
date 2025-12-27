@@ -226,8 +226,6 @@ class TestStorageExceptions:
         assert result["details"]["holding_pid"] == 99999
 
         # Verify JSON serializable
-        import json
-
         json_str = json.dumps(result)
         assert "DATABASE_LOCKED" in json_str
         assert "99999" in json_str

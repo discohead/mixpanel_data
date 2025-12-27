@@ -96,7 +96,7 @@ class TestFetchQueryWorkflow:
         mock_api_client.export_events.return_value = iter(events)
 
         db_path = temp_dir / "test_workflow.db"
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
 
         with Workspace(
             _config_manager=mock_config_manager,
@@ -151,7 +151,7 @@ class TestFetchQueryWorkflow:
         ]
         mock_api_client.export_events.return_value = iter(events)
 
-        storage1 = StorageEngine(path=db_path)
+        storage1 = StorageEngine(path=db_path, read_only=False)
         ws1 = Workspace(
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
@@ -253,7 +253,7 @@ class TestQueryOnlyIntegration:
         db_path = temp_dir / "existing.db"
 
         # Create database with data
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
         storage.connection.execute("CREATE TABLE test_data (id INTEGER, value VARCHAR)")
         storage.connection.execute(
             "INSERT INTO test_data VALUES (1, 'one'), (2, 'two')"
@@ -291,7 +291,7 @@ class TestTableManagementIntegration:
         create, list, get schema, and drop tables.
         """
         db_path = temp_dir / "management.db"
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
 
         # Create events using the storage directly (simulating fetch)
         events = [
@@ -359,7 +359,7 @@ class TestWorkspaceInfoIntegration:
     ) -> None:
         """Test info() returns complete workspace metadata."""
         db_path = temp_dir / "info_test.db"
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
 
         # Create a table
         storage.connection.execute("CREATE TABLE test (id INTEGER)")

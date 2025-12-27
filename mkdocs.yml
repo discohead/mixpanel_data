@@ -107,6 +107,7 @@ nav:
   - Architecture:
       - Design: architecture/design.md
       - Data Model: architecture/data-model.md
+      - Storage Engine: architecture/storage.md
 
 extra:
   social:

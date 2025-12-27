@@ -19,7 +19,7 @@ from mixpanel_data._internal.storage import StorageEngine
 def test_init_with_explicit_path_creates_database_file(tmp_path: Path) -> None:
     """Test that StorageEngine creates database file at specified path."""
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Database file should exist
         assert db_path.exists()
         assert db_path.is_file()
@@ -34,7 +34,7 @@ def test_init_with_explicit_path_creates_database_file(tmp_path: Path) -> None:
 def test_init_creates_parent_directories_if_needed(tmp_path: Path) -> None:
     """Test that StorageEngine creates parent directories automatically."""
     db_path = tmp_path / "subdir" / "nested" / "test.db"
-    with StorageEngine(path=db_path):
+    with StorageEngine(path=db_path, read_only=False):
         # Parent directories should be created
         assert db_path.parent.exists()
         assert db_path.exists()
@@ -45,11 +45,11 @@ def test_init_can_reopen_existing_database(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
 
     # Create database
-    with StorageEngine(path=db_path):
+    with StorageEngine(path=db_path, read_only=False):
         pass
 
     # Reopen same database
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         assert storage.path == db_path
         assert storage.connection is not None
 
@@ -107,7 +107,7 @@ def test_context_manager_enters_and_exits(tmp_path: Path) -> None:
     """Test that StorageEngine works as context manager."""
     db_path = tmp_path / "test.db"
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Inside context, storage should be usable
         assert storage.connection is not None
         assert storage.path == db_path
@@ -120,7 +120,10 @@ def test_context_manager_closes_on_exception(tmp_path: Path) -> None:
     """Test that context manager closes connection even on exception."""
     db_path = tmp_path / "test.db"
 
-    with pytest.raises(ValueError), StorageEngine(path=db_path) as storage:
+    with (
+        pytest.raises(ValueError),
+        StorageEngine(path=db_path, read_only=False) as storage,
+    ):
         assert storage.connection is not None
         # Raise exception to test cleanup
         raise ValueError("test exception")
@@ -132,7 +135,7 @@ def test_context_manager_returns_self(tmp_path: Path) -> None:
     """Test that __enter__ returns self."""
     db_path = tmp_path / "test.db"
 
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
     try:
         result = storage.__enter__()
         assert result is storage
@@ -154,7 +157,7 @@ def test_context_manager_returns_self(tmp_path: Path) -> None:
 def test_close_can_be_called_multiple_times(tmp_path: Path) -> None:
     """Test that close() is idempotent."""
     db_path = tmp_path / "test.db"
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     # Should be safe to call multiple times
     storage.close()
@@ -165,7 +168,7 @@ def test_close_can_be_called_multiple_times(tmp_path: Path) -> None:
 def test_path_property_returns_path(tmp_path: Path) -> None:
     """Test that path property returns the database path."""
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         assert storage.path == db_path
 
 
@@ -174,14 +177,14 @@ def test_connection_property_returns_duckdb_connection(tmp_path: Path) -> None:
     import duckdb
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         assert isinstance(storage.connection, duckdb.DuckDBPyConnection)
 
 
 def test_cleanup_is_alias_for_close(tmp_path: Path) -> None:
     """Test that cleanup() calls close()."""
     db_path = tmp_path / "test.db"
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     # cleanup() should work just like close()
     storage.cleanup()
@@ -200,7 +203,7 @@ def test_create_events_table_inserts_all_records(tmp_path: Path) -> None:
     from datetime import datetime
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create sample events
         events = [
             {
@@ -252,7 +255,7 @@ def test_create_events_table_handles_large_batches(tmp_path: Path) -> None:
     from datetime import datetime
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create 2100 events to test batching (batch size is 2000, so this
         # creates 2 batches - enough to verify batching works correctly)
         def event_generator() -> Iterator[dict[str, Any]]:
@@ -297,7 +300,7 @@ def test_create_events_table_raises_error_if_table_exists(tmp_path: Path) -> Non
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         events = [
             {
                 "event_name": "Event",
@@ -328,7 +331,7 @@ def test_create_events_table_validates_table_name(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         events = [
             {
                 "event_name": "Event",
@@ -368,7 +371,7 @@ def test_create_events_table_validates_required_fields(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         metadata = TableMetadata(
             type="events",
             fetched_at=datetime.now(UTC),
@@ -471,7 +474,7 @@ def test_create_profiles_table_inserts_all_records(tmp_path: Path) -> None:
     from datetime import datetime
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create sample profiles
         profiles = [
             {
@@ -521,7 +524,7 @@ def test_create_profiles_table_validates_required_fields(tmp_path: Path) -> None
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         metadata = TableMetadata(
             type="profiles",
             fetched_at=datetime.now(UTC),
@@ -577,7 +580,7 @@ def test_create_events_table_invokes_progress_callback(tmp_path: Path) -> None:
     from datetime import datetime
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create events generator (2100 events = 2 batches with batch_size=2000)
         def event_generator() -> Iterator[dict[str, Any]]:
             for i in range(2100):
@@ -623,7 +626,7 @@ def test_create_profiles_table_invokes_progress_callback(tmp_path: Path) -> None
     from datetime import datetime
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create profiles generator (500 is enough to verify callback works)
         def profile_generator() -> Iterator[dict[str, Any]]:
             for i in range(500):
@@ -768,7 +771,7 @@ def test_cleanup_removes_wal_files_if_present() -> None:
 def test_cleanup_does_nothing_for_persistent_database(tmp_path: Path) -> None:
     """Test that cleanup() doesn't delete persistent databases."""
     db_path = tmp_path / "persistent.db"
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     # Before cleanup, file should exist
     assert db_path.exists()
@@ -793,7 +796,7 @@ def test_open_existing_opens_existing_database(tmp_path: Path) -> None:
     db_path = tmp_path / "existing.db"
 
     # Create database first
-    with StorageEngine(path=db_path) as storage1:
+    with StorageEngine(path=db_path, read_only=False) as storage1:
         storage1.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
         storage1.connection.execute("INSERT INTO test VALUES (1, 'data')")
 
@@ -820,7 +823,7 @@ def test_open_existing_raises_error_if_file_missing(tmp_path: Path) -> None:
 def test_list_tables_returns_empty_list_for_new_database(tmp_path: Path) -> None:
     """Test that list_tables() returns empty list for new database."""
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # New database should have no user tables
         tables = storage.list_tables()
         assert tables == []
@@ -833,7 +836,7 @@ def test_list_tables_returns_all_user_tables(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create multiple tables
         events = [
             {
@@ -893,7 +896,7 @@ def test_list_tables_excludes_internal_metadata_table(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create one user table
         events = [
             {
@@ -936,7 +939,7 @@ def test_get_schema_returns_events_table_schema(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create events table
         events = [
             {
@@ -980,7 +983,7 @@ def test_get_schema_returns_profiles_table_schema(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create profiles table
         profiles = [
             {
@@ -1027,7 +1030,7 @@ def test_get_metadata_returns_table_metadata(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create events table with specific metadata
         events = [
             {
@@ -1064,7 +1067,7 @@ def test_get_metadata_returns_profiles_metadata(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create profiles table
         profiles = [
             {
@@ -1101,7 +1104,7 @@ def test_get_schema_raises_error_for_missing_table(tmp_path: Path) -> None:
 
     db_path = tmp_path / "test.db"
     with (
-        StorageEngine(path=db_path) as storage,
+        StorageEngine(path=db_path, read_only=False) as storage,
         pytest.raises(TableNotFoundError, match="nonexistent_table"),
     ):
         storage.get_schema("nonexistent_table")
@@ -1113,7 +1116,7 @@ def test_get_metadata_raises_error_for_missing_table(tmp_path: Path) -> None:
 
     db_path = tmp_path / "test.db"
     with (
-        StorageEngine(path=db_path) as storage,
+        StorageEngine(path=db_path, read_only=False) as storage,
         pytest.raises(TableNotFoundError, match="nonexistent_table"),
     ):
         storage.get_metadata("nonexistent_table")
@@ -1131,7 +1134,7 @@ def test_table_exists_returns_true_for_existing_table(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create a table
         events = [
             {
@@ -1157,7 +1160,7 @@ def test_table_exists_returns_true_for_existing_table(tmp_path: Path) -> None:
 def test_table_exists_returns_false_for_nonexistent_table(tmp_path: Path) -> None:
     """Test that table_exists() returns False for nonexistent tables."""
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Check for table that doesn't exist
         assert storage.table_exists("nonexistent_table") is False
 
@@ -1169,7 +1172,7 @@ def test_table_exists_returns_false_for_metadata_table(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create a table to trigger _metadata table creation
         events = [
             {
@@ -1204,7 +1207,7 @@ def test_drop_table_removes_table_from_database(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create a table
         events = [
             {
@@ -1240,7 +1243,7 @@ def test_drop_table_removes_metadata_entry(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create a table
         events = [
             {
@@ -1292,7 +1295,7 @@ def test_create_events_table_raises_table_exists_error_on_duplicate(
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         events = [
             {
                 "event_name": "Event",
@@ -1326,7 +1329,7 @@ def test_create_profiles_table_raises_table_exists_error_on_duplicate(
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         profiles = [
             {
                 "distinct_id": "user_1",
@@ -1361,7 +1364,7 @@ def test_drop_table_raises_table_not_found_error_for_missing_table(
 
     db_path = tmp_path / "test.db"
     with (
-        StorageEngine(path=db_path) as storage,
+        StorageEngine(path=db_path, read_only=False) as storage,
         pytest.raises(TableNotFoundError, match="nonexistent_table"),
     ):
         # Try to drop table that doesn't exist
@@ -1376,7 +1379,7 @@ def test_drop_table_raises_table_not_found_error_after_drop(tmp_path: Path) -> N
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create a table
         events = [
             {
@@ -1413,7 +1416,7 @@ def test_execute_returns_duckdb_relation(tmp_path: Path) -> None:
     import duckdb
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create a test table
         storage.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
         storage.connection.execute("INSERT INTO test VALUES (1, 'hello'), (2, 'world')")
@@ -1434,7 +1437,7 @@ def test_execute_can_be_chained(tmp_path: Path) -> None:
     import duckdb
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create test data
         storage.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
         storage.connection.execute(
@@ -1463,7 +1466,7 @@ def test_execute_df_returns_dataframe(tmp_path: Path) -> None:
     import pandas as pd
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create test data
         storage.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
         storage.connection.execute("INSERT INTO test VALUES (1, 'hello'), (2, 'world')")
@@ -1486,7 +1489,7 @@ def test_execute_df_returns_empty_dataframe_for_empty_result(tmp_path: Path) -> 
     import pandas as pd
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create empty table
         storage.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
 
@@ -1506,7 +1509,7 @@ def test_execute_df_handles_json_columns(tmp_path: Path) -> None:
     import pandas as pd
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create events table with JSON properties
         from mixpanel_data.types import TableMetadata
 
@@ -1544,7 +1547,7 @@ def test_execute_df_handles_json_columns(tmp_path: Path) -> None:
 def test_execute_scalar_returns_single_value(tmp_path: Path) -> None:
     """Test that execute_scalar() returns a single scalar value."""
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create test data
         storage.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
         storage.connection.execute("INSERT INTO test VALUES (1, 'hello'), (2, 'world')")
@@ -1560,7 +1563,7 @@ def test_execute_scalar_returns_single_value(tmp_path: Path) -> None:
 def test_execute_scalar_returns_different_types(tmp_path: Path) -> None:
     """Test that execute_scalar() returns correct types for different queries."""
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create test data
         storage.connection.execute(
             "CREATE TABLE test (id INTEGER, price DECIMAL, name VARCHAR)"
@@ -1585,7 +1588,7 @@ def test_execute_scalar_returns_different_types(tmp_path: Path) -> None:
 def test_execute_scalar_returns_none_for_null(tmp_path: Path) -> None:
     """Test that execute_scalar() returns None for NULL values."""
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create test data with NULL
         storage.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
         storage.connection.execute("INSERT INTO test VALUES (1, NULL)")
@@ -1605,7 +1608,7 @@ def test_execute_scalar_returns_none_for_null(tmp_path: Path) -> None:
 def test_execute_rows_returns_list_of_tuples(tmp_path: Path) -> None:
     """Test that execute_rows() returns a list of tuples."""
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create test data
         storage.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
         storage.connection.execute(
@@ -1629,7 +1632,7 @@ def test_execute_rows_returns_list_of_tuples(tmp_path: Path) -> None:
 def test_execute_rows_returns_empty_list_for_empty_result(tmp_path: Path) -> None:
     """Test that execute_rows() returns empty list for empty result."""
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create empty table
         storage.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
 
@@ -1644,7 +1647,7 @@ def test_execute_rows_returns_empty_list_for_empty_result(tmp_path: Path) -> Non
 def test_execute_rows_handles_single_column(tmp_path: Path) -> None:
     """Test that execute_rows() handles single column queries."""
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create test data
         storage.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
         storage.connection.execute("INSERT INTO test VALUES (1, 'a'), (2, 'b')")
@@ -1669,7 +1672,7 @@ def test_execute_wraps_sql_errors_in_query_error(tmp_path: Path) -> None:
     from mixpanel_data.exceptions import QueryError
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Execute invalid SQL
         with pytest.raises(QueryError) as exc_info:
             storage.execute("SELECT * FROM nonexistent_table")
@@ -1689,7 +1692,7 @@ def test_execute_df_wraps_sql_errors_in_query_error(tmp_path: Path) -> None:
     from mixpanel_data.exceptions import QueryError
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Execute invalid SQL
         with pytest.raises(QueryError) as exc_info:
             storage.execute_df("INVALID SQL SYNTAX")
@@ -1704,7 +1707,7 @@ def test_execute_scalar_wraps_sql_errors_in_query_error(tmp_path: Path) -> None:
     from mixpanel_data.exceptions import QueryError
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Execute invalid SQL
         with pytest.raises(QueryError) as exc_info:
             storage.execute_scalar("SELECT * FROM missing_table")
@@ -1719,7 +1722,7 @@ def test_execute_rows_wraps_sql_errors_in_query_error(tmp_path: Path) -> None:
     from mixpanel_data.exceptions import QueryError
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Execute invalid SQL
         with pytest.raises(QueryError) as exc_info:
             storage.execute_rows("GARBAGE SQL")
@@ -1734,7 +1737,7 @@ def test_query_error_includes_query_text(tmp_path: Path) -> None:
     from mixpanel_data.exceptions import QueryError
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         bad_query = "SELECT * FROM table_does_not_exist"
 
         # Execute invalid SQL
@@ -1766,7 +1769,7 @@ def test_create_events_table_skips_duplicate_insert_ids(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create events with duplicate insert_ids (simulating raw export data)
         events = [
             {
@@ -1821,7 +1824,7 @@ def test_create_events_table_keeps_first_duplicate(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create events with same insert_id but different properties
         events = [
             {
@@ -1871,7 +1874,7 @@ def test_create_profiles_table_skips_duplicate_distinct_ids(tmp_path: Path) -> N
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create profiles with duplicate distinct_ids
         profiles = [
             {
@@ -1918,7 +1921,7 @@ def test_create_profiles_table_keeps_first_duplicate(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create profiles with same distinct_id but different properties
         profiles = [
             {
@@ -1962,7 +1965,7 @@ def test_create_events_table_handles_many_duplicates(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "test.db"
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         # Create 100 events where each insert_id appears 3 times
         # (simulating the ai_demo project's ~65% duplicate rate)
         events = []
@@ -2023,7 +2026,7 @@ def test_create_events_table_rolls_back_on_failure(tmp_path: Path) -> None:
         }
         raise ValueError("Simulated failure during iteration")
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         metadata = TableMetadata(
             type="events",
             fetched_at=datetime.now(UTC),
@@ -2060,7 +2063,7 @@ def test_create_profiles_table_rolls_back_on_failure(tmp_path: Path) -> None:
         }
         raise RuntimeError("Simulated database error")
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         metadata = TableMetadata(
             type="profiles",
             fetched_at=datetime.now(UTC),
@@ -2101,7 +2104,7 @@ def test_rollback_allows_retry_without_table_exists_error(tmp_path: Path) -> Non
             raise ValueError("First attempt fails")
         # Second attempt succeeds
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         metadata = TableMetadata(
             type="events",
             fetched_at=datetime.now(UTC),
@@ -2355,7 +2358,7 @@ class TestDatabaseLocking:
 
         # Should raise DatabaseLockedError
         with pytest.raises(DatabaseLockedError) as exc_info:
-            StorageEngine(path=db_path)
+            StorageEngine(path=db_path, read_only=False)
 
         # Error should contain the database path
         assert str(db_path) in str(exc_info.value.message)
@@ -2380,7 +2383,7 @@ class TestDatabaseLocking:
         monkeypatch.setattr(duckdb, "connect", mock_connect)
 
         with pytest.raises(DatabaseLockedError) as exc_info:
-            StorageEngine(path=db_path)
+            StorageEngine(path=db_path, read_only=False)
 
         assert exc_info.value.details["db_path"] == str(db_path)
         assert exc_info.value.holding_pid == 99999
@@ -2404,7 +2407,7 @@ class TestDatabaseLocking:
         monkeypatch.setattr(duckdb, "connect", mock_connect)
 
         with pytest.raises(DatabaseLockedError) as exc_info:
-            StorageEngine(path=db_path)
+            StorageEngine(path=db_path, read_only=False)
 
         assert exc_info.value.holding_pid is None
 
@@ -2422,18 +2425,18 @@ class TestDatabaseLocking:
         monkeypatch.setattr(duckdb, "connect", mock_connect)
 
         with pytest.raises(OSError, match="Failed to create database"):
-            StorageEngine(path=db_path)
+            StorageEngine(path=db_path, read_only=False)
 
     def test_lock_released_after_close(self, tmp_path: Path) -> None:
         """Database can be opened after previous connection is closed."""
         db_path = tmp_path / "test.db"
 
         # Open and close first connection
-        storage1 = StorageEngine(path=db_path)
+        storage1 = StorageEngine(path=db_path, read_only=False)
         storage1.close()
 
         # Second connection should succeed
-        storage2 = StorageEngine(path=db_path)
+        storage2 = StorageEngine(path=db_path, read_only=False)
         try:
             assert storage2.connection is not None
         finally:
@@ -2444,11 +2447,11 @@ class TestDatabaseLocking:
         db_path = tmp_path / "test.db"
 
         # Use context manager
-        with StorageEngine(path=db_path):
+        with StorageEngine(path=db_path, read_only=False):
             pass  # Lock held during context
 
         # After context exits, should be able to open
-        with StorageEngine(path=db_path) as storage:
+        with StorageEngine(path=db_path, read_only=False) as storage:
             assert storage.connection is not None
 
     def test_memory_databases_dont_conflict(self) -> None:
@@ -2478,7 +2481,7 @@ class TestReadOnlyMode:
         db_path = tmp_path / "test.db"
 
         # Create database with write connection
-        with StorageEngine(path=db_path) as writer:
+        with StorageEngine(path=db_path, read_only=False) as writer:
             writer.connection.execute("CREATE TABLE test (id INTEGER)")
             writer.connection.execute("INSERT INTO test VALUES (1), (2), (3)")
 
@@ -2495,7 +2498,7 @@ class TestReadOnlyMode:
         db_path = tmp_path / "test.db"
 
         # Create database
-        with StorageEngine(path=db_path) as writer:
+        with StorageEngine(path=db_path, read_only=False) as writer:
             writer.connection.execute("CREATE TABLE test (id INTEGER)")
 
         # Try to insert via read-only connection
@@ -2512,7 +2515,7 @@ class TestReadOnlyMode:
         db_path = tmp_path / "test.db"
 
         # Create database with data
-        with StorageEngine(path=db_path) as writer:
+        with StorageEngine(path=db_path, read_only=False) as writer:
             writer.connection.execute("CREATE TABLE test (id INTEGER)")
             writer.connection.execute("INSERT INTO test VALUES (1)")
 
@@ -2530,7 +2533,7 @@ class TestReadOnlyMode:
         db_path = tmp_path / "test.db"
 
         # Create database with data
-        with StorageEngine(path=db_path) as writer:
+        with StorageEngine(path=db_path, read_only=False) as writer:
             writer.connection.execute("CREATE TABLE test (id INTEGER)")
             writer.connection.execute("INSERT INTO test VALUES (1)")
 
@@ -2548,7 +2551,7 @@ class TestReadOnlyMode:
         db_path = tmp_path / "test.db"
 
         # Create empty database
-        with StorageEngine(path=db_path):
+        with StorageEngine(path=db_path, read_only=False):
             pass
 
         # Try to create table via read-only connection
@@ -2563,7 +2566,7 @@ class TestReadOnlyMode:
         db_path = tmp_path / "test.db"
 
         # Create database with data
-        with StorageEngine(path=db_path) as writer:
+        with StorageEngine(path=db_path, read_only=False) as writer:
             writer.connection.execute("CREATE TABLE test (id INTEGER)")
             writer.connection.execute("INSERT INTO test VALUES (1), (2)")
 
@@ -2593,7 +2596,7 @@ class TestReadOnlyMode:
         db_path = tmp_path / "test.db"
 
         # Create database with data
-        with StorageEngine(path=db_path) as writer:
+        with StorageEngine(path=db_path, read_only=False) as writer:
             writer.connection.execute("CREATE TABLE test (id INTEGER)")
             writer.connection.execute("INSERT INTO test VALUES (1)")
 
@@ -2608,7 +2611,7 @@ class TestReadOnlyMode:
         db_path = tmp_path / "test.db"
 
         # Create database
-        with StorageEngine(path=db_path):
+        with StorageEngine(path=db_path, read_only=False):
             pass
 
         # Check property on both modes
@@ -2622,5 +2625,5 @@ class TestReadOnlyMode:
         """Default read_only value is False."""
         db_path = tmp_path / "test.db"
 
-        with StorageEngine(path=db_path) as storage:
+        with StorageEngine(path=db_path, read_only=False) as storage:
             assert storage.read_only is False

@@ -27,7 +27,7 @@ def test_database_persists_across_sessions(tmp_path: Path) -> None:
     db_path = tmp_path / "persistent.db"
 
     # Session 1: Create database
-    storage1 = StorageEngine(path=db_path)
+    storage1 = StorageEngine(path=db_path, read_only=False)
     try:
         # Create a simple table to verify persistence
         storage1.connection.execute("""
@@ -45,7 +45,7 @@ def test_database_persists_across_sessions(tmp_path: Path) -> None:
     assert db_path.exists()
 
     # Session 2: Reopen database
-    storage2 = StorageEngine(path=db_path)
+    storage2 = StorageEngine(path=db_path, read_only=False)
     try:
         # Verify table and data still exist
         result = storage2.connection.execute(
@@ -61,16 +61,16 @@ def test_multiple_reopens_preserve_data(tmp_path: Path) -> None:
     db_path = tmp_path / "multi_session.db"
 
     # Session 1: Create and insert
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         storage.connection.execute("CREATE TABLE data (id INTEGER, name VARCHAR)")
         storage.connection.execute("INSERT INTO data VALUES (1, 'first')")
 
     # Session 2: Insert more
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         storage.connection.execute("INSERT INTO data VALUES (2, 'second')")
 
     # Session 3: Verify all data present
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         result = storage.connection.execute("SELECT COUNT(*) FROM data").fetchone()
         assert result == (2,)
 
@@ -82,7 +82,7 @@ def test_database_file_format_is_duckdb(tmp_path: Path) -> None:
     db_path = tmp_path / "format_test.db"
 
     # Create via StorageEngine
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
     storage.close()
 
     # Verify we can open it directly with duckdb
@@ -108,7 +108,7 @@ def test_large_dataset_ingestion_100k_events(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "large_dataset.db"
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     try:
         # Create generator for 100K events
@@ -170,7 +170,7 @@ def test_large_dataset_ingestion_50k_profiles(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "large_profiles.db"
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     try:
         # Create generator for 50K profiles
@@ -230,7 +230,7 @@ def test_memory_usage_stays_constant_for_1m_events(tmp_path: Path) -> None:
     # Start memory tracking
     tracemalloc.start()
 
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     try:
         # Create generator for 1M events
@@ -283,9 +283,9 @@ def test_memory_usage_stays_constant_for_1m_events(tmp_path: Path) -> None:
         tracemalloc.stop()
 
         # Verify peak memory stayed under 500MB
-        assert (
-            peak_mb < 500
-        ), f"Peak memory usage {peak_mb:.2f} MB exceeded 500 MB limit"
+        assert peak_mb < 500, (
+            f"Peak memory usage {peak_mb:.2f} MB exceeded 500 MB limit"
+        )
 
         # Verify memory didn't grow linearly with dataset size
         # If memory grew linearly, 1M events would use ~10x more than 100K events
@@ -296,9 +296,9 @@ def test_memory_usage_stays_constant_for_1m_events(tmp_path: Path) -> None:
             memory_growth = last_snapshot["current_mb"] - first_snapshot["current_mb"]
 
             # Memory growth should be less than 100MB between first and last snapshot
-            assert (
-                memory_growth < 100
-            ), f"Memory grew by {memory_growth:.2f} MB, indicating non-constant usage"
+            assert memory_growth < 100, (
+                f"Memory grew by {memory_growth:.2f} MB, indicating non-constant usage"
+            )
 
         # Verify data in database
         result = storage.connection.execute(
@@ -490,7 +490,7 @@ def test_table_replacement_pattern_create_drop_recreate(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "replacement.db"
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     try:
         # Step 1: Create initial table
@@ -633,7 +633,7 @@ def test_table_replacement_with_different_table_types(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "mixed_types.db"
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     try:
         # Create events table
@@ -703,7 +703,7 @@ def test_introspection_workflow_create_list_inspect_verify(tmp_path: Path) -> No
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "introspection.db"
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     try:
         # Step 1: Create multiple tables with different schemas and metadata
@@ -887,7 +887,7 @@ def test_introspection_workflow_create_list_inspect_verify(tmp_path: Path) -> No
 def test_introspection_on_empty_database(tmp_path: Path) -> None:
     """Test that introspection works on empty database (no user tables)."""
     db_path = tmp_path / "empty.db"
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     try:
         # List tables should return empty list
@@ -905,7 +905,7 @@ def test_introspection_after_table_drop(tmp_path: Path) -> None:
     from mixpanel_data.types import TableMetadata
 
     db_path = tmp_path / "drop_test.db"
-    storage = StorageEngine(path=db_path)
+    storage = StorageEngine(path=db_path, read_only=False)
 
     try:
         # Create two tables

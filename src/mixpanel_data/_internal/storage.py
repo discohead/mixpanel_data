@@ -78,7 +78,7 @@ class StorageEngine:
         self,
         path: Path | None = None,
         *,
-        read_only: bool = False,
+        read_only: bool = True,
         _ephemeral: bool = False,
         _in_memory: bool = False,
     ) -> None:
@@ -89,7 +89,7 @@ class StorageEngine:
             read_only: Open database in read-only mode. When True, the
                 connection allows SELECT queries but blocks INSERT, UPDATE,
                 DELETE, and DDL operations. Read-only connections can be
-                opened even when a write lock is held by another process.
+                opened concurrently, enabling parallel query operations.
             _ephemeral: Internal flag to mark database as ephemeral.
                 DO NOT USE DIRECTLY - use StorageEngine.ephemeral() instead.
                 This parameter is keyword-only and prefixed with underscore
@@ -155,7 +155,7 @@ class StorageEngine:
                     # Example: "Conflicting lock is held in ... (PID 12345)"
                     pid_match = re.search(r"PID (\d+)", error_str)
                     holding_pid = int(pid_match.group(1)) if pid_match else None
-                    raise DatabaseLockedError(str(path), holding_pid) from None
+                    raise DatabaseLockedError(str(path), holding_pid) from e
                 # Other IO errors - wrap as OSError
                 raise OSError(f"Failed to create database at {path}: {e}") from e
             except Exception as e:
@@ -190,8 +190,8 @@ class StorageEngine:
         # File is closed here. Delete it so DuckDB can create it fresh.
         temp_path.unlink()
 
-        # Create storage engine with ephemeral flag
-        storage = cls(path=temp_path, _ephemeral=True)
+        # Create storage engine with ephemeral flag (write access needed)
+        storage = cls(path=temp_path, read_only=False, _ephemeral=True)
 
         return storage
 
@@ -222,14 +222,16 @@ class StorageEngine:
             # Database gone - no cleanup needed
             ```
         """
-        return cls(path=None, _in_memory=True)
+        return cls(path=None, read_only=False, _in_memory=True)
 
     @classmethod
-    def open_existing(cls, path: Path) -> StorageEngine:
+    def open_existing(cls, path: Path, *, read_only: bool = True) -> StorageEngine:
         """Open existing database file.
 
         Args:
             path: Path to existing database file.
+            read_only: If True (default), open in read-only mode allowing
+                concurrent reads. Set to False for write access.
 
         Returns:
             StorageEngine instance.
@@ -248,7 +250,7 @@ class StorageEngine:
             raise FileNotFoundError(f"Database file not found: {path}")
 
         # Open existing database
-        return cls(path=path)
+        return cls(path=path, read_only=read_only)
 
     @property
     def path(self) -> Path | None:

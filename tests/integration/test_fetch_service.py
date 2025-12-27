@@ -69,7 +69,7 @@ def test_fetch_events_with_real_duckdb(tmp_path: Path) -> None:
 
     mock_api_client.export_events.return_value = mock_export_events()
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         fetcher = FetcherService(mock_api_client, storage)
 
         # Fetch events
@@ -140,7 +140,7 @@ def test_fetch_events_json_properties_queryable(tmp_path: Path) -> None:
 
     mock_api_client.export_events.return_value = mock_export_events()
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         fetcher = FetcherService(mock_api_client, storage)
         fetcher.fetch_events(
             name="purchases",
@@ -182,7 +182,7 @@ def test_fetch_events_table_exists_error_with_real_storage(tmp_path: Path) -> No
         ]
     )
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         fetcher = FetcherService(mock_api_client, storage)
 
         # First fetch should succeed
@@ -235,7 +235,7 @@ def test_fetch_events_progress_callback_integration(tmp_path: Path) -> None:
 
     mock_api_client.export_events.side_effect = mock_export_events
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         fetcher = FetcherService(mock_api_client, storage)
 
         progress_values: list[int] = []
@@ -303,7 +303,7 @@ def test_fetch_profiles_with_real_duckdb(tmp_path: Path) -> None:
 
     mock_api_client.export_profiles.return_value = mock_export_profiles()
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         fetcher = FetcherService(mock_api_client, storage)
 
         # Fetch profiles
@@ -360,7 +360,7 @@ def test_fetch_profiles_json_properties_queryable(tmp_path: Path) -> None:
 
     mock_api_client.export_profiles.return_value = mock_export_profiles()
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         fetcher = FetcherService(mock_api_client, storage)
         fetcher.fetch_profiles(name="users")
 
@@ -395,7 +395,7 @@ def test_fetch_profiles_table_exists_error_with_real_storage(tmp_path: Path) -> 
         ]
     )
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         fetcher = FetcherService(mock_api_client, storage)
 
         # First fetch should succeed
@@ -455,7 +455,7 @@ def test_events_and_profiles_can_be_joined(tmp_path: Path) -> None:
             },
         }
 
-    with StorageEngine(path=db_path) as storage:
+    with StorageEngine(path=db_path, read_only=False) as storage:
         fetcher = FetcherService(mock_api_client, storage)
 
         # Fetch events

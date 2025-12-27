@@ -120,7 +120,7 @@ def fetch_events(
     # Parse events filter
     events_list = [e.strip() for e in events.split(",")] if events else None
 
-    workspace = get_workspace(ctx)
+    workspace = get_workspace(ctx, read_only=False)
 
     # Streaming mode: output JSONL to stdout
     if stdout:
@@ -220,7 +220,7 @@ def fetch_profiles(
         err_console.print("[red]Error:[/red] --raw requires --stdout")
         raise typer.Exit(3)
 
-    workspace = get_workspace(ctx)
+    workspace = get_workspace(ctx, read_only=False)
 
     # Streaming mode: output JSONL to stdout
     if stdout:

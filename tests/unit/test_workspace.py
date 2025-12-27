@@ -1057,7 +1057,7 @@ class TestQueryOnlyMode:
         """T081: Test Workspace.open() creating query-only workspace."""
         # Create a database file first
         db_path = temp_dir / "test.db"
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
         storage.close()
 
         ws = Workspace.open(db_path)
@@ -1074,7 +1074,7 @@ class TestQueryOnlyMode:
         """T082: Test sql operations working without credentials."""
         # Create a database with data
         db_path = temp_dir / "test.db"
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
         storage.connection.execute("CREATE TABLE test (id INTEGER)")
         storage.connection.execute("INSERT INTO test VALUES (1), (2)")
         storage.close()
@@ -1093,7 +1093,7 @@ class TestQueryOnlyMode:
         """T083: Test API methods raising ConfigError in query-only mode."""
         # Create a database file
         db_path = temp_dir / "test.db"
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
         storage.close()
 
         ws = Workspace.open(db_path)
@@ -1112,7 +1112,7 @@ class TestQueryOnlyMode:
         """Test .api property raises ConfigError in query-only mode."""
         # Create a database file
         db_path = temp_dir / "test.db"
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
         storage.close()
 
         ws = Workspace.open(db_path)
@@ -1303,7 +1303,7 @@ class TestEscapeHatches:
         """T102: Test api property raising ConfigError when no credentials."""
         # Create a database file
         db_path = temp_dir / "test.db"
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
         storage.close()
 
         ws = Workspace.open(db_path)
@@ -1683,6 +1683,7 @@ class TestLazyStorageInitialization:
         """Calling storage method should initialize storage on first access."""
         ws = Workspace(
             path=tmp_path / "test.db",
+            read_only=False,  # Need write access to create database
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
         )
@@ -1710,6 +1711,7 @@ class TestLazyStorageInitialization:
         """Storage property should return same instance on repeated access."""
         ws = Workspace(
             path=tmp_path / "test.db",
+            read_only=False,  # Need write access to create database
             _config_manager=mock_config_manager,
             _api_client=mock_api_client,
         )
@@ -1809,5 +1811,135 @@ class TestLazyStorageInitialization:
 
             # Storage should still be None
             assert ws._storage is None
+        finally:
+            ws.close()
+
+
+class TestReadOnlyMode:
+    """Tests for read-only Workspace mode (Phase 3).
+
+    Verify that read-only connections allow concurrent reads.
+    """
+
+    def test_workspace_read_only_flag_stored(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """read_only flag should be stored in Workspace."""
+        ws = Workspace(
+            path=tmp_path / "test.db",
+            read_only=True,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            assert ws._read_only is True
+        finally:
+            ws.close()
+
+    def test_workspace_default_is_read_only(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Workspace should default to read-only for concurrent read access."""
+        ws = Workspace(
+            path=tmp_path / "test.db",
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            assert ws._read_only is True
+        finally:
+            ws.close()
+
+    def test_storage_created_with_read_only_flag(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Storage should be created with read_only flag from Workspace."""
+        # First create a database
+        db_path = tmp_path / "test.db"
+        storage = StorageEngine(path=db_path, read_only=False)
+        storage.close()
+
+        # Now open it read-only
+        ws = Workspace(
+            path=db_path,
+            read_only=True,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            # Access storage to trigger lazy initialization
+            assert ws.storage.read_only is True
+        finally:
+            ws.close()
+
+    def test_workspace_open_defaults_to_read_only(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Workspace.open should default to read-only mode."""
+        # Create a database first
+        db_path = tmp_path / "test.db"
+        storage = StorageEngine(path=db_path, read_only=False)
+        storage.close()
+
+        # Open it
+        ws = Workspace.open(db_path)
+        try:
+            assert ws._read_only is True
+            assert ws.storage.read_only is True
+        finally:
+            ws.close()
+
+    def test_workspace_open_can_be_writable(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Workspace.open can be opened with read_only=False."""
+        # Create a database first
+        db_path = tmp_path / "test.db"
+        storage = StorageEngine(path=db_path, read_only=False)
+        storage.close()
+
+        # Open it writable
+        ws = Workspace.open(db_path, read_only=False)
+        try:
+            assert ws._read_only is False
+            assert ws.storage.read_only is False
+        finally:
+            ws.close()
+
+    def test_read_only_allows_queries(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Read-only Workspace should allow SQL queries."""
+        # Create a database with some data
+        db_path = tmp_path / "test.db"
+        storage = StorageEngine(path=db_path, read_only=False)
+        storage.execute("CREATE TABLE test (id INT, name VARCHAR)")
+        storage.execute("INSERT INTO test VALUES (1, 'a'), (2, 'b')")
+        storage.close()
+
+        # Open read-only and query
+        ws = Workspace(
+            path=db_path,
+            read_only=True,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            count = ws.sql_scalar("SELECT COUNT(*) FROM test")
+            assert count == 2
         finally:
             ws.close()

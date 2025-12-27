@@ -382,7 +382,7 @@ def inspect_drop(
             err_console.print("[yellow]Cancelled[/yellow]")
             raise typer.Exit(2)
 
-    workspace = get_workspace(ctx)
+    workspace = get_workspace(ctx, read_only=False)
     workspace.drop(table)
 
     output_result(ctx, {"dropped": table}, format=format)

@@ -131,6 +131,7 @@ class Workspace:
         project_id: str | None = None,
         region: str | None = None,
         path: str | Path | None = None,
+        read_only: bool = True,
         # Dependency injection for testing
         _config_manager: ConfigManager | None = None,
         _api_client: MixpanelAPIClient | None = None,
@@ -148,6 +149,8 @@ class Workspace:
             project_id: Override project ID from credentials.
             region: Override region from credentials (us, eu, in).
             path: Path to database file. If None, uses default location.
+            read_only: If True (default), open database in read-only mode
+                allowing concurrent reads. Set to False for write access.
             _config_manager: Injected ConfigManager for testing.
             _api_client: Injected MixpanelAPIClient for testing.
             _storage: Injected StorageEngine for testing.
@@ -186,6 +189,7 @@ class Workspace:
         # Store path for lazy initialization, or use injected storage directly
         self._db_path: Path | None = None
         self._storage: StorageEngine | None = None
+        self._read_only = read_only
 
         if _storage is not None:
             # Injected storage - use directly
@@ -307,7 +311,7 @@ class Workspace:
             ws.close()
 
     @classmethod
-    def open(cls, path: str | Path) -> Workspace:
+    def open(cls, path: str | Path, *, read_only: bool = True) -> Workspace:
         """Open an existing database for query-only access.
 
         This method opens a database without requiring API credentials.
@@ -315,9 +319,11 @@ class Workspace:
 
         Args:
             path: Path to existing database file.
+            read_only: If True (default), open in read-only mode allowing
+                concurrent reads. Set to False for write access.
 
         Returns:
-            Workspace: A workspace with read-only access to stored data.
+            Workspace: A workspace with access to stored data.
 
         Raises:
             FileNotFoundError: If database file doesn't exist.
@@ -330,14 +336,16 @@ class Workspace:
             ```
         """
         db_path = Path(path) if isinstance(path, str) else path
-        storage = StorageEngine.open_existing(db_path)
+        storage = StorageEngine.open_existing(db_path, read_only=read_only)
 
         # Create instance without credential resolution
         instance = object.__new__(cls)
         instance._config_manager = ConfigManager()
         instance._credentials = None
         instance._account_name = None
+        instance._db_path = db_path
         instance._storage = storage
+        instance._read_only = read_only
         instance._api_client = None
         instance._discovery = None
         instance._fetcher = None
@@ -521,13 +529,15 @@ class Workspace:
 
         Raises:
             DatabaseLockedError: If database is locked by another process.
+            OSError: If the database file cannot be created or opened due to
+                filesystem permission issues or other I/O errors.
             RuntimeError: If no database path configured (shouldn't happen
                 in normal use).
         """
         if self._storage is None:
             if self._db_path is None:
                 raise RuntimeError("No database path configured")
-            self._storage = StorageEngine(path=self._db_path)
+            self._storage = StorageEngine(path=self._db_path, read_only=self._read_only)
         return self._storage
 
     @property

@@ -500,7 +500,7 @@ class TestStreamingConfigError:
         """Test stream_events raises ConfigError when opened without credentials."""
         # Create a database file
         db_path = temp_dir / "test.db"
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
         storage.close()
 
         ws = Workspace.open(db_path)
@@ -519,7 +519,7 @@ class TestStreamingConfigError:
         """Test stream_profiles raises ConfigError when opened without credentials."""
         # Create a database file
         db_path = temp_dir / "test.db"
-        storage = StorageEngine(path=db_path)
+        storage = StorageEngine(path=db_path, read_only=False)
         storage.close()
 
         ws = Workspace.open(db_path)

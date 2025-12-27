@@ -124,14 +124,21 @@ def handle_errors(func: F) -> F:
     return wrapper  # type: ignore[return-value]
 
 
-def get_workspace(ctx: typer.Context) -> Workspace:
+def get_workspace(ctx: typer.Context, *, read_only: bool = True) -> Workspace:
     """Get or create workspace from context.
 
     Lazily initializes a Workspace instance, respecting the --account
     global option. The workspace is cached in the context for reuse.
 
+    Note: The read_only parameter only applies when creating a new workspace.
+    If a workspace already exists in context, that instance is returned
+    regardless of the read_only parameter.
+
     Args:
         ctx: Typer context with global options in obj dict.
+        read_only: If True (default), open database in read-only mode
+            allowing concurrent reads. Pass False for commands that
+            modify the database (fetch, drop).
 
     Returns:
         Configured Workspace instance.
@@ -144,7 +151,7 @@ def get_workspace(ctx: typer.Context) -> Workspace:
 
     if "workspace" not in ctx.obj or ctx.obj["workspace"] is None:
         account = ctx.obj.get("account")
-        ctx.obj["workspace"] = Workspace(account=account)
+        ctx.obj["workspace"] = Workspace(account=account, read_only=read_only)
     workspace: Workspace = ctx.obj["workspace"]
     return workspace
 
