@@ -12,7 +12,7 @@ import httpx
 import pytest
 
 from mixpanel_data._internal.services.discovery import DiscoveryService
-from mixpanel_data.exceptions import AuthenticationError, QueryError
+from mixpanel_data.exceptions import AuthenticationError, EventNotFoundError, QueryError
 
 if TYPE_CHECKING:
     from mixpanel_data._internal.api_client import MixpanelAPIClient
@@ -231,21 +231,50 @@ class TestListProperties:
         assert props1 == props2 == ["amount", "currency"]
         assert props3 == ["email", "user_id"]
 
-    def test_list_properties_with_query_error(
+    def test_list_properties_with_event_not_found_raises_with_suggestions(
         self,
         discovery_factory: Callable[
             [Callable[[httpx.Request], httpx.Response]], DiscoveryService
         ],
     ) -> None:
-        """list_properties() should propagate QueryError for invalid event."""
+        """list_properties() should raise EventNotFoundError with suggestions for 400."""
+        call_count = 0
 
-        def handler(_request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            # First call: get events for suggestions
+            if "/events/names" in str(request.url) or call_count == 2:
+                return httpx.Response(
+                    200, json=["Sign Up", "Login", "Purchase", "sign_up_complete"]
+                )
+            # Second call: get properties fails
             return httpx.Response(400, json={"error": "Invalid event name"})
 
         discovery = discovery_factory(handler)
 
+        with pytest.raises(EventNotFoundError) as exc_info:
+            discovery.list_properties("sign up")
+
+        # Should have case-insensitive match as suggestion
+        assert exc_info.value.event_name == "sign up"
+        assert "Sign Up" in exc_info.value.similar_events
+
+    def test_list_properties_with_query_error_non_400(
+        self,
+        discovery_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], DiscoveryService
+        ],
+    ) -> None:
+        """list_properties() should propagate QueryError for non-400 errors."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(403, json={"error": "Permission denied"})
+
+        discovery = discovery_factory(handler)
+
         with pytest.raises(QueryError):
-            discovery.list_properties("NonExistentEvent")
+            discovery.list_properties("SomeEvent")
 
     def test_list_properties_with_empty_result(
         self,
@@ -262,6 +291,111 @@ class TestListProperties:
         properties = discovery.list_properties("EmptyEvent")
 
         assert properties == []
+
+
+# =============================================================================
+# Fuzzy Matching Tests
+# =============================================================================
+
+
+class TestFindSimilarEvents:
+    """Tests for DiscoveryService._find_similar_events() fuzzy matching."""
+
+    def test_exact_case_insensitive_match(
+        self,
+        discovery_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], DiscoveryService
+        ],
+        success_handler: Callable[[httpx.Request], httpx.Response],
+    ) -> None:
+        """Should find exact case-insensitive matches first."""
+        discovery = discovery_factory(success_handler)
+        events = ["Sign Up", "Login", "Purchase"]
+
+        result = discovery._find_similar_events("sign up", events)
+
+        assert result == ["Sign Up"]
+
+    def test_substring_match(
+        self,
+        discovery_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], DiscoveryService
+        ],
+        success_handler: Callable[[httpx.Request], httpx.Response],
+    ) -> None:
+        """Should find events containing the query as substring."""
+        discovery = discovery_factory(success_handler)
+        events = ["User Sign Up", "Sign Up Complete", "Login", "sign_up_flow"]
+
+        result = discovery._find_similar_events("sign", events)
+
+        # Should be sorted by length (shorter = more specific)
+        assert "sign_up_flow" in result
+        assert "Login" not in result
+
+    def test_word_overlap_match(
+        self,
+        discovery_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], DiscoveryService
+        ],
+        success_handler: Callable[[httpx.Request], httpx.Response],
+    ) -> None:
+        """Should find events with overlapping words."""
+        discovery = discovery_factory(success_handler)
+        events = ["User Created", "User Updated", "Order Placed", "user_deleted"]
+
+        result = discovery._find_similar_events("user signup", events)
+
+        # Should find events with "user" word
+        assert "User Created" in result
+        assert "User Updated" in result
+        assert "user_deleted" in result
+        assert "Order Placed" not in result
+
+    def test_handles_underscores_and_hyphens(
+        self,
+        discovery_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], DiscoveryService
+        ],
+        success_handler: Callable[[httpx.Request], httpx.Response],
+    ) -> None:
+        """Should treat underscores and hyphens as word separators."""
+        discovery = discovery_factory(success_handler)
+        events = ["user_sign_up", "user-login", "User Logout"]
+
+        result = discovery._find_similar_events("user", events)
+
+        assert len(result) == 3
+
+    def test_limits_to_five_results(
+        self,
+        discovery_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], DiscoveryService
+        ],
+        success_handler: Callable[[httpx.Request], httpx.Response],
+    ) -> None:
+        """Should return at most 5 suggestions."""
+        discovery = discovery_factory(success_handler)
+        events = [f"Event {i}" for i in range(10)]
+
+        result = discovery._find_similar_events("event", events)
+
+        assert len(result) <= 5
+
+    def test_no_matches_returns_empty(
+        self,
+        discovery_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], DiscoveryService
+        ],
+        success_handler: Callable[[httpx.Request], httpx.Response],
+    ) -> None:
+        """Should return empty list when no matches found."""
+        discovery = discovery_factory(success_handler)
+        events = ["Login", "Logout", "Purchase"]
+
+        result = discovery._find_similar_events("completely_different", events)
+
+        assert result == []
 
 
 # =============================================================================

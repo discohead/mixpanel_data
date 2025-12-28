@@ -402,6 +402,61 @@ class RateLimitError(APIError):
 # Query Exceptions
 
 
+class EventNotFoundError(MixpanelDataError):
+    """Event name not found in Mixpanel project.
+
+    Raised when an event name is not found. Includes suggestions for
+    similar event names based on case-insensitive and substring matching
+    to help users correct typos or case mismatches.
+
+    Example:
+        ```python
+        try:
+            properties = discovery.list_properties("sign up")
+        except EventNotFoundError as e:
+            print(f"Event '{e.event_name}' not found.")
+            if e.similar_events:
+                print(f"Did you mean: {', '.join(e.similar_events)}")
+        ```
+    """
+
+    def __init__(
+        self,
+        event_name: str,
+        similar_events: list[str] | None = None,
+    ) -> None:
+        """Initialize EventNotFoundError.
+
+        Args:
+            event_name: The event name that was not found.
+            similar_events: List of similar event names to suggest.
+        """
+        self._event_name = event_name
+        self._similar_events = similar_events or []
+
+        message = f"Event '{event_name}' not found."
+        if self._similar_events:
+            suggestions = ", ".join(f"'{e}'" for e in self._similar_events[:5])
+            message += f" Did you mean: {suggestions}?"
+
+        details: dict[str, Any] = {
+            "event_name": event_name,
+            "similar_events": self._similar_events,
+        }
+
+        super().__init__(message, code="EVENT_NOT_FOUND", details=details)
+
+    @property
+    def event_name(self) -> str:
+        """The event name that was not found."""
+        return self._event_name
+
+    @property
+    def similar_events(self) -> list[str]:
+        """List of similar event names."""
+        return self._similar_events
+
+
 class QueryError(APIError):
     """Query execution failed (HTTP 400 or query-specific error).
 
@@ -843,3 +898,76 @@ class JQLSyntaxError(QueryError):
             return match.group(1)
 
         return None
+
+
+# Validation Exceptions
+
+
+class DateRangeTooLargeError(MixpanelDataError):
+    """Date range exceeds maximum allowed by Mixpanel API.
+
+    The Mixpanel Export API limits requests to 100 days maximum.
+    Split large date ranges into smaller chunks.
+
+    Example:
+        ```python
+        try:
+            events = fetcher.fetch_events("2024-01-01", "2024-06-30")
+        except DateRangeTooLargeError as e:
+            print(f"Range is {e.days_requested} days, max is {e.max_days}")
+        ```
+    """
+
+    def __init__(
+        self,
+        from_date: str,
+        to_date: str,
+        days_requested: int,
+        max_days: int = 100,
+    ) -> None:
+        """Initialize DateRangeTooLargeError.
+
+        Args:
+            from_date: Start date that was requested.
+            to_date: End date that was requested.
+            days_requested: Number of days in the requested range.
+            max_days: Maximum allowed days (default: 100).
+        """
+        self._from_date = from_date
+        self._to_date = to_date
+        self._days_requested = days_requested
+        self._max_days = max_days
+
+        message = (
+            f"Date range from {from_date} to {to_date} spans {days_requested} days, "
+            f"but maximum is {max_days} days. Split your request into smaller chunks."
+        )
+
+        details: dict[str, Any] = {
+            "from_date": from_date,
+            "to_date": to_date,
+            "days_requested": days_requested,
+            "max_days": max_days,
+        }
+
+        super().__init__(message, code="DATE_RANGE_TOO_LARGE", details=details)
+
+    @property
+    def from_date(self) -> str:
+        """Start date that was requested."""
+        return self._from_date
+
+    @property
+    def to_date(self) -> str:
+        """End date that was requested."""
+        return self._to_date
+
+    @property
+    def days_requested(self) -> int:
+        """Number of days in the requested range."""
+        return self._days_requested
+
+    @property
+    def max_days(self) -> int:
+        """Maximum allowed days."""
+        return self._max_days

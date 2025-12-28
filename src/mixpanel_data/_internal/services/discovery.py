@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from mixpanel_data.exceptions import EventNotFoundError, QueryError
 from mixpanel_data.types import (
     BookmarkInfo,
     BookmarkType,
@@ -210,7 +211,7 @@ class DiscoveryService:
 
         Raises:
             AuthenticationError: Invalid credentials.
-            QueryError: Event does not exist.
+            EventNotFoundError: Event does not exist (includes suggestions).
 
         Note:
             Results are cached per event for the lifetime of this service instance.
@@ -219,10 +220,70 @@ class DiscoveryService:
         if cache_key in self._cache:
             return list(self._cache[cache_key])
 
-        result = self._api_client.get_event_properties(event)
+        try:
+            result = self._api_client.get_event_properties(event)
+        except QueryError as e:
+            # If event not found (400 error), provide helpful suggestions
+            if e.status_code == 400:
+                available_events = self.list_events()
+                similar = self._find_similar_events(event, available_events)
+                raise EventNotFoundError(
+                    event_name=event,
+                    similar_events=similar,
+                ) from e
+            raise
+
         sorted_result = sorted(result)
         self._cache[cache_key] = sorted_result
         return list(sorted_result)
+
+    def _find_similar_events(self, query: str, events: list[str]) -> list[str]:
+        """Find events with similar names for suggestions.
+
+        Uses a progressive matching strategy:
+        1. Exact case-insensitive match (highest priority)
+        2. Substring matches (query appears in event name)
+        3. Word overlap matches (shared words between query and event)
+
+        Args:
+            query: The event name that was not found.
+            events: List of available event names.
+
+        Returns:
+            List of up to 5 similar event names, ordered by relevance.
+        """
+        query_lower = query.lower()
+
+        # 1. Exact case-insensitive match (highest priority)
+        exact_matches = [e for e in events if e.lower() == query_lower]
+        if exact_matches:
+            return exact_matches
+
+        # 2. Substring matches (query contained in event name)
+        substring_matches = [e for e in events if query_lower in e.lower()]
+        if substring_matches:
+            # Sort by length (shorter = more specific match)
+            return sorted(substring_matches, key=lambda x: len(x))[:5]
+
+        # 3. Word overlap matches
+        # Split query into words (handle spaces, underscores, hyphens)
+        import re
+
+        query_words = set(re.split(r"[\s_\-]+", query_lower))
+        word_matches: list[tuple[str, int]] = []
+
+        for e in events:
+            event_words = set(re.split(r"[\s_\-]+", e.lower()))
+            overlap = len(query_words & event_words)
+            if overlap > 0:
+                word_matches.append((e, overlap))
+
+        if word_matches:
+            # Sort by overlap count (descending), then by name length
+            word_matches.sort(key=lambda x: (-x[1], len(x[0])))
+            return [e for e, _ in word_matches[:5]]
+
+        return []
 
     def list_property_values(
         self,

@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from mixpanel_data.exceptions import DateRangeTooLargeError
 from mixpanel_data.types import FetchResult, TableMetadata
 
 if TYPE_CHECKING:
@@ -19,6 +20,14 @@ if TYPE_CHECKING:
     from mixpanel_data._internal.storage import StorageEngine
 
 _logger = logging.getLogger(__name__)
+
+# Reserved keys that _transform_event extracts from properties.
+# These are standard Mixpanel fields that become top-level columns in storage.
+_RESERVED_EVENT_KEYS = frozenset({"distinct_id", "time", "$insert_id"})
+
+# Reserved keys that _transform_profile extracts from properties.
+# These are standard Mixpanel fields that become top-level columns in storage.
+_RESERVED_PROFILE_KEYS = frozenset({"$last_seen"})
 
 
 def _transform_event(event: dict[str, Any]) -> dict[str, Any]:
@@ -120,6 +129,47 @@ class FetcherService:
         self._api_client = api_client
         self._storage = storage
 
+    def _validate_date_range(
+        self,
+        from_date: str,
+        to_date: str,
+        max_days: int = 100,
+    ) -> None:
+        """Validate date range format and constraints.
+
+        Mixpanel Export API limits requests to 100 days maximum.
+        This method validates the date range before making API calls.
+
+        Args:
+            from_date: Start date (YYYY-MM-DD format).
+            to_date: End date (YYYY-MM-DD format).
+            max_days: Maximum allowed days (default: 100).
+
+        Raises:
+            ValueError: If date format is invalid or from_date > to_date.
+            DateRangeTooLargeError: If range exceeds max_days.
+        """
+        try:
+            from_dt = datetime.strptime(from_date, "%Y-%m-%d")
+            to_dt = datetime.strptime(to_date, "%Y-%m-%d")
+        except ValueError as e:
+            raise ValueError(f"Invalid date format. Use YYYY-MM-DD. Error: {e}") from e
+
+        if from_dt > to_dt:
+            raise ValueError(
+                f"from_date ({from_date}) must be before or equal to to_date ({to_date})"
+            )
+
+        # Calculate days inclusive (+1 because both dates are inclusive)
+        days = (to_dt - from_dt).days + 1
+        if days > max_days:
+            raise DateRangeTooLargeError(
+                from_date=from_date,
+                to_date=to_date,
+                days_requested=days,
+                max_days=max_days,
+            )
+
     def fetch_events(
         self,
         name: str,
@@ -148,8 +198,12 @@ class FetcherService:
             AuthenticationError: If API credentials are invalid.
             RateLimitError: If Mixpanel rate limit is exceeded.
             QueryError: If filter expression is invalid.
-            ValueError: If table name is invalid.
+            ValueError: If table name or date format is invalid.
+            DateRangeTooLargeError: If date range exceeds 100 days.
         """
+        # Validate date range before making API calls
+        self._validate_date_range(from_date, to_date)
+
         start_time = datetime.now(UTC)
 
         # Wrap progress callback for API client

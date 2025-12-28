@@ -14,6 +14,8 @@ from mixpanel_data.exceptions import (
     ConfigError,
     DatabaseLockedError,
     DatabaseNotFoundError,
+    DateRangeTooLargeError,
+    EventNotFoundError,
     JQLSyntaxError,
     MixpanelDataError,
     QueryError,
@@ -263,6 +265,125 @@ class TestStorageExceptions:
         assert "12345.db" in json_str
 
 
+class TestEventNotFoundError:
+    """Tests for EventNotFoundError exception."""
+
+    def test_basic_creation(self) -> None:
+        """EventNotFoundError should have EVENT_NOT_FOUND code."""
+        exc = EventNotFoundError("sign up")
+
+        assert exc.code == "EVENT_NOT_FOUND"
+        assert exc.event_name == "sign up"
+        assert exc.similar_events == []
+        assert "sign up" in str(exc)
+        assert "not found" in str(exc).lower()
+
+    def test_with_suggestions(self) -> None:
+        """EventNotFoundError should include suggestions in message."""
+        exc = EventNotFoundError(
+            "sign up",
+            similar_events=["Sign Up", "Sign Up Complete"],
+        )
+
+        assert exc.similar_events == ["Sign Up", "Sign Up Complete"]
+        assert "Did you mean" in str(exc)
+        assert "'Sign Up'" in str(exc)
+        assert "'Sign Up Complete'" in str(exc)
+
+    def test_limits_suggestions_to_five(self) -> None:
+        """EventNotFoundError should show at most 5 suggestions."""
+        many_events = [f"Event {i}" for i in range(10)]
+        exc = EventNotFoundError("test", similar_events=many_events)
+
+        # Message should only contain first 5
+        message = str(exc)
+        assert "'Event 0'" in message
+        assert "'Event 4'" in message
+        assert "'Event 5'" not in message
+
+        # But all are stored in property
+        assert len(exc.similar_events) == 10
+
+    def test_inherits_from_base(self) -> None:
+        """EventNotFoundError should inherit from MixpanelDataError."""
+        exc = EventNotFoundError("test")
+        assert isinstance(exc, MixpanelDataError)
+
+    def test_to_dict_includes_event_info(self) -> None:
+        """to_dict should include event name and suggestions."""
+        exc = EventNotFoundError("signup", similar_events=["Sign Up"])
+
+        result = exc.to_dict()
+
+        assert result["code"] == "EVENT_NOT_FOUND"
+        assert result["details"]["event_name"] == "signup"
+        assert result["details"]["similar_events"] == ["Sign Up"]
+
+        # Verify JSON serializable
+        json_str = json.dumps(result)
+        assert "EVENT_NOT_FOUND" in json_str
+        assert "signup" in json_str
+
+
+class TestDateRangeTooLargeError:
+    """Tests for DateRangeTooLargeError exception."""
+
+    def test_basic_creation(self) -> None:
+        """DateRangeTooLargeError should have correct code and message."""
+        exc = DateRangeTooLargeError(
+            from_date="2024-01-01",
+            to_date="2024-06-30",
+            days_requested=182,
+        )
+
+        assert exc.code == "DATE_RANGE_TOO_LARGE"
+        assert exc.from_date == "2024-01-01"
+        assert exc.to_date == "2024-06-30"
+        assert exc.days_requested == 182
+        assert exc.max_days == 100  # default
+        assert "182 days" in str(exc)
+        assert "100 days" in str(exc)
+        assert "Split" in str(exc)
+
+    def test_custom_max_days(self) -> None:
+        """DateRangeTooLargeError should support custom max_days."""
+        exc = DateRangeTooLargeError(
+            from_date="2024-01-01",
+            to_date="2024-02-15",
+            days_requested=45,
+            max_days=30,
+        )
+
+        assert exc.max_days == 30
+        assert "30 days" in str(exc)
+
+    def test_inherits_from_base(self) -> None:
+        """DateRangeTooLargeError should inherit from MixpanelDataError."""
+        exc = DateRangeTooLargeError("2024-01-01", "2024-06-30", 182)
+        assert isinstance(exc, MixpanelDataError)
+
+    def test_to_dict_includes_date_info(self) -> None:
+        """to_dict should include all date range information."""
+        exc = DateRangeTooLargeError(
+            from_date="2024-01-01",
+            to_date="2024-06-30",
+            days_requested=182,
+            max_days=100,
+        )
+
+        result = exc.to_dict()
+
+        assert result["code"] == "DATE_RANGE_TOO_LARGE"
+        assert result["details"]["from_date"] == "2024-01-01"
+        assert result["details"]["to_date"] == "2024-06-30"
+        assert result["details"]["days_requested"] == 182
+        assert result["details"]["max_days"] == 100
+
+        # Verify JSON serializable
+        json_str = json.dumps(result)
+        assert "DATE_RANGE_TOO_LARGE" in json_str
+
+
 class TestExceptionHierarchy:
     """Tests for exception inheritance."""
 
@@ -280,6 +401,8 @@ class TestExceptionHierarchy:
             TableNotFoundError("test"),
             DatabaseLockedError("/path/to/db"),
             DatabaseNotFoundError("/path/to/db"),
+            EventNotFoundError("test"),
+            DateRangeTooLargeError("2024-01-01", "2024-06-30", 182),
         ]
 
         for exc in exceptions:
@@ -323,6 +446,8 @@ class TestExceptionHierarchy:
             TableNotFoundError: "TABLE_NOT_FOUND",
             DatabaseLockedError: "DATABASE_LOCKED",
             DatabaseNotFoundError: "DATABASE_NOT_FOUND",
+            EventNotFoundError: "EVENT_NOT_FOUND",
+            DateRangeTooLargeError: "DATE_RANGE_TOO_LARGE",
         }
 
         for exc_class, expected_code in expected_codes.items():
@@ -332,6 +457,10 @@ class TestExceptionHierarchy:
                 exc = exc_class("test_table")
             elif exc_class in (DatabaseLockedError, DatabaseNotFoundError):
                 exc = exc_class("/path/to/db")
+            elif exc_class is EventNotFoundError:
+                exc = exc_class("test_event")
+            elif exc_class is DateRangeTooLargeError:
+                exc = exc_class("2024-01-01", "2024-06-30", 182)
             else:
                 exc = exc_class("test message")
 

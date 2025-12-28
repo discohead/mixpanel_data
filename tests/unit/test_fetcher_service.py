@@ -17,7 +17,7 @@ from mixpanel_data._internal.services.fetcher import (
     _transform_event,
     _transform_profile,
 )
-from mixpanel_data.exceptions import TableExistsError
+from mixpanel_data.exceptions import DateRangeTooLargeError, TableExistsError
 
 # =============================================================================
 # Transform Function Tests
@@ -602,3 +602,91 @@ class TestFetchProfiles:
         result = fetcher.fetch_profiles(name="profiles")
 
         assert result.date_range is None
+
+
+# =============================================================================
+# Date Range Validation Tests
+# =============================================================================
+
+
+class TestDateRangeValidation:
+    """Tests for FetcherService._validate_date_range()."""
+
+    def test_valid_date_range_within_limit(self) -> None:
+        """Should accept valid date ranges within 100 days."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        # Should not raise for 30-day range
+        fetcher._validate_date_range("2024-01-01", "2024-01-30")
+
+    def test_valid_date_range_exactly_100_days(self) -> None:
+        """Should accept exactly 100 days (inclusive)."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        # 100 days: Jan 1 to Apr 9 (inclusive)
+        fetcher._validate_date_range("2024-01-01", "2024-04-09")
+
+    def test_date_range_too_large_raises_error(self) -> None:
+        """Should raise DateRangeTooLargeError for ranges over 100 days."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        with pytest.raises(DateRangeTooLargeError) as exc_info:
+            fetcher._validate_date_range("2024-01-01", "2024-06-30")
+
+        assert exc_info.value.from_date == "2024-01-01"
+        assert exc_info.value.to_date == "2024-06-30"
+        assert exc_info.value.days_requested == 182
+        assert exc_info.value.max_days == 100
+
+    def test_invalid_date_format_raises_value_error(self) -> None:
+        """Should raise ValueError for invalid date format."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        with pytest.raises(ValueError) as exc_info:
+            fetcher._validate_date_range("01-01-2024", "2024-01-31")
+
+        assert "Invalid date format" in str(exc_info.value)
+
+    def test_from_date_after_to_date_raises_value_error(self) -> None:
+        """Should raise ValueError when from_date is after to_date."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        with pytest.raises(ValueError) as exc_info:
+            fetcher._validate_date_range("2024-02-01", "2024-01-01")
+
+        assert "must be before or equal to" in str(exc_info.value)
+
+    def test_same_day_range_is_valid(self) -> None:
+        """Should accept same-day range (1 day)."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        # Same day = 1 day, which is valid
+        fetcher._validate_date_range("2024-01-15", "2024-01-15")
+
+    def test_fetch_events_validates_date_range(self) -> None:
+        """fetch_events should validate date range before calling API."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        with pytest.raises(DateRangeTooLargeError):
+            fetcher.fetch_events(
+                name="test_events",
+                from_date="2024-01-01",
+                to_date="2024-12-31",
+            )
+
+        # API should NOT have been called since validation failed first
+        mock_api_client.export_events.assert_not_called()

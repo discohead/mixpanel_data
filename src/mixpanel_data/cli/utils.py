@@ -27,6 +27,8 @@ from mixpanel_data.exceptions import (
     ConfigError,
     DatabaseLockedError,
     DatabaseNotFoundError,
+    DateRangeTooLargeError,
+    EventNotFoundError,
     MixpanelDataError,
     QueryError,
     RateLimitError,
@@ -41,7 +43,7 @@ if TYPE_CHECKING:
 # Console instances for stdout/stderr separation
 # Data output goes to stdout; progress/errors go to stderr
 console = Console()
-err_console = Console(stderr=True, force_terminal=not os.environ.get("NO_COLOR"))
+err_console = Console(stderr=True, no_color=bool(os.environ.get("NO_COLOR")))
 
 
 class ExitCode(IntEnum):
@@ -116,10 +118,40 @@ def handle_errors(func: F) -> F:
         except RateLimitError as e:
             err_console.print(f"[yellow]Rate limited:[/yellow] {e.message}")
             if e.retry_after:
-                err_console.print(f"Retry after {e.retry_after} seconds.")
+                err_console.print(
+                    f"[cyan]Wait {e.retry_after} seconds before retrying.[/cyan]"
+                )
+            # Show which endpoint was hit
+            if e.request_url:
+                endpoint = e.request_url.split("/")[-1].split("?")[0]
+                err_console.print(f"[dim]Endpoint: {endpoint}[/dim]")
+            err_console.print(
+                "[yellow]Tip:[/yellow] Use 'mp fetch' for bulk data, "
+                "then query locally with SQL."
+            )
             raise typer.Exit(ExitCode.RATE_LIMIT) from None
+        except EventNotFoundError as e:
+            err_console.print(f"[red]Event not found:[/red] '{e.event_name}'")
+            if e.similar_events:
+                suggestions = ", ".join(f"'{s}'" for s in e.similar_events[:5])
+                err_console.print(f"Did you mean: {suggestions}?")
+            raise typer.Exit(ExitCode.NOT_FOUND) from None
+        except DateRangeTooLargeError as e:
+            err_console.print(f"[red]Date range too large:[/red] {e.message}")
+            err_console.print("Split your request into chunks of 100 days or less.")
+            raise typer.Exit(ExitCode.INVALID_ARGS) from None
         except QueryError as e:
             err_console.print(f"[red]Query error:[/red] {e.message}")
+            # Show non-sensitive request context for debugging
+            if e.request_params:
+                for key, value in e.request_params.items():
+                    if key not in ("project_id",):
+                        err_console.print(f"  [dim]{key}:[/dim] {value}")
+            # Provide contextual hints
+            if e.status_code == 403:
+                err_console.print(
+                    "[yellow]Hint:[/yellow] Check service account permissions."
+                )
             raise typer.Exit(ExitCode.INVALID_ARGS) from None
         except ConfigError as e:
             err_console.print(f"[red]Configuration error:[/red] {e.message}")
@@ -127,6 +159,10 @@ def handle_errors(func: F) -> F:
         except MixpanelDataError as e:
             err_console.print(f"[red]Error:[/red] {e.message}")
             raise typer.Exit(ExitCode.GENERAL_ERROR) from None
+        except ValueError as e:
+            # Handle validation errors (e.g., invalid date format)
+            err_console.print(f"[red]Invalid argument:[/red] {e}")
+            raise typer.Exit(ExitCode.INVALID_ARGS) from None
 
     return wrapper  # type: ignore[return-value]
 

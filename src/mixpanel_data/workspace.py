@@ -33,6 +33,7 @@ Example:
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -794,10 +795,10 @@ class Workspace:
             ConfigError: If API credentials not available.
             AuthenticationError: If credentials are invalid.
         """
-        # Create progress callback if requested
+        # Create progress callback if requested (only for interactive terminals)
         progress_callback = None
         pbar = None
-        if progress:
+        if progress and sys.stderr.isatty():
             try:
                 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -853,10 +854,10 @@ class Workspace:
             TableExistsError: If table already exists.
             ConfigError: If API credentials not available.
         """
-        # Create progress callback if requested
+        # Create progress callback if requested (only for interactive terminals)
         progress_callback = None
         pbar = None
-        if progress:
+        if progress and sys.stderr.isatty():
             try:
                 from rich.progress import Progress, SpinnerColumn, TextColumn
 
