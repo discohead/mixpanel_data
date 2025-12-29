@@ -16,6 +16,7 @@ without recomputation.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -119,7 +120,7 @@ class SQLResult:
         """
         return len(self.rows)
 
-    def __iter__(self) -> Any:
+    def __iter__(self) -> Iterator[tuple[Any, ...]]:
         """Iterate over rows.
 
         Yields:
