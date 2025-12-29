@@ -54,10 +54,13 @@ def test_init_can_reopen_existing_database(tmp_path: Path) -> None:
         assert storage.connection is not None
 
 
-def test_init_with_invalid_path_raises_error() -> None:
+def test_init_with_invalid_path_raises_error(tmp_path: Path) -> None:
     """Test that StorageEngine raises error for invalid paths."""
-    # Try to create database in root directory (should fail on permissions)
-    invalid_path = Path("/root/cannot_write_here.db")
+    # Create a file, then try to create a database "inside" it
+    # This reliably fails on all systems (not permission-dependent)
+    blocker_file = tmp_path / "blocker.txt"
+    blocker_file.touch()
+    invalid_path = blocker_file / "test.db"
 
     with pytest.raises(OSError):
         StorageEngine(path=invalid_path)
