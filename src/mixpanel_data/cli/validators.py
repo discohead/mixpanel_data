@@ -10,7 +10,7 @@ from typing import Any, TypeVar, cast, get_args
 
 import typer
 
-from mixpanel_data._literal_types import CountType, HourDayUnit, TimeUnit
+from mixpanel_data._literal_types import CountType, HourDayUnit, TableType, TimeUnit
 from mixpanel_data.cli.utils import ExitCode, err_console
 from mixpanel_data.types import EntityType
 
@@ -107,3 +107,20 @@ def validate_entity_type(value: str, param_name: str = "--type") -> EntityType:
     """
     validate_literal(value, EntityType, param_name)
     return cast(EntityType, value)
+
+
+def validate_table_type(value: str, param_name: str = "--type") -> TableType:
+    """Validate table type for filtering.
+
+    Args:
+        value: String value from CLI. Valid types: "events", "profiles".
+        param_name: Parameter name for error message. Default: "--type".
+
+    Returns:
+        Validated value as TableType literal type.
+
+    Raises:
+        typer.Exit: With code 3 (INVALID_ARGS) if value is invalid.
+    """
+    validate_literal(value, TableType, param_name)
+    return cast(TableType, value)

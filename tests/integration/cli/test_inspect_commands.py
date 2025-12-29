@@ -423,6 +423,141 @@ class TestInspectDrop:
         mock_workspace.drop.assert_not_called()
 
 
+class TestInspectDropAll:
+    """Tests for mp inspect drop-all command."""
+
+    def test_drop_all_with_force_flag(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test dropping all tables with --force flag skips confirmation."""
+        mock_workspace.drop_all.return_value = None
+        mock_table1 = MagicMock()
+        mock_table1.name = "events1"
+        mock_table2 = MagicMock()
+        mock_table2.name = "profiles1"
+        mock_workspace.tables.return_value = [mock_table1, mock_table2]
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["inspect", "drop-all", "--force", "--format", "json"],
+            )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["dropped_count"] == 2
+        mock_workspace.drop_all.assert_called_once_with(type=None)
+
+    def test_drop_all_with_type_filter(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test dropping all tables with type filter."""
+        mock_workspace.drop_all.return_value = None
+        mock_table = MagicMock()
+        mock_table.name = "events1"
+        mock_table.type = "events"
+        mock_workspace.tables.return_value = [mock_table]
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "inspect",
+                    "drop-all",
+                    "--type",
+                    "events",
+                    "--force",
+                    "--format",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["type_filter"] == "events"
+        mock_workspace.drop_all.assert_called_once_with(type="events")
+
+    def test_drop_all_confirms_with_user(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test dropping all tables prompts for confirmation."""
+        mock_workspace.drop_all.return_value = None
+        mock_table = MagicMock()
+        mock_table.name = "events1"
+        mock_workspace.tables.return_value = [mock_table]
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["inspect", "drop-all", "--format", "json"],
+                input="y\n",
+            )
+
+        assert result.exit_code == 0
+        mock_workspace.drop_all.assert_called_once_with(type=None)
+
+    def test_drop_all_cancelled_by_user(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test dropping all tables cancelled when user declines."""
+        mock_table = MagicMock()
+        mock_table.name = "events1"
+        mock_workspace.tables.return_value = [mock_table]
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["inspect", "drop-all"],
+                input="n\n",
+            )
+
+        assert result.exit_code == 2  # Cancelled
+        mock_workspace.drop_all.assert_not_called()
+
+    def test_drop_all_no_tables(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test dropping all tables when no tables exist."""
+        mock_workspace.drop_all.return_value = None
+        mock_workspace.tables.return_value = []
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["inspect", "drop-all", "--force", "--format", "json"],
+            )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["dropped_count"] == 0
+
+    def test_drop_all_invalid_type(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test dropping all tables with invalid type returns error."""
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["inspect", "drop-all", "--type", "invalid", "--force"],
+            )
+
+        assert result.exit_code == 3  # INVALID_ARGS
+        mock_workspace.drop_all.assert_not_called()
+
+
 class TestInspectLexiconSchemas:
     """Tests for mp inspect lexicon-schemas command."""
 
