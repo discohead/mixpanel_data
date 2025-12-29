@@ -8,15 +8,17 @@
 # Setup (REQUIRED first)
 uv sync --all-extras
 
-# Verify changes
-just check          # Run ALL checks (lint, typecheck, test)
-just test -k name   # Run specific test
-just test-cov       # Tests with coverage (must be ≥90%)
+# Verify changes (run ALL before committing)
+uv run ruff format src/ tests/                    # Format code
+uv run ruff check src/ tests/                     # Lint code
+uv run mypy src/ tests/                           # Type check
+uv run pytest                                     # Run tests
 
-# Individual checks
-just fmt            # Format code
-just lint           # Lint code  
-just typecheck      # Type check
+# Run specific test
+uv run pytest -k test_name
+
+# Tests with coverage (must be ≥90%)
+uv run pytest --cov=src/mixpanel_data --cov-fail-under=90
 ```
 
 ## Tech Stack
@@ -117,12 +119,12 @@ Use library hierarchy, never bare `Exception`:
 1. Check `context/` for design specs
 2. Write test in `tests/unit/` first
 3. Implement minimal code to pass
-4. Run `just check`
+4. Run all checks: `uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ tests/ && uv run pytest`
 
 ### Fixing a Bug  
 1. Write failing test reproducing bug
 2. Fix implementation
-3. Run `just check`
+3. Run all checks: `uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run mypy src/ tests/ && uv run pytest`
 
 ### Adding CLI Command
 1. Add to `src/mixpanel_data/cli/commands/`
@@ -141,4 +143,4 @@ Use library hierarchy, never bare `Exception`:
 - Use mutable defaults (`list` → `field(default_factory=list)`)
 - Skip type annotations
 - Skip docstrings
-- Commit without `just check` passing
+- Commit without running all checks
