@@ -1,208 +1,144 @@
 # Copilot Instructions for mixpanel_data
 
-## Project Overview
+> Python library + CLI for Mixpanel analytics: discovery, live queries, local DuckDB analysis.
 
-**mixpanel_data** is a complete programmable interface to Mixpanel analytics—Python library and CLI for discovery, querying, and data extraction.
+## Quick Reference (Start Here)
 
-**Core capabilities:**
-- **Discovery**: Explore schema (events, properties, funnels, cohorts, bookmarks)
-- **Live queries**: Segmentation, funnels, retention, saved reports, JQL—direct API access
-- **Local analysis**: Fetch into DuckDB, query with SQL, iterate without re-fetching
-
-**Technology Stack**: Python 3.11+, Typer (CLI), Rich (output), Pydantic v2 (validation), DuckDB (storage), httpx (HTTP client), pandas (DataFrames), pytest, ruff, mypy
-
-## Build & Test Setup
-
-### Prerequisites
-- Python 3.11+ (3.12 recommended)
-- [uv](https://docs.astral.sh/uv/) - Python package manager
-
-### Development Commands
-
-| Command | Description |
-|---------|-------------|
-| `uv sync --all-extras` | Sync all dependencies |
-| `uv run pytest` | Run tests |
-| `uv run pytest --cov=src/mixpanel_data` | Run tests with coverage |
-| `uv run ruff check src/ tests/` | Lint code |
-| `uv run ruff check --fix src/ tests/` | Auto-fix lint errors |
-| `uv run ruff format src/ tests/` | Format code |
-| `uv run mypy src/` | Type check |
-| `uv build` | Build package |
-
-### Installation & Setup
-**ALWAYS sync dependencies before any development work:**
 ```bash
+# Setup (REQUIRED first)
 uv sync --all-extras
+
+# Verify changes
+just check          # Run ALL checks (lint, typecheck, test)
+just test -k name   # Run specific test
+just test-cov       # Tests with coverage (must be ≥90%)
+
+# Individual checks
+just fmt            # Format code
+just lint           # Lint code  
+just typecheck      # Type check
 ```
 
-### Testing
-```bash
-# Run all tests
-uv run pytest
+## Tech Stack
 
-# Run tests with coverage
-uv run pytest --cov=src/mixpanel_data --cov-report=term-missing
-
-# Run specific tests
-uv run pytest -k test_name
-uv run pytest tests/unit/test_config.py
-```
-
-Tests are organized:
-- `tests/unit/` - Unit tests (isolated, mocked dependencies)
-- `tests/integration/` - Integration tests (real component interaction)
-- `tests/conftest.py` - Shared fixtures
-
-### Pre-commit Checks
-**ALWAYS run all checks before committing:**
-```bash
-uv run ruff format src/ tests/
-uv run ruff check src/ tests/
-uv run mypy src/
-uv run pytest
-```
+- **Language**: Python 3.11+
+- **CLI**: Typer + Rich
+- **Validation**: Pydantic v2
+- **Database**: DuckDB
+- **HTTP**: httpx
+- **Testing**: pytest, ruff, mypy
 
 ## Project Structure
 
 ```
 src/mixpanel_data/
-├── __init__.py              # Public API exports
-├── workspace.py             # Workspace facade class
-├── auth.py                  # Public auth module
-├── exceptions.py            # Exception hierarchy
-├── types.py                 # Result types (FetchResult, SegmentationResult, etc.)
-├── py.typed                 # PEP 561 marker for typed package
-├── _internal/               # Private implementation (do not import directly)
-│   ├── config.py            # ConfigManager, Credentials
-│   ├── api_client.py        # MixpanelAPIClient
-│   ├── storage.py           # StorageEngine (DuckDB)
-│   └── services/            # Discovery, Fetcher, LiveQuery services
+├── workspace.py        # Main facade (entry point for library)
+├── auth.py             # Public auth module
+├── exceptions.py       # Exception hierarchy
+├── types.py            # Result types (frozen dataclasses)
+├── _internal/          # PRIVATE: never import in public signatures
+│   ├── config.py       # ConfigManager, Credentials
+│   ├── api_client.py   # MixpanelAPIClient
+│   ├── storage.py      # StorageEngine (DuckDB)
+│   └── services/       # Discovery, Fetcher, LiveQuery services
 └── cli/
-    ├── main.py              # Typer app entry point
-    ├── commands/            # auth, fetch, query, inspect command groups
-    ├── formatters.py        # JSON, JSONL, Table, CSV, Plain output
-    └── utils.py             # Error handling, console helpers
+    ├── main.py         # Typer entry point
+    └── commands/       # auth, fetch, query, inspect commands
 
 tests/
-├── conftest.py              # Shared pytest fixtures
-├── unit/                    # Unit tests
-└── integration/             # Integration tests
-
-context/                     # Design documentation
-├── mixpanel_data-design.md              # Architecture & public API
-├── mixpanel_data-project-brief.md       # Vision and goals
-├── mp-cli-project-spec.md               # CLI specification
-└── mixpanel-http-api-specification.md   # Mixpanel HTTP API reference
+├── unit/              # Isolated tests (mocked deps)
+└── integration/       # Component interaction tests
 ```
 
 ## Architecture
 
-**Layered Design:**
 ```
-CLI (Typer)              → mp commands, output formatting
-    ↓
-Public API               → Workspace, auth module, exceptions, types
-    ↓
-Services                 → DiscoveryService, FetcherService, LiveQueryService
-    ↓
-Infrastructure           → ConfigManager, MixpanelAPIClient, StorageEngine (DuckDB)
+CLI (Typer) → Public API (Workspace) → Services → Infrastructure (Config, API, Storage)
 ```
 
-**Three capability areas:**
-- **Discovery**: Explore schema (events, properties, funnels, cohorts, bookmarks)
-- **Live queries**: Call Mixpanel API directly (segmentation, funnels, retention, JQL)
-- **Local analysis**: Fetch → Store in DuckDB → Query with SQL → Iterate
+**Layer rules:**
+- CLI calls Workspace only (never storage/API directly)
+- Services call infrastructure only (no horizontal service calls)
 
-## Code Style
+## Code Requirements
 
-### Type Safety
-All code must be fully typed and pass `mypy --strict`:
-- No `Any` types without explicit justification
-- Use `Literal` types for constrained string values
-- Use `X | None` instead of `Optional[X]` (modern union syntax)
-- Missing type annotations are not acceptable
+### Types (STRICT)
+- All code passes `mypy --strict`
+- No `Any` without justification
+- Use `X | None` (not `Optional[X]`)
+- Use `Literal` for constrained strings
 
-### Documentation
-Every class, method, and function—public and private—requires a complete docstring:
+### Docstrings (REQUIRED)
+Every function/method/class needs:
 - One-line summary
-- Args section with type and description for each parameter
-- Returns section describing the return value
-- Raises section listing exceptions that may be raised
-- Example section where usage isn't immediately obvious
+- Args with types
+- Returns description
+- Raises section
 
-### Formatting & Linting
-Code must pass `ruff format` and `ruff check`. Run all checks before committing.
+### Testing (TDD)
+- Write test FIRST, then implement
+- Unit tests: `tests/unit/`
+- Integration tests: `tests/integration/`
+- Coverage minimum: 90%
 
-### Development Approach
-This project uses spec-driven development and test-first (TDD):
-1. Define behavior in specs/design docs before implementation
-2. Write tests that capture expected behavior
-3. Implement until tests pass
-4. Refactor while keeping tests green
+### Patterns
+- `frozen=True` on all dataclasses
+- `model_config = ConfigDict(frozen=True)` on Pydantic models
+- Use `Iterator[T]` not `list[T]` for streaming data
+- Use `field(default_factory=list)` not `[]` for defaults
 
-### Testing Requirements
-New functionality requires tests:
-- Unit tests: Isolated, mocked dependencies
-- Integration tests: Real component interaction
+## Exceptions
 
-## Key Design Decisions
+Use library hierarchy, never bare `Exception`:
 
-- **Explicit table management**: Tables never implicitly overwritten; raise `TableExistsError` if exists
-- **Streaming ingestion**: API returns iterators, storage accepts iterators (memory efficient)
-- **JSON property storage**: Properties stored as JSON columns, queried with `properties->>'$.field'`
-- **Immutable credentials**: Resolved once at Workspace construction
-- **Frozen dataclasses**: All result types are frozen (immutable)
-- **Dependency injection**: Services accept dependencies as constructor arguments
+**Valid classes:**
+- `MixpanelDataError` (base)
+- `ConfigError`
+- `AccountNotFoundError`
+- `AccountExistsError`
+- `AuthenticationError`
+- `RateLimitError`
+- `QueryError`
+- `TableExistsError`
+- `TableNotFoundError`
 
-## Configuration System
+**Always chain:** `raise XError(...) from e`
 
-Config file: `~/.mp/config.toml` (TOML format)
-- Multiple named accounts supported
-- One account marked as default
-- Environment variables override config file: `MP_USERNAME`, `MP_SECRET`, `MP_PROJECT_ID`, `MP_REGION`, `MP_CONFIG_PATH`
+## Security: Credentials
 
-## Code Review Guidelines
+**NEVER expose secrets:**
+- Use `secret.get_secret_value()` for SecretStr
+- Don't interpolate secrets in f-strings
+- Don't log Credentials without using `__repr__`
 
-### Architecture Enforcement
+## Agent Task Guidelines
 
-**Layer Boundaries**: Flag any code that:
-- Has CLI code directly accessing storage or API clients (should go through Workspace facade)
-- Has services calling other services horizontally (they should only call infrastructure)
+### Adding a Feature
+1. Check `context/` for design specs
+2. Write test in `tests/unit/` first
+3. Implement minimal code to pass
+4. Run `just check`
 
-**Private API for External Consumers**: The `src/mixpanel_data/_internal/` directory is private implementation that external consumers should not import. However, internal package code (like `workspace.py`, `auth.py`, CLI commands) legitimately imports from `_internal/` to implement the public API. Flag any:
-- Types from `_internal/` appearing in public function signatures (return types, parameters)
-- `__all__` exports that include `_internal` symbols
-- Documentation or examples that tell users to import from `_internal`
+### Fixing a Bug  
+1. Write failing test reproducing bug
+2. Fix implementation
+3. Run `just check`
 
-### Exception Handling
+### Adding CLI Command
+1. Add to `src/mixpanel_data/cli/commands/`
+2. Register in `main.py`
+3. Follow existing patterns (formatters, error handling)
 
-Use the library's exception hierarchy—never bare exceptions. Flag:
-- `except Exception:` or `except BaseException:` (should be `except MixpanelDataError:`)
-- `raise Exception(...)` (should use a specific subclass like `ConfigError`, `QueryError`, etc.)
-- Missing exception chaining (`raise X from e`)
+### Modifying Public API
+1. Edit `workspace.py` or `auth.py`
+2. Update `__init__.py` exports if needed
+3. Never expose `_internal` types in signatures
 
-**Valid exception classes**: `MixpanelDataError`, `ConfigError`, `AccountNotFoundError`, `AccountExistsError`, `AuthenticationError`, `RateLimitError`, `QueryError`, `TableExistsError`, `TableNotFoundError`
+## DO NOT
 
-### Security: Credential Handling
-
-Flag any code that could expose secrets:
-- Logging or printing `Credentials` objects without going through `__repr__` (which redacts)
-- Using `str(secret)` instead of `secret.get_secret_value()` for SecretStr
-- f-strings or `.format()` that interpolate secret values
-- Secrets in error messages or exception details dicts
-
-### Immutability Patterns
-
-All result types and credentials must be immutable. Flag:
-- Dataclasses without `frozen=True`
-- Pydantic models without `model_config = ConfigDict(frozen=True)`
-- Code that mutates frozen objects (should use `object.__setattr__` for internal caching only)
-- Mutable default arguments (`list` instead of `field(default_factory=list)`)
-
-### Streaming and Memory Efficiency
-
-Data should flow through iterators, not be loaded entirely into memory. Flag:
-- Functions returning `list[dict]` when they should return `Iterator[dict]`
-- Collecting all results with `list()` when streaming is possible
-- Large data structures stored in variables when they could be yielded
+- Import from `_internal/` in public signatures
+- Use `except Exception:` (use `MixpanelDataError`)
+- Use mutable defaults (`list` → `field(default_factory=list)`)
+- Skip type annotations
+- Skip docstrings
+- Commit without `just check` passing
