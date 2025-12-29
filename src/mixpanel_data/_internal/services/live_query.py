@@ -1246,8 +1246,11 @@ function main() {
         event_selectors: [{event: params.event}]
     })
     .reduce(function(accumulators, items) {
+        // JQL reduce pattern: accumulators[0] is the running accumulated result,
+        // while accumulators[1:] are partial results from parallel worker shards
+        // that need to be merged. We initialize from [0] then merge [1:] to avoid
+        // double-counting the accumulated value.
         var result = accumulators[0] || {total: 0, properties: {}};
-        // Start from index 1 to avoid double-counting accumulators[0]
         for (var i = 1; i < accumulators.length; i++) {
             result.total += accumulators[i].total || 0;
             for (var prop in accumulators[i].properties) {
@@ -1569,16 +1572,15 @@ def _transform_property_distribution(
     # Apply limit after computing total (percentages are relative to full data)
     limited_raw = raw[:limit]
 
-    values = tuple(
-        PropertyValueCount(
+    def make_value_count(item: dict[str, Any]) -> PropertyValueCount:
+        count = item.get("count", 0)
+        return PropertyValueCount(
             value=item.get("value"),
-            count=item.get("count", 0),
-            percentage=(item.get("count", 0) / total_count * 100)
-            if total_count > 0
-            else 0.0,
+            count=count,
+            percentage=(count / total_count * 100) if total_count > 0 else 0.0,
         )
-        for item in limited_raw
-    )
+
+    values = tuple(make_value_count(item) for item in limited_raw)
 
     return PropertyDistributionResult(
         event=event,
