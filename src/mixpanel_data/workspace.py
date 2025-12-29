@@ -53,6 +53,7 @@ from mixpanel_data._internal.services.fetcher import (
 )
 from mixpanel_data._internal.services.live_query import LiveQueryService
 from mixpanel_data._internal.storage import StorageEngine
+from mixpanel_data._literal_types import TableType
 from mixpanel_data.exceptions import ConfigError, QueryError
 from mixpanel_data.types import (
     ActivityFeedResult,
@@ -2104,11 +2105,35 @@ class Workspace:
         for name in names:
             self.storage.drop_table(name)
 
-    def drop_all(self, type: Literal["events", "profiles"] | None = None) -> None:
-        """Drop all tables, optionally filtered by type.
+    def drop_all(self, type: TableType | None = None) -> None:
+        """Drop all tables from the workspace, optionally filtered by type.
+
+        Permanently removes all tables and their data. When used with the type
+        parameter, only tables matching the specified type are dropped.
 
         Args:
-            type: If specified, only drop tables of this type.
+            type: Optional table type filter. Valid values: "events", "profiles".
+                  If None, all tables are dropped regardless of type.
+
+        Raises:
+            TableNotFoundError: If a table cannot be dropped (rare in practice).
+
+        Example:
+            Drop all event tables:
+
+            ```python
+            ws = Workspace()
+            ws.drop_all(type="events")  # Only drops event tables
+            ws.close()
+            ```
+
+            Drop all tables:
+
+            ```python
+            ws = Workspace()
+            ws.drop_all()  # Drops everything
+            ws.close()
+            ```
         """
         tables = self.storage.list_tables()
         for table in tables:
