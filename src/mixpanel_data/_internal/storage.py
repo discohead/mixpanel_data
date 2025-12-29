@@ -1265,6 +1265,60 @@ class StorageEngine:
                 response_body={"query": sql, "error": str(e)},
             ) from e
 
+    def execute_rows_params(self, sql: str, params: list[Any]) -> SQLResult:
+        """Execute parameterized SQL and return structured result with column metadata.
+
+        Similar to execute_rows(), but accepts SQL parameters for safe query
+        parameterization. Returns an SQLResult containing both column names
+        and row data.
+
+        Args:
+            sql: SQL query string with ? placeholders.
+            params: List of parameter values to substitute.
+
+        Returns:
+            SQLResult with columns and rows.
+
+        Raises:
+            QueryError: If query execution fails.
+
+        Examples:
+            Filter with parameter:
+
+            ```python
+            storage = StorageEngine(path=Path("data.db"))
+            result = storage.execute_rows_params(
+                "SELECT * FROM events WHERE event_name = ?",
+                ["Login"]
+            )
+            print(result.columns)  # ['event_name', 'count', ...]
+            for row in result.rows:
+                print(row)
+            ```
+
+            Multiple parameters:
+
+            ```python
+            result = storage.execute_rows_params(
+                "SELECT name FROM users WHERE age > ? AND city = ?",
+                [18, "NYC"]
+            )
+            for row in result.to_dicts():
+                print(row)  # {'name': 'Alice'}
+            ```
+        """
+        try:
+            cursor = self.connection.execute(sql, params)
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            return SQLResult(columns=columns, rows=rows)
+        except duckdb.Error as e:
+            raise QueryError(
+                f"Query execution failed: {e}",
+                status_code=0,  # Not an HTTP error
+                response_body={"query": sql, "params": params, "error": str(e)},
+            ) from e
+
     def list_tables(self) -> list[TableInfo]:
         """List all user-created tables in database.
 

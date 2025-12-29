@@ -1812,6 +1812,161 @@ def test_query_error_includes_query_text(tmp_path: Path) -> None:
 
 
 # =============================================================================
+# Parameterized SQL Execution Tests (execute_rows_params)
+# =============================================================================
+
+
+def test_execute_rows_params_returns_sql_result(tmp_path: Path) -> None:
+    """Test that execute_rows_params() returns SQLResult with columns and rows."""
+    from mixpanel_data.types import SQLResult
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create test data
+        storage.connection.execute("CREATE TABLE events (name VARCHAR, count INTEGER)")
+        storage.connection.execute(
+            "INSERT INTO events VALUES ('Signup', 100), ('Login', 200), ('Purchase', 50)"
+        )
+
+        # Execute parameterized query
+        result = storage.execute_rows_params(
+            "SELECT * FROM events WHERE name = ?", ["Login"]
+        )
+
+        # Should return SQLResult
+        assert isinstance(result, SQLResult)
+
+        # Should have correct columns
+        assert result.columns == ["name", "count"]
+
+        # Should have filtered result
+        assert len(result) == 1
+        assert result.rows[0] == ("Login", 200)
+
+
+def test_execute_rows_params_with_multiple_parameters(tmp_path: Path) -> None:
+    """Test that execute_rows_params() works with multiple parameters."""
+    from mixpanel_data.types import SQLResult
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create test data
+        storage.connection.execute(
+            "CREATE TABLE users (name VARCHAR, age INTEGER, city VARCHAR)"
+        )
+        storage.connection.execute(
+            "INSERT INTO users VALUES "
+            "('Alice', 30, 'NYC'), ('Bob', 25, 'LA'), ('Carol', 30, 'NYC')"
+        )
+
+        # Execute query with multiple parameters
+        result = storage.execute_rows_params(
+            "SELECT name FROM users WHERE age = ? AND city = ?",
+            [30, "NYC"],
+        )
+
+        # Should return SQLResult with multiple matches
+        assert isinstance(result, SQLResult)
+        assert result.columns == ["name"]
+        assert len(result) == 2
+        names = [row[0] for row in result.rows]
+        assert "Alice" in names
+        assert "Carol" in names
+
+
+def test_execute_rows_params_returns_empty_for_no_matches(tmp_path: Path) -> None:
+    """Test that execute_rows_params() returns empty SQLResult when no matches."""
+    from mixpanel_data.types import SQLResult
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create test data
+        storage.connection.execute("CREATE TABLE events (name VARCHAR)")
+        storage.connection.execute("INSERT INTO events VALUES ('Signup'), ('Login')")
+
+        # Execute query that matches nothing
+        result = storage.execute_rows_params(
+            "SELECT * FROM events WHERE name = ?", ["NonExistent"]
+        )
+
+        # Should return empty SQLResult
+        assert isinstance(result, SQLResult)
+        assert result.columns == ["name"]
+        assert len(result) == 0
+        assert result.rows == []
+
+
+def test_execute_rows_params_preserves_column_aliases(tmp_path: Path) -> None:
+    """Test that execute_rows_params() preserves column aliases from query."""
+    from mixpanel_data.types import SQLResult
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create test data
+        storage.connection.execute(
+            "CREATE TABLE events (event_name VARCHAR, user_id INTEGER)"
+        )
+        storage.connection.execute(
+            "INSERT INTO events VALUES ('Signup', 1), ('Login', 1), ('Login', 2)"
+        )
+
+        # Execute query with aliases and parameter
+        result = storage.execute_rows_params(
+            "SELECT event_name as name, COUNT(*) as cnt "
+            "FROM events WHERE event_name = ? GROUP BY 1",
+            ["Login"],
+        )
+
+        # Should preserve aliases
+        assert isinstance(result, SQLResult)
+        assert result.columns == ["name", "cnt"]
+        assert len(result) == 1
+        assert result.rows[0] == ("Login", 2)
+
+
+def test_execute_rows_params_to_dicts_integration(tmp_path: Path) -> None:
+    """Test that execute_rows_params().to_dicts() produces correct output."""
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create test data
+        storage.connection.execute(
+            "CREATE TABLE users (name VARCHAR, age INTEGER, active BOOLEAN)"
+        )
+        storage.connection.execute(
+            "INSERT INTO users VALUES "
+            "('Alice', 30, true), ('Bob', 25, false), ('Carol', 28, true)"
+        )
+
+        # Execute parameterized query and convert to dicts
+        result = storage.execute_rows_params(
+            "SELECT name, age FROM users WHERE active = ? ORDER BY name",
+            [True],
+        )
+        dicts = result.to_dicts()
+
+        # Should convert correctly
+        assert dicts == [
+            {"name": "Alice", "age": 30},
+            {"name": "Carol", "age": 28},
+        ]
+
+
+def test_execute_rows_params_wraps_sql_errors_in_query_error(tmp_path: Path) -> None:
+    """Test that execute_rows_params() wraps SQL errors in QueryError."""
+    from mixpanel_data.exceptions import QueryError
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Execute invalid SQL with parameters
+        with pytest.raises(QueryError) as exc_info:
+            storage.execute_rows_params("GARBAGE SQL ?", ["param"])
+
+        # Should wrap DuckDB error
+        error = exc_info.value
+        assert error.details is not None
+
+
+# =============================================================================
 # Duplicate Handling Tests
 # =============================================================================
 # The Mixpanel Export API returns raw data without deduplication, so duplicate

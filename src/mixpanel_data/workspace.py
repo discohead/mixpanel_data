@@ -1917,7 +1917,8 @@ class Workspace:
                 WHERE event_name = ?
                 ORDER BY key
             """
-            rows = self.storage.connection.execute(sql, [event]).fetchall()
+            result = self.storage.execute_rows_params(sql, [event])
+            rows = result.rows
         else:
             sql = f"""
                 SELECT DISTINCT unnest(json_keys(properties)) as key
