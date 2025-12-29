@@ -1021,10 +1021,6 @@ class SavedReportResult:
         }
 
 
-# Backward compatibility alias (will be removed in future version)
-InsightsResult = SavedReportResult
-
-
 @dataclass(frozen=True)
 class FlowsResult:
     """Data from a saved Flows report.

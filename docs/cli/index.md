@@ -95,11 +95,15 @@ Execute queries against local or remote data.
 | `mp query event-counts` | Multi-event time series |
 | `mp query property-counts` | Property breakdown time series |
 | `mp query activity-feed` | User event history |
-| `mp query insights` | Query saved Insights reports |
+| `mp query saved-report` | Query saved reports (Insights, Retention, Funnel) |
+| `mp query flows` | Query saved Flows reports |
 | `mp query frequency` | Event frequency distribution |
 | `mp query segmentation-numeric` | Numeric property bucketing |
 | `mp query segmentation-sum` | Numeric property sum |
 | `mp query segmentation-average` | Numeric property average |
+
+!!! tip "Saved Reports Workflow"
+    Use `mp inspect bookmarks` to list available saved reports and get their IDs, then query them with `mp query saved-report` or `mp query flows`.
 
 ### inspect — Discovery & Introspection
 
@@ -112,16 +116,23 @@ Explore schema and local database.
 | `mp inspect values` | List values for a property |
 | `mp inspect funnels` | List saved funnels |
 | `mp inspect cohorts` | List saved cohorts |
+| `mp inspect bookmarks` | List saved reports (bookmarks) |
 | `mp inspect top-events` | List today's top events |
 | `mp inspect info` | Show workspace info |
 | `mp inspect tables` | List local tables |
 | `mp inspect schema` | Show table schema |
 | `mp inspect drop` | Drop a local table |
+| `mp inspect drop-all` | Drop all tables (with optional type filter) |
 | `mp inspect sample` | Random sample rows from a table |
 | `mp inspect summarize` | Statistical summary of all columns |
 | `mp inspect breakdown` | Event distribution analysis |
 | `mp inspect keys` | Discover JSON property keys |
 | `mp inspect column` | Deep column-level statistics |
+| `mp inspect distribution` | Property value distribution (JQL) |
+| `mp inspect numeric` | Numeric property statistics (JQL) |
+| `mp inspect daily` | Daily event counts (JQL) |
+| `mp inspect engagement` | User engagement distribution (JQL) |
+| `mp inspect coverage` | Property coverage analysis (JQL) |
 
 ## Output Formats
 

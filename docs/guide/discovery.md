@@ -361,6 +361,8 @@ Check data quality by seeing how often properties are defined:
     - **Data quality checks**: Verify property coverage and value distributions
     - **Trend analysis**: See daily activity patterns
 
+See the [JQL Discovery Types](../api/types.md#jql-discovery-types) in the API reference for return type details.
+
 ## Caching
 
 Discovery results are cached for the lifetime of the Workspace:

@@ -307,21 +307,92 @@ Get a user's event history:
         --format json
     ```
 
-## Insights
+## Saved Reports
 
-Query saved Insights reports:
+Query saved reports from Mixpanel (Insights, Retention, Funnels, and Flows).
+
+### Listing Bookmarks
+
+First, find available saved reports:
 
 === "Python"
 
     ```python
-    result = ws.insights(bookmark_id=12345)
+    # List all saved reports
+    bookmarks = ws.list_bookmarks()
+    for b in bookmarks:
+        print(f"{b.id}: {b.name} ({b.type})")
+
+    # Filter by type
+    insights = ws.list_bookmarks(bookmark_type="insights")
+    funnels = ws.list_bookmarks(bookmark_type="funnels")
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp inspect bookmarks
+    mp inspect bookmarks --type insights
+    mp inspect bookmarks --type funnels --format table
+    ```
+
+### Querying Saved Reports
+
+Query Insights, Retention, or Funnel reports by bookmark ID:
+
+!!! tip "Get Bookmark IDs First"
+    Run `list_bookmarks()` or `mp inspect bookmarks` to find the numeric ID of the report you want to query.
+
+=== "Python"
+
+    ```python
+    # Get the bookmark ID from list_bookmarks() first
+    bookmarks = ws.list_bookmarks(bookmark_type="insights")
+    bookmark_id = bookmarks[0].id  # e.g., 98765
+
+    result = ws.query_saved_report(bookmark_id=bookmark_id)
+    print(f"Report type: {result.report_type}")
     print(result.df)
     ```
 
 === "CLI"
 
     ```bash
-    mp query insights --bookmark-id 12345 --format table
+    # First find your bookmark ID
+    mp inspect bookmarks --type insights --format table
+
+    # Then query it
+    mp query saved-report --bookmark-id 98765 --format table
+    ```
+
+## Flows
+
+Query saved Flows reports:
+
+!!! tip "Flows Use Different IDs"
+    Flows reports have their own bookmark IDs. Filter with `--type flows` when listing.
+
+=== "Python"
+
+    ```python
+    # Get Flows bookmark ID
+    flows = ws.list_bookmarks(bookmark_type="flows")
+    bookmark_id = flows[0].id  # e.g., 54321
+
+    result = ws.query_flows(bookmark_id=bookmark_id)
+    print(f"Conversion rate: {result.overall_conversion_rate:.1%}")
+    for step in result.steps:
+        print(f"  {step}")
+    ```
+
+=== "CLI"
+
+    ```bash
+    # First find Flows bookmark IDs
+    mp inspect bookmarks --type flows --format table
+
+    # Then query it
+    mp query flows --bookmark-id 54321 --format table
     ```
 
 ## Frequency Analysis

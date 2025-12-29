@@ -11,10 +11,10 @@ import pytest
 from mixpanel_data.types import (
     ActivityFeedResult,
     FrequencyResult,
-    InsightsResult,
     NumericAverageResult,
     NumericBucketResult,
     NumericSumResult,
+    SavedReportResult,
     UserEvent,
 )
 
@@ -566,16 +566,16 @@ class TestNumericBucketResult:
 
 
 # =============================================================================
-# User Story 6: Insights Types
+# User Story 6: Saved Report Types
 # =============================================================================
 
 
-class TestInsightsResult:
-    """Tests for InsightsResult."""
+class TestSavedReportResult:
+    """Tests for SavedReportResult."""
 
     def test_basic_creation(self) -> None:
-        """Test creating an InsightsResult."""
-        result = InsightsResult(
+        """Test creating a SavedReportResult."""
+        result = SavedReportResult(
             bookmark_id=12345678,
             computed_at="2024-01-15T10:30:00+00:00",
             from_date="2024-01-01",
@@ -593,7 +593,7 @@ class TestInsightsResult:
 
     def test_df_has_expected_columns(self) -> None:
         """df should have date, event, count columns."""
-        result = InsightsResult(
+        result = SavedReportResult(
             bookmark_id=12345,
             computed_at="2024-01-15T10:30:00+00:00",
             from_date="2024-01-01",
@@ -613,7 +613,7 @@ class TestInsightsResult:
 
     def test_df_empty_series(self) -> None:
         """df should handle empty series."""
-        result = InsightsResult(
+        result = SavedReportResult(
             bookmark_id=12345,
             computed_at="2024-01-15T10:30:00+00:00",
             from_date="2024-01-01",
@@ -628,7 +628,7 @@ class TestInsightsResult:
 
     def test_df_cached(self) -> None:
         """df should be cached on first access."""
-        result = InsightsResult(
+        result = SavedReportResult(
             bookmark_id=12345,
             computed_at="2024-01-15T10:30:00+00:00",
             from_date="2024-01-01",
@@ -643,7 +643,7 @@ class TestInsightsResult:
 
     def test_to_dict_serializable(self) -> None:
         """to_dict output should be JSON serializable."""
-        result = InsightsResult(
+        result = SavedReportResult(
             bookmark_id=12345678,
             computed_at="2024-01-15T10:30:00+00:00",
             from_date="2024-01-01",
@@ -681,7 +681,7 @@ class TestPhase008TypesImmutability:
                 to_date=None,
                 events=[],
             ),
-            InsightsResult(
+            SavedReportResult(
                 bookmark_id=1,
                 computed_at="",
                 from_date="2024-01-01",

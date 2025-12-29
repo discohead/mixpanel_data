@@ -67,7 +67,7 @@ Executes live analytics queries against Mixpanel Query API:
 
 - Segmentation, funnels, retention, JQL
 - Event counts, property counts
-- Activity feed, insights, frequency
+- Activity feed, saved reports, flows, frequency
 - Numeric aggregations (bucket, sum, average)
 
 ### Infrastructure

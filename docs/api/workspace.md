@@ -51,6 +51,7 @@ Duplicate events (by `insert_id`) and profiles (by `distinct_id`) are automatica
         - property_values
         - funnels
         - cohorts
+        - list_bookmarks
         - top_events
         - lexicon_schemas
         - lexicon_schema
@@ -69,11 +70,17 @@ Duplicate events (by `insert_id`) and profiles (by `distinct_id`) are automatica
         - event_counts
         - property_counts
         - activity_feed
-        - insights
+        - query_saved_report
+        - query_flows
         - frequency
         - segmentation_numeric
         - segmentation_sum
         - segmentation_average
+        - property_distribution
+        - numeric_summary
+        - daily_counts
+        - engagement_distribution
+        - property_coverage
         - info
         - tables
         - table_schema

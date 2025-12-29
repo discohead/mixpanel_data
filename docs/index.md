@@ -17,7 +17,7 @@ Fetch data once, store it locally in DuckDB, query repeatedly with SQL. Data liv
 - **Live Queries** — Run Mixpanel reports (segmentation, funnels, retention) directly when fresh data is needed
 - **Data Discovery** — Introspect events, properties, values, saved funnels, and cohorts before writing queries
 - **Event Analytics** — Query multi-event time series and property breakdowns across date ranges
-- **Advanced Analytics** — User activity feeds, saved Insights reports, frequency analysis, numeric aggregations
+- **Advanced Analytics** — User activity feeds, saved reports (Insights, Funnels, Flows), frequency analysis, numeric aggregations
 - **Python Library** — Import and use programmatically in scripts and notebooks
 - **CLI** — Compose into Unix pipelines, invoke from agents without writing Python
 

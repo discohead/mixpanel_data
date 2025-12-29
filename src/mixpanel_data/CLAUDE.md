@@ -37,15 +37,17 @@ ws = Workspace.open("existing.db")
 
 ## Workspace Methods
 
-**Discovery**: `events()`, `properties()`, `property_values()`, `funnels()`, `cohorts()`, `top_events()`
+**Discovery**: `events()`, `properties()`, `property_values()`, `funnels()`, `cohorts()`, `list_bookmarks()`, `top_events()`, `lexicon_schemas()`, `lexicon_schema()`, `clear_discovery_cache()`
 
-**Fetching**: `fetch_events()`, `fetch_profiles()`
+**Fetching**: `fetch_events()`, `fetch_profiles()`, `stream_events()`, `stream_profiles()`
 
 **Local Queries**: `sql()`, `sql_scalar()`, `sql_rows()`
 
-**Live Queries**: `segmentation()`, `funnel()`, `retention()`, `jql()`, `event_counts()`, `property_counts()`, `activity_feed()`, `insights()`, `frequency()`, `segmentation_numeric()`, `segmentation_sum()`, `segmentation_average()`
+**Live Queries**: `segmentation()`, `funnel()`, `retention()`, `jql()`, `event_counts()`, `property_counts()`, `activity_feed()`, `query_saved_report()`, `query_flows()`, `frequency()`, `segmentation_numeric()`, `segmentation_sum()`, `segmentation_average()`
 
-**Introspection**: `info()`, `tables()`, `schema()`
+**JQL Discovery**: `property_distribution()`, `numeric_summary()`, `daily_counts()`, `engagement_distribution()`, `property_coverage()`
+
+**Introspection**: `info()`, `tables()`, `table_schema()`, `sample()`, `summarize()`, `event_breakdown()`, `property_keys()`, `column_stats()`
 
 **Table Management**: `drop()`, `drop_all()`
 
@@ -76,7 +78,7 @@ All frozen dataclasses with:
 - `.df` property: Lazy DataFrame conversion (cached)
 - `.to_dict()`: JSON-serializable output
 
-Key types: `FetchResult`, `SegmentationResult`, `FunnelResult`, `RetentionResult`, `JQLResult`, `TableInfo`, `TableSchema`, `WorkspaceInfo`
+Key types: `FetchResult`, `SegmentationResult`, `FunnelResult`, `RetentionResult`, `JQLResult`, `SavedReportResult`, `FlowsResult`, `BookmarkInfo`, `PropertyDistributionResult`, `NumericPropertySummaryResult`, `DailyCountsResult`, `EngagementDistributionResult`, `PropertyCoverageResult`, `TableInfo`, `TableSchema`, `WorkspaceInfo`
 
 ## Type Aliases
 

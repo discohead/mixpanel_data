@@ -108,11 +108,6 @@ All result types are immutable frozen dataclasses with:
       show_root_heading: true
       show_root_toc_entry: true
 
-::: mixpanel_data.InsightsResult
-    options:
-      show_root_heading: true
-      show_root_toc_entry: true
-
 ::: mixpanel_data.FrequencyResult
     options:
       show_root_heading: true
@@ -129,6 +124,70 @@ All result types are immutable frozen dataclasses with:
       show_root_toc_entry: true
 
 ::: mixpanel_data.NumericAverageResult
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+## Bookmark Types
+
+::: mixpanel_data.BookmarkInfo
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.SavedReportResult
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.FlowsResult
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+## JQL Discovery Types
+
+::: mixpanel_data.PropertyDistributionResult
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.PropertyValueCount
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.NumericPropertySummaryResult
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.DailyCountsResult
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.DailyCount
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.EngagementDistributionResult
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.EngagementBucket
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.PropertyCoverageResult
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.PropertyCoverage
     options:
       show_root_heading: true
       show_root_toc_entry: true
