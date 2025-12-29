@@ -61,6 +61,8 @@ from mixpanel_data.types import (
     BookmarkType,
     ColumnStatsResult,
     ColumnSummary,
+    DailyCountsResult,
+    EngagementDistributionResult,
     EntityType,
     EventBreakdownResult,
     EventCountsResult,
@@ -74,8 +76,11 @@ from mixpanel_data.types import (
     LexiconSchema,
     NumericAverageResult,
     NumericBucketResult,
+    NumericPropertySummaryResult,
     NumericSumResult,
     PropertyCountsResult,
+    PropertyCoverageResult,
+    PropertyDistributionResult,
     RetentionResult,
     SavedCohort,
     SavedReportResult,
@@ -1595,6 +1600,233 @@ class Workspace:
             on=on,
             unit=unit,
             where=where,
+        )
+
+    # =========================================================================
+    # JQL-BASED REMOTE DISCOVERY METHODS
+    # =========================================================================
+
+    def property_distribution(
+        self,
+        event: str,
+        property: str,
+        *,
+        from_date: str,
+        to_date: str,
+        limit: int = 20,
+    ) -> PropertyDistributionResult:
+        """Get distribution of values for a property.
+
+        Uses JQL to count occurrences of each property value, returning
+        counts and percentages sorted by frequency.
+
+        Args:
+            event: Event name to analyze.
+            property: Property name to get distribution for.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            limit: Maximum number of values to return. Default: 20.
+
+        Returns:
+            PropertyDistributionResult with value counts and percentages.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            QueryError: Script execution error.
+
+        Example:
+            ```python
+            result = ws.property_distribution(
+                event="Purchase",
+                property="country",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            for v in result.values:
+                print(f"{v.value}: {v.count} ({v.percentage:.1f}%)")
+            ```
+        """
+        return self._live_query_service.property_distribution(
+            event=event,
+            property=property,
+            from_date=from_date,
+            to_date=to_date,
+            limit=limit,
+        )
+
+    def numeric_summary(
+        self,
+        event: str,
+        property: str,
+        *,
+        from_date: str,
+        to_date: str,
+        percentiles: list[int] | None = None,
+    ) -> NumericPropertySummaryResult:
+        """Get statistical summary for a numeric property.
+
+        Uses JQL to compute count, min, max, avg, stddev, and percentiles
+        for a numeric property.
+
+        Args:
+            event: Event name to analyze.
+            property: Numeric property name.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            percentiles: Percentiles to compute. Default: [25, 50, 75, 90, 95, 99].
+
+        Returns:
+            NumericPropertySummaryResult with statistics.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            QueryError: Script execution error or non-numeric property.
+
+        Example:
+            ```python
+            result = ws.numeric_summary(
+                event="Purchase",
+                property="amount",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            print(f"Avg: {result.avg}, Median: {result.percentiles[50]}")
+            ```
+        """
+        return self._live_query_service.numeric_summary(
+            event=event,
+            property=property,
+            from_date=from_date,
+            to_date=to_date,
+            percentiles=percentiles,
+        )
+
+    def daily_counts(
+        self,
+        *,
+        from_date: str,
+        to_date: str,
+        events: list[str] | None = None,
+    ) -> DailyCountsResult:
+        """Get daily event counts.
+
+        Uses JQL to count events by day, optionally filtered to specific events.
+
+        Args:
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            events: Optional list of events to count. None = all events.
+
+        Returns:
+            DailyCountsResult with date/event/count tuples.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            QueryError: Script execution error.
+
+        Example:
+            ```python
+            result = ws.daily_counts(
+                from_date="2024-01-01",
+                to_date="2024-01-07",
+                events=["Purchase", "Signup"],
+            )
+            for c in result.counts:
+                print(f"{c.date} {c.event}: {c.count}")
+            ```
+        """
+        return self._live_query_service.daily_counts(
+            from_date=from_date,
+            to_date=to_date,
+            events=events,
+        )
+
+    def engagement_distribution(
+        self,
+        *,
+        from_date: str,
+        to_date: str,
+        events: list[str] | None = None,
+        buckets: list[int] | None = None,
+    ) -> EngagementDistributionResult:
+        """Get user engagement distribution.
+
+        Uses JQL to bucket users by their event count, showing how many
+        users performed N events.
+
+        Args:
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            events: Optional list of events to count. None = all events.
+            buckets: Bucket boundaries. Default: [1, 2, 5, 10, 25, 50, 100].
+
+        Returns:
+            EngagementDistributionResult with user counts per bucket.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            QueryError: Script execution error.
+
+        Example:
+            ```python
+            result = ws.engagement_distribution(
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            for b in result.buckets:
+                print(f"{b.bucket_label}: {b.user_count} ({b.percentage:.1f}%)")
+            ```
+        """
+        return self._live_query_service.engagement_distribution(
+            from_date=from_date,
+            to_date=to_date,
+            events=events,
+            buckets=buckets,
+        )
+
+    def property_coverage(
+        self,
+        event: str,
+        properties: list[str],
+        *,
+        from_date: str,
+        to_date: str,
+    ) -> PropertyCoverageResult:
+        """Get property coverage statistics.
+
+        Uses JQL to count how often each property is defined (non-null)
+        vs undefined for the specified event.
+
+        Args:
+            event: Event name to analyze.
+            properties: List of property names to check.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+
+        Returns:
+            PropertyCoverageResult with coverage statistics per property.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            QueryError: Script execution error.
+
+        Example:
+            ```python
+            result = ws.property_coverage(
+                event="Purchase",
+                properties=["coupon_code", "referrer"],
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            for c in result.coverage:
+                print(f"{c.property}: {c.coverage_percentage:.1f}% defined")
+            ```
+        """
+        return self._live_query_service.property_coverage(
+            event=event,
+            properties=properties,
+            from_date=from_date,
+            to_date=to_date,
         )
 
     # =========================================================================

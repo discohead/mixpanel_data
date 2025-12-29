@@ -227,6 +227,140 @@ event.percent_change  # 12.5 (compared to yesterday)
 !!! note "Not Cached"
     Unlike other discovery methods, `top_events()` always makes an API call since it returns real-time data.
 
+## JQL-Based Remote Discovery
+
+These methods use JQL (JavaScript Query Language) to analyze data directly on Mixpanel's servers, returning aggregated results without fetching raw data locally.
+
+### Property Value Distribution
+
+Understand what values a property contains and how often they appear:
+
+=== "Python"
+
+    ```python
+    result = ws.property_distribution(
+        event="Purchase",
+        property="country",
+        from_date="2024-01-01",
+        to_date="2024-01-31",
+        limit=10,
+    )
+    print(f"Total: {result.total_count}")
+    for v in result.values:
+        print(f"  {v.value}: {v.count} ({v.percentage:.1f}%)")
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp inspect distribution -e Purchase -p country --from 2024-01-01 --to 2024-01-31
+    mp inspect distribution -e Purchase -p country --from 2024-01-01 --to 2024-01-31 --limit 10
+    ```
+
+### Numeric Property Summary
+
+Get statistical summary for numeric properties:
+
+=== "Python"
+
+    ```python
+    result = ws.numeric_summary(
+        event="Purchase",
+        property="amount",
+        from_date="2024-01-01",
+        to_date="2024-01-31",
+    )
+    print(f"Count: {result.count}")
+    print(f"Range: {result.min} to {result.max}")
+    print(f"Avg: {result.avg:.2f}, Stddev: {result.stddev:.2f}")
+    print(f"Median: {result.percentiles[50]}")
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31
+    mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31 --percentiles 25,50,75,90
+    ```
+
+### Daily Event Counts
+
+See event activity over time:
+
+=== "Python"
+
+    ```python
+    result = ws.daily_counts(
+        from_date="2024-01-01",
+        to_date="2024-01-07",
+        events=["Purchase", "Signup"],
+    )
+    for c in result.counts:
+        print(f"{c.date} {c.event}: {c.count}")
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp inspect daily --from 2024-01-01 --to 2024-01-07
+    mp inspect daily --from 2024-01-01 --to 2024-01-07 -e Purchase,Signup
+    ```
+
+### User Engagement Distribution
+
+Understand how engaged users are by their event count:
+
+=== "Python"
+
+    ```python
+    result = ws.engagement_distribution(
+        from_date="2024-01-01",
+        to_date="2024-01-31",
+    )
+    print(f"Total users: {result.total_users}")
+    for b in result.buckets:
+        print(f"  {b.bucket_label} events: {b.user_count} ({b.percentage:.1f}%)")
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp inspect engagement --from 2024-01-01 --to 2024-01-31
+    mp inspect engagement --from 2024-01-01 --to 2024-01-31 --buckets 1,5,10,50,100
+    ```
+
+### Property Coverage
+
+Check data quality by seeing how often properties are defined:
+
+=== "Python"
+
+    ```python
+    result = ws.property_coverage(
+        event="Purchase",
+        properties=["coupon_code", "referrer", "utm_source"],
+        from_date="2024-01-01",
+        to_date="2024-01-31",
+    )
+    print(f"Total events: {result.total_events}")
+    for c in result.coverage:
+        print(f"  {c.property}: {c.coverage_percentage:.1f}% defined")
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp inspect coverage -e Purchase -p coupon_code,referrer,utm_source --from 2024-01-01 --to 2024-01-31
+    ```
+
+!!! tip "When to Use JQL-Based Discovery"
+    These methods are ideal for:
+
+    - **Quick exploration**: Understand data shape before fetching locally
+    - **Large date ranges**: Analyze months of data without downloading everything
+    - **Data quality checks**: Verify property coverage and value distributions
+    - **Trend analysis**: See daily activity patterns
+
 ## Caching
 
 Discovery results are cached for the lifetime of the Workspace:

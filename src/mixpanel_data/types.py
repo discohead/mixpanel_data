@@ -2052,3 +2052,522 @@ class ColumnStatsResult:
             "mean": self.mean,
             "std": self.std,
         }
+
+
+# =============================================================================
+# JQL-Based Discovery Types (Phase 016)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class PropertyValueCount:
+    """A single value and its count from property distribution analysis.
+
+    Represents one row in a property value distribution, showing the value,
+    its occurrence count, and percentage of total.
+
+    Attributes:
+        value: The property value (can be string, number, bool, or None).
+        count: Number of occurrences of this value.
+        percentage: Percentage of total events (0.0 to 100.0).
+    """
+
+    value: str | int | float | bool | None
+    """The property value."""
+
+    count: int
+    """Number of occurrences."""
+
+    percentage: float
+    """Percentage of total (0.0 to 100.0)."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with value, count, and percentage.
+        """
+        return {
+            "value": self.value,
+            "count": self.count,
+            "percentage": self.percentage,
+        }
+
+
+@dataclass(frozen=True)
+class PropertyDistributionResult:
+    """Distribution of values for a property from JQL analysis.
+
+    Contains the top N values for a property with their counts and percentages,
+    enabling quick understanding of property value distribution without fetching
+    all data locally.
+
+    Attributes:
+        event: The event type analyzed.
+        property_name: The property name analyzed.
+        from_date: Query start date (YYYY-MM-DD).
+        to_date: Query end date (YYYY-MM-DD).
+        total_count: Total number of events with this property defined.
+        values: Top values with counts and percentages.
+    """
+
+    event: str
+    """Event type analyzed."""
+
+    property_name: str
+    """Property name analyzed."""
+
+    from_date: str
+    """Query start date (YYYY-MM-DD)."""
+
+    to_date: str
+    """Query end date (YYYY-MM-DD)."""
+
+    total_count: int
+    """Total events with this property defined."""
+
+    values: tuple[PropertyValueCount, ...]
+    """Top values with counts and percentages."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with columns: value, count, percentage.
+
+        Conversion is lazy - computed on first access and cached.
+
+        Returns:
+            DataFrame with value distribution data.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = [v.to_dict() for v in self.values]
+
+        result_df = (
+            pd.DataFrame(rows)
+            if rows
+            else pd.DataFrame(columns=["value", "count", "percentage"])
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all distribution data.
+        """
+        return {
+            "event": self.event,
+            "property_name": self.property_name,
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "total_count": self.total_count,
+            "values": [v.to_dict() for v in self.values],
+        }
+
+
+@dataclass(frozen=True)
+class NumericPropertySummaryResult:
+    """Statistical summary of a numeric property from JQL analysis.
+
+    Contains min, max, sum, average, standard deviation, and percentiles
+    for a numeric property, enabling understanding of value distributions
+    without fetching all data locally.
+
+    Attributes:
+        event: The event type analyzed.
+        property_name: The property name analyzed.
+        from_date: Query start date (YYYY-MM-DD).
+        to_date: Query end date (YYYY-MM-DD).
+        count: Number of events with this property defined.
+        min: Minimum value.
+        max: Maximum value.
+        sum: Sum of all values.
+        avg: Average value.
+        stddev: Standard deviation.
+        percentiles: Percentile values keyed by percentile number.
+    """
+
+    event: str
+    """Event type analyzed."""
+
+    property_name: str
+    """Property name analyzed."""
+
+    from_date: str
+    """Query start date (YYYY-MM-DD)."""
+
+    to_date: str
+    """Query end date (YYYY-MM-DD)."""
+
+    count: int
+    """Number of events with this property defined."""
+
+    min: float
+    """Minimum value."""
+
+    max: float
+    """Maximum value."""
+
+    sum: float
+    """Sum of all values."""
+
+    avg: float
+    """Average value."""
+
+    stddev: float
+    """Standard deviation."""
+
+    percentiles: dict[int, float]
+    """Percentile values keyed by percentile number (e.g., {50: 98.0})."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all numeric summary data.
+        """
+        return {
+            "event": self.event,
+            "property_name": self.property_name,
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "count": self.count,
+            "min": self.min,
+            "max": self.max,
+            "sum": self.sum,
+            "avg": self.avg,
+            "stddev": self.stddev,
+            "percentiles": {str(k): v for k, v in self.percentiles.items()},
+        }
+
+
+@dataclass(frozen=True)
+class DailyCount:
+    """Event count for a single date from daily counts analysis.
+
+    Represents one row in a daily counts result, showing date, event, and count.
+
+    Attributes:
+        date: Date string (YYYY-MM-DD).
+        event: Event name.
+        count: Number of occurrences on this date.
+    """
+
+    date: str
+    """Date string (YYYY-MM-DD)."""
+
+    event: str
+    """Event name."""
+
+    count: int
+    """Number of occurrences."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with date, event, and count.
+        """
+        return {
+            "date": self.date,
+            "event": self.event,
+            "count": self.count,
+        }
+
+
+@dataclass(frozen=True)
+class DailyCountsResult:
+    """Time-series event counts by day from JQL analysis.
+
+    Contains daily event counts for quick activity trend analysis
+    without complex segmentation setup.
+
+    Attributes:
+        from_date: Query start date (YYYY-MM-DD).
+        to_date: Query end date (YYYY-MM-DD).
+        events: Event types included (None for all events).
+        counts: Daily counts for each event.
+    """
+
+    from_date: str
+    """Query start date (YYYY-MM-DD)."""
+
+    to_date: str
+    """Query end date (YYYY-MM-DD)."""
+
+    events: tuple[str, ...] | None
+    """Event types included (None for all events)."""
+
+    counts: tuple[DailyCount, ...]
+    """Daily counts for each event."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with columns: date, event, count.
+
+        Conversion is lazy - computed on first access and cached.
+
+        Returns:
+            DataFrame with daily counts data.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = [c.to_dict() for c in self.counts]
+
+        result_df = (
+            pd.DataFrame(rows)
+            if rows
+            else pd.DataFrame(columns=["date", "event", "count"])
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all daily counts data.
+        """
+        return {
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "events": list(self.events) if self.events else None,
+            "counts": [c.to_dict() for c in self.counts],
+        }
+
+
+@dataclass(frozen=True)
+class EngagementBucket:
+    """User count in an engagement bucket from engagement analysis.
+
+    Represents one bucket in a user engagement distribution, showing
+    how many users performed events in a certain frequency range.
+
+    Attributes:
+        bucket_min: Minimum events in this bucket.
+        bucket_label: Human-readable label (e.g., "1", "2-5", "100+").
+        user_count: Number of users in this bucket.
+        percentage: Percentage of total users (0.0 to 100.0).
+    """
+
+    bucket_min: int
+    """Minimum events in this bucket."""
+
+    bucket_label: str
+    """Human-readable label (e.g., '1', '2-5', '100+')."""
+
+    user_count: int
+    """Number of users in this bucket."""
+
+    percentage: float
+    """Percentage of total users (0.0 to 100.0)."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with bucket data.
+        """
+        return {
+            "bucket_min": self.bucket_min,
+            "bucket_label": self.bucket_label,
+            "user_count": self.user_count,
+            "percentage": self.percentage,
+        }
+
+
+@dataclass(frozen=True)
+class EngagementDistributionResult:
+    """User engagement distribution from JQL analysis.
+
+    Shows how many users performed N events, helping understand
+    user engagement patterns without fetching all data locally.
+
+    Attributes:
+        from_date: Query start date (YYYY-MM-DD).
+        to_date: Query end date (YYYY-MM-DD).
+        events: Event types included (None for all events).
+        total_users: Total number of distinct users.
+        buckets: Engagement buckets with user counts.
+    """
+
+    from_date: str
+    """Query start date (YYYY-MM-DD)."""
+
+    to_date: str
+    """Query end date (YYYY-MM-DD)."""
+
+    events: tuple[str, ...] | None
+    """Event types included (None for all events)."""
+
+    total_users: int
+    """Total number of distinct users."""
+
+    buckets: tuple[EngagementBucket, ...]
+    """Engagement buckets with user counts."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with engagement bucket columns.
+
+        Conversion is lazy - computed on first access and cached.
+
+        Returns:
+            DataFrame with engagement distribution data.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = [b.to_dict() for b in self.buckets]
+
+        result_df = (
+            pd.DataFrame(rows)
+            if rows
+            else pd.DataFrame(
+                columns=["bucket_min", "bucket_label", "user_count", "percentage"]
+            )
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all engagement distribution data.
+        """
+        return {
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "events": list(self.events) if self.events else None,
+            "total_users": self.total_users,
+            "buckets": [b.to_dict() for b in self.buckets],
+        }
+
+
+@dataclass(frozen=True)
+class PropertyCoverage:
+    """Coverage statistics for a single property from coverage analysis.
+
+    Shows how often a property is defined vs null for a given event type.
+
+    Attributes:
+        property: Property name.
+        defined_count: Number of events with this property defined.
+        null_count: Number of events with this property null/undefined.
+        coverage_percentage: Percentage of events with property defined (0.0-100.0).
+    """
+
+    property: str
+    """Property name."""
+
+    defined_count: int
+    """Number of events with property defined."""
+
+    null_count: int
+    """Number of events with property null/undefined."""
+
+    coverage_percentage: float
+    """Percentage with property defined (0.0 to 100.0)."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with coverage data.
+        """
+        return {
+            "property": self.property,
+            "defined_count": self.defined_count,
+            "null_count": self.null_count,
+            "coverage_percentage": self.coverage_percentage,
+        }
+
+
+@dataclass(frozen=True)
+class PropertyCoverageResult:
+    """Property coverage analysis result from JQL.
+
+    Shows which properties are consistently populated vs sparse,
+    helping understand data quality before writing queries.
+
+    Attributes:
+        event: The event type analyzed.
+        from_date: Query start date (YYYY-MM-DD).
+        to_date: Query end date (YYYY-MM-DD).
+        total_events: Total number of events analyzed.
+        coverage: Coverage statistics for each property.
+    """
+
+    event: str
+    """Event type analyzed."""
+
+    from_date: str
+    """Query start date (YYYY-MM-DD)."""
+
+    to_date: str
+    """Query end date (YYYY-MM-DD)."""
+
+    total_events: int
+    """Total number of events analyzed."""
+
+    coverage: tuple[PropertyCoverage, ...]
+    """Coverage statistics for each property."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert to DataFrame with property coverage columns.
+
+        Conversion is lazy - computed on first access and cached.
+
+        Returns:
+            DataFrame with property coverage data.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        rows: list[dict[str, Any]] = [c.to_dict() for c in self.coverage]
+
+        result_df = (
+            pd.DataFrame(rows)
+            if rows
+            else pd.DataFrame(
+                columns=[
+                    "property",
+                    "defined_count",
+                    "null_count",
+                    "coverage_percentage",
+                ]
+            )
+        )
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all coverage data.
+        """
+        return {
+            "event": self.event,
+            "from_date": self.from_date,
+            "to_date": self.to_date,
+            "total_events": self.total_events,
+            "coverage": [c.to_dict() for c in self.coverage],
+        }

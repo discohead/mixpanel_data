@@ -13,6 +13,13 @@ Live (calls Mixpanel API):
 - lexicon-schemas: List Lexicon schemas
 - lexicon-schema: Get a single Lexicon schema
 
+JQL-based Remote Discovery (calls Mixpanel API with JQL):
+- distribution: Property value distribution with counts/percentages
+- numeric: Numeric property statistics (min/max/avg/percentiles)
+- daily: Daily event counts over time
+- engagement: User engagement distribution by event count
+- coverage: Property coverage/null rate statistics
+
 Local (uses DuckDB):
 - info: Show workspace information
 - tables: List local tables
@@ -52,6 +59,9 @@ inspect_app = typer.Typer(
     epilog="""Live (calls Mixpanel API):
   events, properties, values, funnels, cohorts, top-events, bookmarks,
   lexicon-schemas, lexicon-schema
+
+JQL-based Remote Discovery:
+  distribution, numeric, daily, engagement, coverage
 
 Local (uses DuckDB):
   info, tables, schema, drop, drop-all, sample, summarize, breakdown, keys, column""",
@@ -680,4 +690,263 @@ def inspect_column(
     """
     workspace = get_workspace(ctx, read_only=True)
     result = workspace.column_stats(table, column, top_n=top)
+    output_result(ctx, result.to_dict(), format=format)
+
+
+# =============================================================================
+# JQL-BASED REMOTE DISCOVERY COMMANDS
+# =============================================================================
+
+
+@inspect_app.command("distribution")
+@handle_errors
+def inspect_distribution(
+    ctx: typer.Context,
+    event: Annotated[
+        str,
+        typer.Option("--event", "-e", help="Event name to analyze."),
+    ],
+    property: Annotated[
+        str,
+        typer.Option("--property", "-p", help="Property name to get distribution for."),
+    ],
+    from_date: Annotated[
+        str,
+        typer.Option("--from", help="Start date (YYYY-MM-DD)."),
+    ],
+    to_date: Annotated[
+        str,
+        typer.Option("--to", help="End date (YYYY-MM-DD)."),
+    ],
+    limit: Annotated[
+        int,
+        typer.Option("--limit", "-l", help="Maximum values to return."),
+    ] = 20,
+    format: FormatOption = "json",
+) -> None:
+    """Show property value distribution from Mixpanel.
+
+    Uses JQL to count occurrences of each value for a property, showing
+    counts and percentages sorted by frequency. Useful for understanding
+    what values a property contains before writing queries.
+
+    Examples:
+
+        mp inspect distribution -e Purchase -p country --from 2024-01-01 --to 2024-01-31
+        mp inspect distribution -e Signup -p referrer --from 2024-01-01 --to 2024-01-31 --limit 10
+    """
+    workspace = get_workspace(ctx, read_only=True)
+    with status_spinner(ctx, "Analyzing property distribution..."):
+        result = workspace.property_distribution(
+            event=event,
+            property=property,
+            from_date=from_date,
+            to_date=to_date,
+            limit=limit,
+        )
+    output_result(ctx, result.to_dict(), format=format)
+
+
+@inspect_app.command("numeric")
+@handle_errors
+def inspect_numeric(
+    ctx: typer.Context,
+    event: Annotated[
+        str,
+        typer.Option("--event", "-e", help="Event name to analyze."),
+    ],
+    property: Annotated[
+        str,
+        typer.Option("--property", "-p", help="Numeric property name."),
+    ],
+    from_date: Annotated[
+        str,
+        typer.Option("--from", help="Start date (YYYY-MM-DD)."),
+    ],
+    to_date: Annotated[
+        str,
+        typer.Option("--to", help="End date (YYYY-MM-DD)."),
+    ],
+    percentiles: Annotated[
+        str | None,
+        typer.Option(
+            "--percentiles", help="Comma-separated percentiles (e.g., 25,50,75,90)."
+        ),
+    ] = None,
+    format: FormatOption = "json",
+) -> None:
+    """Show numeric property statistics from Mixpanel.
+
+    Uses JQL to compute min, max, avg, stddev, and percentiles for a
+    numeric property. Useful for understanding value ranges and distributions.
+
+    Examples:
+
+        mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31
+        mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31 --percentiles 10,50,90
+    """
+    # Parse percentiles if provided
+    percentile_list: list[int] | None = None
+    if percentiles:
+        percentile_list = [int(p.strip()) for p in percentiles.split(",")]
+
+    workspace = get_workspace(ctx, read_only=True)
+    with status_spinner(ctx, "Computing numeric statistics..."):
+        result = workspace.numeric_summary(
+            event=event,
+            property=property,
+            from_date=from_date,
+            to_date=to_date,
+            percentiles=percentile_list,
+        )
+    output_result(ctx, result.to_dict(), format=format)
+
+
+@inspect_app.command("daily")
+@handle_errors
+def inspect_daily(
+    ctx: typer.Context,
+    from_date: Annotated[
+        str,
+        typer.Option("--from", help="Start date (YYYY-MM-DD)."),
+    ],
+    to_date: Annotated[
+        str,
+        typer.Option("--to", help="End date (YYYY-MM-DD)."),
+    ],
+    events: Annotated[
+        str | None,
+        typer.Option(
+            "--events", "-e", help="Comma-separated event names (or all if omitted)."
+        ),
+    ] = None,
+    format: FormatOption = "json",
+) -> None:
+    """Show daily event counts from Mixpanel.
+
+    Uses JQL to count events by day. Optionally filter to specific events.
+    Useful for understanding activity trends over time.
+
+    Examples:
+
+        mp inspect daily --from 2024-01-01 --to 2024-01-07
+        mp inspect daily --from 2024-01-01 --to 2024-01-07 -e Purchase,Signup
+    """
+    # Parse events if provided
+    event_list: list[str] | None = None
+    if events:
+        event_list = [e.strip() for e in events.split(",")]
+
+    workspace = get_workspace(ctx, read_only=True)
+    with status_spinner(ctx, "Fetching daily counts..."):
+        result = workspace.daily_counts(
+            from_date=from_date,
+            to_date=to_date,
+            events=event_list,
+        )
+    output_result(ctx, result.to_dict(), format=format)
+
+
+@inspect_app.command("engagement")
+@handle_errors
+def inspect_engagement(
+    ctx: typer.Context,
+    from_date: Annotated[
+        str,
+        typer.Option("--from", help="Start date (YYYY-MM-DD)."),
+    ],
+    to_date: Annotated[
+        str,
+        typer.Option("--to", help="End date (YYYY-MM-DD)."),
+    ],
+    events: Annotated[
+        str | None,
+        typer.Option(
+            "--events", "-e", help="Comma-separated event names (or all if omitted)."
+        ),
+    ] = None,
+    buckets: Annotated[
+        str | None,
+        typer.Option(
+            "--buckets", help="Comma-separated bucket boundaries (e.g., 1,5,10,50)."
+        ),
+    ] = None,
+    format: FormatOption = "json",
+) -> None:
+    """Show user engagement distribution from Mixpanel.
+
+    Uses JQL to bucket users by their event count, showing how many
+    users performed N events. Useful for understanding user engagement levels.
+
+    Examples:
+
+        mp inspect engagement --from 2024-01-01 --to 2024-01-31
+        mp inspect engagement --from 2024-01-01 --to 2024-01-31 -e Purchase
+        mp inspect engagement --from 2024-01-01 --to 2024-01-31 --buckets 1,5,10,50,100
+    """
+    # Parse events if provided
+    event_list: list[str] | None = None
+    if events:
+        event_list = [e.strip() for e in events.split(",")]
+
+    # Parse buckets if provided
+    bucket_list: list[int] | None = None
+    if buckets:
+        bucket_list = [int(b.strip()) for b in buckets.split(",")]
+
+    workspace = get_workspace(ctx, read_only=True)
+    with status_spinner(ctx, "Analyzing engagement distribution..."):
+        result = workspace.engagement_distribution(
+            from_date=from_date,
+            to_date=to_date,
+            events=event_list,
+            buckets=bucket_list,
+        )
+    output_result(ctx, result.to_dict(), format=format)
+
+
+@inspect_app.command("coverage")
+@handle_errors
+def inspect_coverage(
+    ctx: typer.Context,
+    event: Annotated[
+        str,
+        typer.Option("--event", "-e", help="Event name to analyze."),
+    ],
+    properties: Annotated[
+        str,
+        typer.Option(
+            "--properties", "-p", help="Comma-separated property names to check."
+        ),
+    ],
+    from_date: Annotated[
+        str,
+        typer.Option("--from", help="Start date (YYYY-MM-DD)."),
+    ],
+    to_date: Annotated[
+        str,
+        typer.Option("--to", help="End date (YYYY-MM-DD)."),
+    ],
+    format: FormatOption = "json",
+) -> None:
+    """Show property coverage statistics from Mixpanel.
+
+    Uses JQL to count how often each property is defined (non-null) vs
+    undefined. Useful for data quality assessment.
+
+    Examples:
+
+        mp inspect coverage -e Purchase -p coupon_code,referrer --from 2024-01-01 --to 2024-01-31
+    """
+    # Parse properties
+    property_list = [p.strip() for p in properties.split(",")]
+
+    workspace = get_workspace(ctx, read_only=True)
+    with status_spinner(ctx, "Analyzing property coverage..."):
+        result = workspace.property_coverage(
+            event=event,
+            properties=property_list,
+            from_date=from_date,
+            to_date=to_date,
+        )
     output_result(ctx, result.to_dict(), format=format)

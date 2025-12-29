@@ -29,6 +29,10 @@ from mixpanel_data.types import (
     CohortInfo,
     ColumnStatsResult,
     ColumnSummary,
+    DailyCount,
+    DailyCountsResult,
+    EngagementBucket,
+    EngagementDistributionResult,
     EventBreakdownResult,
     EventCountsResult,
     EventStats,
@@ -41,8 +45,13 @@ from mixpanel_data.types import (
     JQLResult,
     NumericAverageResult,
     NumericBucketResult,
+    NumericPropertySummaryResult,
     NumericSumResult,
     PropertyCountsResult,
+    PropertyCoverage,
+    PropertyCoverageResult,
+    PropertyDistributionResult,
+    PropertyValueCount,
     RetentionResult,
     SavedCohort,
     SavedReportResult,
@@ -1570,3 +1579,618 @@ class TestSQLResultPBT:
 
         iterated = list(result)
         assert iterated == rows
+
+
+# =============================================================================
+# PropertyValueCount Property Tests
+# =============================================================================
+
+
+# Strategy for property values (mixed types that can appear in Mixpanel)
+property_values = st.one_of(
+    st.text(min_size=0, max_size=50),
+    st.integers(min_value=-1_000_000, max_value=1_000_000),
+    st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_infinity=False),
+    st.booleans(),
+    st.none(),
+)
+
+# Strategy for percentages (0.0 to 100.0)
+percentages = st.floats(min_value=0.0, max_value=100.0, allow_nan=False)
+
+# Strategy for property names
+property_names = st.text(
+    alphabet=st.characters(categories=("L", "N", "P")),
+    min_size=1,
+    max_size=50,
+).filter(lambda s: s.strip())
+
+
+class TestPropertyValueCountProperties:
+    """Property-based tests for PropertyValueCount."""
+
+    @given(
+        value=property_values,
+        count=st.integers(min_value=0, max_value=10_000_000),
+        percentage=percentages,
+    )
+    def test_to_dict_always_json_serializable(
+        self, value: str | int | float | bool | None, count: int, percentage: float
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = PropertyValueCount(value=value, count=count, percentage=percentage)
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert data["count"] == count
+
+    @given(
+        count=st.integers(min_value=0, max_value=10_000_000),
+        percentage=percentages,
+    )
+    def test_immutable(self, count: int, percentage: float) -> None:
+        """PropertyValueCount should be immutable (frozen dataclass)."""
+        result = PropertyValueCount(value="test", count=count, percentage=percentage)
+
+        import dataclasses
+
+        import pytest
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.count = 999  # type: ignore[misc]
+
+
+# =============================================================================
+# PropertyDistributionResult Property Tests
+# =============================================================================
+
+
+class TestPropertyDistributionResultProperties:
+    """Property-based tests for PropertyDistributionResult."""
+
+    @given(
+        event=event_names,
+        property_name=property_names,
+        from_date=date_strings,
+        to_date=date_strings,
+        total_count=st.integers(min_value=0, max_value=10_000_000),
+        value_count=st.integers(min_value=0, max_value=20),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        event: str,
+        property_name: str,
+        from_date: str,
+        to_date: str,
+        total_count: int,
+        value_count: int,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        values = tuple(
+            PropertyValueCount(
+                value=f"value_{i}",
+                count=total_count // max(1, value_count),
+                percentage=100.0 / max(1, value_count),
+            )
+            for i in range(value_count)
+        )
+
+        result = PropertyDistributionResult(
+            event=event,
+            property_name=property_name,
+            from_date=from_date,
+            to_date=to_date,
+            total_count=total_count,
+            values=values,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert len(data["values"]) == value_count
+
+    @given(value_count=st.integers(min_value=0, max_value=30))
+    def test_df_row_count_matches_values(self, value_count: int) -> None:
+        """DataFrame row count should equal number of values."""
+        values = tuple(
+            PropertyValueCount(value=f"value_{i}", count=100, percentage=10.0)
+            for i in range(value_count)
+        )
+
+        result = PropertyDistributionResult(
+            event="test_event",
+            property_name="test_property",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_count=1000,
+            values=values,
+        )
+
+        assert len(result.df) == value_count
+
+    @given(event=event_names, property_name=property_names)
+    def test_df_has_required_columns(self, event: str, property_name: str) -> None:
+        """DataFrame should always have value, count, percentage columns."""
+        result = PropertyDistributionResult(
+            event=event,
+            property_name=property_name,
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_count=0,
+            values=(),
+        )
+
+        df = result.df
+        assert "value" in df.columns
+        assert "count" in df.columns
+        assert "percentage" in df.columns
+
+    @given(event=event_names, property_name=property_names)
+    def test_df_cached_returns_same_object(
+        self, event: str, property_name: str
+    ) -> None:
+        """Repeated df access should return the same cached object."""
+        result = PropertyDistributionResult(
+            event=event,
+            property_name=property_name,
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_count=0,
+            values=(),
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2
+
+
+# =============================================================================
+# NumericPropertySummaryResult Property Tests
+# =============================================================================
+
+
+class TestNumericPropertySummaryResultProperties:
+    """Property-based tests for NumericPropertySummaryResult."""
+
+    @given(
+        event=event_names,
+        property_name=property_names,
+        from_date=date_strings,
+        to_date=date_strings,
+        count=st.integers(min_value=0, max_value=10_000_000),
+        min_val=st.floats(min_value=-1e9, max_value=1e9, allow_nan=False),
+        max_val=st.floats(min_value=-1e9, max_value=1e9, allow_nan=False),
+        sum_val=st.floats(min_value=-1e12, max_value=1e12, allow_nan=False),
+        avg_val=st.floats(min_value=-1e9, max_value=1e9, allow_nan=False),
+        stddev_val=st.floats(min_value=0, max_value=1e9, allow_nan=False),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        event: str,
+        property_name: str,
+        from_date: str,
+        to_date: str,
+        count: int,
+        min_val: float,
+        max_val: float,
+        sum_val: float,
+        avg_val: float,
+        stddev_val: float,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = NumericPropertySummaryResult(
+            event=event,
+            property_name=property_name,
+            from_date=from_date,
+            to_date=to_date,
+            count=count,
+            min=min_val,
+            max=max_val,
+            sum=sum_val,
+            avg=avg_val,
+            stddev=stddev_val,
+            percentiles={25: 10.0, 50: 50.0, 75: 90.0},
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert data["count"] == count
+
+    @given(
+        percentile_keys=st.lists(
+            st.integers(min_value=1, max_value=99),
+            min_size=0,
+            max_size=10,
+            unique=True,
+        ),
+    )
+    def test_percentiles_preserved(self, percentile_keys: list[int]) -> None:
+        """Percentiles should be preserved through serialization."""
+        percentiles = {k: float(k) for k in percentile_keys}
+
+        result = NumericPropertySummaryResult(
+            event="test_event",
+            property_name="test_property",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            count=1000,
+            min=0.0,
+            max=100.0,
+            sum=50000.0,
+            avg=50.0,
+            stddev=25.0,
+            percentiles=percentiles,
+        )
+
+        data = result.to_dict()
+        # Keys become strings in JSON
+        assert len(data["percentiles"]) == len(percentile_keys)
+
+
+# =============================================================================
+# DailyCount and DailyCountsResult Property Tests
+# =============================================================================
+
+
+class TestDailyCountProperties:
+    """Property-based tests for DailyCount."""
+
+    @given(
+        date=date_strings,
+        event=event_names,
+        count=st.integers(min_value=0, max_value=10_000_000),
+    )
+    def test_to_dict_always_json_serializable(
+        self, date: str, event: str, count: int
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = DailyCount(date=date, event=event, count=count)
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert data["count"] == count
+
+
+class TestDailyCountsResultProperties:
+    """Property-based tests for DailyCountsResult."""
+
+    @given(
+        from_date=date_strings,
+        to_date=date_strings,
+        events=st.one_of(st.none(), st.lists(event_names, min_size=1, max_size=5)),
+        count_count=st.integers(min_value=0, max_value=20),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        from_date: str,
+        to_date: str,
+        events: list[str] | None,
+        count_count: int,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        counts = tuple(
+            DailyCount(
+                date=f"2024-01-{(i % 28) + 1:02d}", event=f"Event_{i}", count=100
+            )
+            for i in range(count_count)
+        )
+
+        result = DailyCountsResult(
+            from_date=from_date,
+            to_date=to_date,
+            events=tuple(events) if events else None,
+            counts=counts,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert len(data["counts"]) == count_count
+
+    @given(count_count=st.integers(min_value=0, max_value=30))
+    def test_df_row_count_matches_counts(self, count_count: int) -> None:
+        """DataFrame row count should equal number of counts."""
+        counts = tuple(
+            DailyCount(date=f"2024-01-{(i % 28) + 1:02d}", event="TestEvent", count=100)
+            for i in range(count_count)
+        )
+
+        result = DailyCountsResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            counts=counts,
+        )
+
+        assert len(result.df) == count_count
+
+    def test_df_has_required_columns(self) -> None:
+        """DataFrame should always have date, event, count columns."""
+        result = DailyCountsResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            counts=(),
+        )
+
+        df = result.df
+        assert "date" in df.columns
+        assert "event" in df.columns
+        assert "count" in df.columns
+
+    @given(from_date=date_strings, to_date=date_strings)
+    def test_df_cached_returns_same_object(self, from_date: str, to_date: str) -> None:
+        """Repeated df access should return the same cached object."""
+        result = DailyCountsResult(
+            from_date=from_date,
+            to_date=to_date,
+            events=None,
+            counts=(),
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2
+
+
+# =============================================================================
+# EngagementBucket and EngagementDistributionResult Property Tests
+# =============================================================================
+
+
+class TestEngagementBucketProperties:
+    """Property-based tests for EngagementBucket."""
+
+    @given(
+        bucket_min=st.integers(min_value=0, max_value=10000),
+        bucket_label=st.text(min_size=1, max_size=20),
+        user_count=st.integers(min_value=0, max_value=10_000_000),
+        percentage=percentages,
+    )
+    def test_to_dict_always_json_serializable(
+        self, bucket_min: int, bucket_label: str, user_count: int, percentage: float
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = EngagementBucket(
+            bucket_min=bucket_min,
+            bucket_label=bucket_label,
+            user_count=user_count,
+            percentage=percentage,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert data["user_count"] == user_count
+
+
+class TestEngagementDistributionResultProperties:
+    """Property-based tests for EngagementDistributionResult."""
+
+    @given(
+        from_date=date_strings,
+        to_date=date_strings,
+        events=st.one_of(st.none(), st.lists(event_names, min_size=1, max_size=5)),
+        total_users=st.integers(min_value=0, max_value=10_000_000),
+        bucket_count=st.integers(min_value=0, max_value=10),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        from_date: str,
+        to_date: str,
+        events: list[str] | None,
+        total_users: int,
+        bucket_count: int,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        buckets = tuple(
+            EngagementBucket(
+                bucket_min=i * 10,
+                bucket_label=f"{i * 10}-{(i + 1) * 10}",
+                user_count=total_users // max(1, bucket_count),
+                percentage=100.0 / max(1, bucket_count),
+            )
+            for i in range(bucket_count)
+        )
+
+        result = EngagementDistributionResult(
+            from_date=from_date,
+            to_date=to_date,
+            events=tuple(events) if events else None,
+            total_users=total_users,
+            buckets=buckets,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert len(data["buckets"]) == bucket_count
+
+    @given(bucket_count=st.integers(min_value=0, max_value=20))
+    def test_df_row_count_matches_buckets(self, bucket_count: int) -> None:
+        """DataFrame row count should equal number of buckets."""
+        buckets = tuple(
+            EngagementBucket(
+                bucket_min=i * 10,
+                bucket_label=f"{i * 10}+",
+                user_count=100,
+                percentage=10.0,
+            )
+            for i in range(bucket_count)
+        )
+
+        result = EngagementDistributionResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            total_users=1000,
+            buckets=buckets,
+        )
+
+        assert len(result.df) == bucket_count
+
+    def test_df_has_required_columns(self) -> None:
+        """DataFrame should have bucket_min, bucket_label, user_count, percentage."""
+        result = EngagementDistributionResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            total_users=0,
+            buckets=(),
+        )
+
+        df = result.df
+        assert "bucket_min" in df.columns
+        assert "bucket_label" in df.columns
+        assert "user_count" in df.columns
+        assert "percentage" in df.columns
+
+    @given(from_date=date_strings, to_date=date_strings)
+    def test_df_cached_returns_same_object(self, from_date: str, to_date: str) -> None:
+        """Repeated df access should return the same cached object."""
+        result = EngagementDistributionResult(
+            from_date=from_date,
+            to_date=to_date,
+            events=None,
+            total_users=0,
+            buckets=(),
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2
+
+
+# =============================================================================
+# PropertyCoverage and PropertyCoverageResult Property Tests
+# =============================================================================
+
+
+class TestPropertyCoverageProperties:
+    """Property-based tests for PropertyCoverage."""
+
+    @given(
+        property_name=property_names,
+        defined_count=st.integers(min_value=0, max_value=10_000_000),
+        null_count=st.integers(min_value=0, max_value=10_000_000),
+        coverage_percentage=percentages,
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        property_name: str,
+        defined_count: int,
+        null_count: int,
+        coverage_percentage: float,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        result = PropertyCoverage(
+            property=property_name,
+            defined_count=defined_count,
+            null_count=null_count,
+            coverage_percentage=coverage_percentage,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert data["defined_count"] == defined_count
+
+
+class TestPropertyCoverageResultProperties:
+    """Property-based tests for PropertyCoverageResult."""
+
+    @given(
+        event=event_names,
+        from_date=date_strings,
+        to_date=date_strings,
+        total_events=st.integers(min_value=0, max_value=10_000_000),
+        coverage_count=st.integers(min_value=0, max_value=10),
+    )
+    def test_to_dict_always_json_serializable(
+        self,
+        event: str,
+        from_date: str,
+        to_date: str,
+        total_events: int,
+        coverage_count: int,
+    ) -> None:
+        """to_dict() output should always be JSON-serializable."""
+        coverage = tuple(
+            PropertyCoverage(
+                property=f"prop_{i}",
+                defined_count=total_events // 2,
+                null_count=total_events // 2,
+                coverage_percentage=50.0,
+            )
+            for i in range(coverage_count)
+        )
+
+        result = PropertyCoverageResult(
+            event=event,
+            from_date=from_date,
+            to_date=to_date,
+            total_events=total_events,
+            coverage=coverage,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert len(data["coverage"]) == coverage_count
+
+    @given(coverage_count=st.integers(min_value=0, max_value=20))
+    def test_df_row_count_matches_coverage(self, coverage_count: int) -> None:
+        """DataFrame row count should equal number of coverage entries."""
+        coverage = tuple(
+            PropertyCoverage(
+                property=f"prop_{i}",
+                defined_count=500,
+                null_count=500,
+                coverage_percentage=50.0,
+            )
+            for i in range(coverage_count)
+        )
+
+        result = PropertyCoverageResult(
+            event="test_event",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_events=1000,
+            coverage=coverage,
+        )
+
+        assert len(result.df) == coverage_count
+
+    def test_df_has_required_columns(self) -> None:
+        """DataFrame should have property, defined_count, null_count, coverage_pct."""
+        result = PropertyCoverageResult(
+            event="test_event",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_events=0,
+            coverage=(),
+        )
+
+        df = result.df
+        assert "property" in df.columns
+        assert "defined_count" in df.columns
+        assert "null_count" in df.columns
+        assert "coverage_percentage" in df.columns
+
+    @given(event=event_names)
+    def test_df_cached_returns_same_object(self, event: str) -> None:
+        """Repeated df access should return the same cached object."""
+        result = PropertyCoverageResult(
+            event=event,
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_events=0,
+            coverage=(),
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2

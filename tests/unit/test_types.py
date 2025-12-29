@@ -1116,3 +1116,790 @@ class TestSQLResult:
 
         assert len(result) == 0
         assert result.to_dicts() == []
+
+
+# =============================================================================
+# JQL Discovery Types Tests (Phase 016)
+# =============================================================================
+
+
+class TestPropertyValueCount:
+    """Tests for PropertyValueCount."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating a PropertyValueCount."""
+        from mixpanel_data.types import PropertyValueCount
+
+        pvc = PropertyValueCount(value="US", count=1000, percentage=45.2)
+
+        assert pvc.value == "US"
+        assert pvc.count == 1000
+        assert pvc.percentage == 45.2
+
+    def test_with_none_value(self) -> None:
+        """Test PropertyValueCount with None value."""
+        from mixpanel_data.types import PropertyValueCount
+
+        pvc = PropertyValueCount(value=None, count=50, percentage=2.5)
+
+        assert pvc.value is None
+        assert pvc.count == 50
+
+    def test_with_numeric_value(self) -> None:
+        """Test PropertyValueCount with numeric value."""
+        from mixpanel_data.types import PropertyValueCount
+
+        pvc = PropertyValueCount(value=42, count=100, percentage=10.0)
+
+        assert pvc.value == 42
+
+    def test_immutable(self) -> None:
+        """PropertyValueCount should be immutable (frozen)."""
+        from mixpanel_data.types import PropertyValueCount
+
+        pvc = PropertyValueCount(value="US", count=1000, percentage=45.2)
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            pvc.count = 2000  # type: ignore[misc]
+
+    def test_to_dict_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import PropertyValueCount
+
+        pvc = PropertyValueCount(value="US", count=1000, percentage=45.2)
+
+        data = pvc.to_dict()
+        json_str = json.dumps(data)
+
+        assert "US" in json_str
+        assert data["count"] == 1000
+        assert data["percentage"] == 45.2
+
+
+class TestPropertyDistributionResult:
+    """Tests for PropertyDistributionResult."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating a PropertyDistributionResult."""
+        from mixpanel_data.types import PropertyDistributionResult, PropertyValueCount
+
+        values = (
+            PropertyValueCount(value="US", count=1000, percentage=50.0),
+            PropertyValueCount(value="UK", count=500, percentage=25.0),
+            PropertyValueCount(value="DE", count=500, percentage=25.0),
+        )
+        result = PropertyDistributionResult(
+            event="Purchase",
+            property_name="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_count=2000,
+            values=values,
+        )
+
+        assert result.event == "Purchase"
+        assert result.property_name == "country"
+        assert result.total_count == 2000
+        assert len(result.values) == 3
+
+    def test_empty_values(self) -> None:
+        """Test PropertyDistributionResult with empty values."""
+        from mixpanel_data.types import PropertyDistributionResult
+
+        result = PropertyDistributionResult(
+            event="Purchase",
+            property_name="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_count=0,
+            values=(),
+        )
+
+        assert result.total_count == 0
+        assert len(result.values) == 0
+
+    def test_immutable(self) -> None:
+        """PropertyDistributionResult should be immutable (frozen)."""
+        from mixpanel_data.types import PropertyDistributionResult
+
+        result = PropertyDistributionResult(
+            event="Purchase",
+            property_name="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_count=100,
+            values=(),
+        )
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.total_count = 200  # type: ignore[misc]
+
+    def test_df_has_expected_columns(self) -> None:
+        """df should have value, count, percentage columns."""
+        from mixpanel_data.types import PropertyDistributionResult, PropertyValueCount
+
+        values = (
+            PropertyValueCount(value="US", count=1000, percentage=50.0),
+            PropertyValueCount(value="UK", count=500, percentage=25.0),
+        )
+        result = PropertyDistributionResult(
+            event="Purchase",
+            property_name="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_count=1500,
+            values=values,
+        )
+
+        df = result.df
+        assert "value" in df.columns
+        assert "count" in df.columns
+        assert "percentage" in df.columns
+        assert len(df) == 2
+
+    def test_df_empty_values(self) -> None:
+        """df should handle empty values."""
+        from mixpanel_data.types import PropertyDistributionResult
+
+        result = PropertyDistributionResult(
+            event="Purchase",
+            property_name="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_count=0,
+            values=(),
+        )
+
+        df = result.df
+        assert len(df) == 0
+        assert "value" in df.columns
+
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        from mixpanel_data.types import PropertyDistributionResult
+
+        result = PropertyDistributionResult(
+            event="Purchase",
+            property_name="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_count=0,
+            values=(),
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2
+
+    def test_to_dict_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import PropertyDistributionResult, PropertyValueCount
+
+        values = (PropertyValueCount(value="US", count=1000, percentage=100.0),)
+        result = PropertyDistributionResult(
+            event="Purchase",
+            property_name="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_count=1000,
+            values=values,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+
+        assert "Purchase" in json_str
+        assert data["property_name"] == "country"
+        assert len(data["values"]) == 1
+
+
+class TestNumericPropertySummaryResult:
+    """Tests for NumericPropertySummaryResult."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating a NumericPropertySummaryResult."""
+        from mixpanel_data.types import NumericPropertySummaryResult
+
+        result = NumericPropertySummaryResult(
+            event="Purchase",
+            property_name="amount",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            count=10000,
+            min=1.0,
+            max=9999.0,
+            sum=1562300.0,
+            avg=156.23,
+            stddev=234.56,
+            percentiles={
+                25: 45.0,
+                50: 98.0,
+                75: 189.0,
+                90: 356.0,
+                95: 567.0,
+                99: 1234.0,
+            },
+        )
+
+        assert result.event == "Purchase"
+        assert result.property_name == "amount"
+        assert result.count == 10000
+        assert result.min == 1.0
+        assert result.max == 9999.0
+        assert result.avg == 156.23
+        assert result.percentiles[50] == 98.0
+
+    def test_immutable(self) -> None:
+        """NumericPropertySummaryResult should be immutable (frozen)."""
+        from mixpanel_data.types import NumericPropertySummaryResult
+
+        result = NumericPropertySummaryResult(
+            event="Purchase",
+            property_name="amount",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            count=100,
+            min=1.0,
+            max=100.0,
+            sum=5000.0,
+            avg=50.0,
+            stddev=10.0,
+            percentiles={},
+        )
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.count = 200  # type: ignore[misc]
+
+    def test_to_dict_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import NumericPropertySummaryResult
+
+        result = NumericPropertySummaryResult(
+            event="Purchase",
+            property_name="amount",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            count=1000,
+            min=1.0,
+            max=1000.0,
+            sum=50000.0,
+            avg=50.0,
+            stddev=25.0,
+            percentiles={50: 45.0, 90: 200.0},
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+
+        assert "Purchase" in json_str
+        assert data["property_name"] == "amount"
+        assert data["min"] == 1.0
+        assert data["percentiles"]["50"] == 45.0
+
+
+class TestDailyCount:
+    """Tests for DailyCount."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating a DailyCount."""
+        from mixpanel_data.types import DailyCount
+
+        dc = DailyCount(date="2024-01-01", event="Purchase", count=523)
+
+        assert dc.date == "2024-01-01"
+        assert dc.event == "Purchase"
+        assert dc.count == 523
+
+    def test_immutable(self) -> None:
+        """DailyCount should be immutable (frozen)."""
+        from mixpanel_data.types import DailyCount
+
+        dc = DailyCount(date="2024-01-01", event="Purchase", count=100)
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            dc.count = 200  # type: ignore[misc]
+
+    def test_to_dict_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import DailyCount
+
+        dc = DailyCount(date="2024-01-01", event="Purchase", count=523)
+
+        data = dc.to_dict()
+        json_str = json.dumps(data)
+
+        assert "2024-01-01" in json_str
+        assert data["event"] == "Purchase"
+        assert data["count"] == 523
+
+
+class TestDailyCountsResult:
+    """Tests for DailyCountsResult."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating a DailyCountsResult."""
+        from mixpanel_data.types import DailyCount, DailyCountsResult
+
+        counts = (
+            DailyCount(date="2024-01-01", event="Purchase", count=523),
+            DailyCount(date="2024-01-01", event="Signup", count=89),
+            DailyCount(date="2024-01-02", event="Purchase", count=612),
+        )
+        result = DailyCountsResult(
+            from_date="2024-01-01",
+            to_date="2024-01-02",
+            events=("Purchase", "Signup"),
+            counts=counts,
+        )
+
+        assert result.from_date == "2024-01-01"
+        assert result.events == ("Purchase", "Signup")
+        assert len(result.counts) == 3
+
+    def test_with_none_events(self) -> None:
+        """Test DailyCountsResult with None events (all events)."""
+        from mixpanel_data.types import DailyCountsResult
+
+        result = DailyCountsResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            counts=(),
+        )
+
+        assert result.events is None
+
+    def test_immutable(self) -> None:
+        """DailyCountsResult should be immutable (frozen)."""
+        from mixpanel_data.types import DailyCountsResult
+
+        result = DailyCountsResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            counts=(),
+        )
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.from_date = "2024-02-01"  # type: ignore[misc]
+
+    def test_df_has_expected_columns(self) -> None:
+        """df should have date, event, count columns."""
+        from mixpanel_data.types import DailyCount, DailyCountsResult
+
+        counts = (
+            DailyCount(date="2024-01-01", event="Purchase", count=100),
+            DailyCount(date="2024-01-02", event="Purchase", count=150),
+        )
+        result = DailyCountsResult(
+            from_date="2024-01-01",
+            to_date="2024-01-02",
+            events=("Purchase",),
+            counts=counts,
+        )
+
+        df = result.df
+        assert "date" in df.columns
+        assert "event" in df.columns
+        assert "count" in df.columns
+        assert len(df) == 2
+
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        from mixpanel_data.types import DailyCountsResult
+
+        result = DailyCountsResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            counts=(),
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2
+
+    def test_to_dict_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import DailyCount, DailyCountsResult
+
+        counts = (DailyCount(date="2024-01-01", event="Purchase", count=100),)
+        result = DailyCountsResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=("Purchase",),
+            counts=counts,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+
+        assert "2024-01-01" in json_str
+        assert len(data["counts"]) == 1
+
+
+class TestEngagementBucket:
+    """Tests for EngagementBucket."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating an EngagementBucket."""
+        from mixpanel_data.types import EngagementBucket
+
+        bucket = EngagementBucket(
+            bucket_min=1,
+            bucket_label="1",
+            user_count=5234,
+            percentage=35.2,
+        )
+
+        assert bucket.bucket_min == 1
+        assert bucket.bucket_label == "1"
+        assert bucket.user_count == 5234
+        assert bucket.percentage == 35.2
+
+    def test_with_range_label(self) -> None:
+        """Test EngagementBucket with range label."""
+        from mixpanel_data.types import EngagementBucket
+
+        bucket = EngagementBucket(
+            bucket_min=2,
+            bucket_label="2-5",
+            user_count=4521,
+            percentage=30.4,
+        )
+
+        assert bucket.bucket_label == "2-5"
+
+    def test_immutable(self) -> None:
+        """EngagementBucket should be immutable (frozen)."""
+        from mixpanel_data.types import EngagementBucket
+
+        bucket = EngagementBucket(
+            bucket_min=1,
+            bucket_label="1",
+            user_count=100,
+            percentage=10.0,
+        )
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            bucket.user_count = 200  # type: ignore[misc]
+
+    def test_to_dict_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import EngagementBucket
+
+        bucket = EngagementBucket(
+            bucket_min=1,
+            bucket_label="1",
+            user_count=5234,
+            percentage=35.2,
+        )
+
+        data = bucket.to_dict()
+        json_str = json.dumps(data)
+
+        assert data["bucket_min"] == 1
+        assert data["user_count"] == 5234
+        assert "35.2" in json_str
+
+
+class TestEngagementDistributionResult:
+    """Tests for EngagementDistributionResult."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating an EngagementDistributionResult."""
+        from mixpanel_data.types import EngagementBucket, EngagementDistributionResult
+
+        buckets = (
+            EngagementBucket(
+                bucket_min=1, bucket_label="1", user_count=5234, percentage=35.2
+            ),
+            EngagementBucket(
+                bucket_min=2, bucket_label="2-5", user_count=4521, percentage=30.4
+            ),
+        )
+        result = EngagementDistributionResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            total_users=14876,
+            buckets=buckets,
+        )
+
+        assert result.from_date == "2024-01-01"
+        assert result.total_users == 14876
+        assert len(result.buckets) == 2
+
+    def test_with_filtered_events(self) -> None:
+        """Test EngagementDistributionResult with filtered events."""
+        from mixpanel_data.types import EngagementDistributionResult
+
+        result = EngagementDistributionResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=("Purchase", "Signup"),
+            total_users=1000,
+            buckets=(),
+        )
+
+        assert result.events == ("Purchase", "Signup")
+
+    def test_immutable(self) -> None:
+        """EngagementDistributionResult should be immutable (frozen)."""
+        from mixpanel_data.types import EngagementDistributionResult
+
+        result = EngagementDistributionResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            total_users=1000,
+            buckets=(),
+        )
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.total_users = 2000  # type: ignore[misc]
+
+    def test_df_has_expected_columns(self) -> None:
+        """df should have bucket_min, bucket_label, user_count, percentage columns."""
+        from mixpanel_data.types import EngagementBucket, EngagementDistributionResult
+
+        buckets = (
+            EngagementBucket(
+                bucket_min=1, bucket_label="1", user_count=100, percentage=50.0
+            ),
+            EngagementBucket(
+                bucket_min=2, bucket_label="2-5", user_count=100, percentage=50.0
+            ),
+        )
+        result = EngagementDistributionResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            total_users=200,
+            buckets=buckets,
+        )
+
+        df = result.df
+        assert "bucket_min" in df.columns
+        assert "bucket_label" in df.columns
+        assert "user_count" in df.columns
+        assert "percentage" in df.columns
+        assert len(df) == 2
+
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        from mixpanel_data.types import EngagementDistributionResult
+
+        result = EngagementDistributionResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            total_users=0,
+            buckets=(),
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2
+
+    def test_to_dict_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import EngagementBucket, EngagementDistributionResult
+
+        buckets = (
+            EngagementBucket(
+                bucket_min=1, bucket_label="1", user_count=100, percentage=100.0
+            ),
+        )
+        result = EngagementDistributionResult(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=None,
+            total_users=100,
+            buckets=buckets,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+
+        assert data["total_users"] == 100
+        assert len(data["buckets"]) == 1
+        assert "2024-01-01" in json_str
+
+
+class TestPropertyCoverage:
+    """Tests for PropertyCoverage."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating a PropertyCoverage."""
+        from mixpanel_data.types import PropertyCoverage
+
+        cov = PropertyCoverage(
+            property="coupon_code",
+            defined_count=2345,
+            null_count=7655,
+            coverage_percentage=23.45,
+        )
+
+        assert cov.property == "coupon_code"
+        assert cov.defined_count == 2345
+        assert cov.null_count == 7655
+        assert cov.coverage_percentage == 23.45
+
+    def test_full_coverage(self) -> None:
+        """Test PropertyCoverage with 100% coverage."""
+        from mixpanel_data.types import PropertyCoverage
+
+        cov = PropertyCoverage(
+            property="distinct_id",
+            defined_count=10000,
+            null_count=0,
+            coverage_percentage=100.0,
+        )
+
+        assert cov.null_count == 0
+        assert cov.coverage_percentage == 100.0
+
+    def test_immutable(self) -> None:
+        """PropertyCoverage should be immutable (frozen)."""
+        from mixpanel_data.types import PropertyCoverage
+
+        cov = PropertyCoverage(
+            property="test",
+            defined_count=100,
+            null_count=0,
+            coverage_percentage=100.0,
+        )
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            cov.defined_count = 200  # type: ignore[misc]
+
+    def test_to_dict_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import PropertyCoverage
+
+        cov = PropertyCoverage(
+            property="coupon_code",
+            defined_count=2345,
+            null_count=7655,
+            coverage_percentage=23.45,
+        )
+
+        data = cov.to_dict()
+        json_str = json.dumps(data)
+
+        assert "coupon_code" in json_str
+        assert data["defined_count"] == 2345
+
+
+class TestPropertyCoverageResult:
+    """Tests for PropertyCoverageResult."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating a PropertyCoverageResult."""
+        from mixpanel_data.types import PropertyCoverage, PropertyCoverageResult
+
+        coverage = (
+            PropertyCoverage("coupon_code", 2345, 7655, 23.45),
+            PropertyCoverage("referrer", 8901, 1099, 89.01),
+            PropertyCoverage("utm_source", 6789, 3211, 67.89),
+        )
+        result = PropertyCoverageResult(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_events=10000,
+            coverage=coverage,
+        )
+
+        assert result.event == "Purchase"
+        assert result.total_events == 10000
+        assert len(result.coverage) == 3
+
+    def test_empty_coverage(self) -> None:
+        """Test PropertyCoverageResult with empty coverage."""
+        from mixpanel_data.types import PropertyCoverageResult
+
+        result = PropertyCoverageResult(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_events=0,
+            coverage=(),
+        )
+
+        assert len(result.coverage) == 0
+
+    def test_immutable(self) -> None:
+        """PropertyCoverageResult should be immutable (frozen)."""
+        from mixpanel_data.types import PropertyCoverageResult
+
+        result = PropertyCoverageResult(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_events=1000,
+            coverage=(),
+        )
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.total_events = 2000  # type: ignore[misc]
+
+    def test_df_has_expected_columns(self) -> None:
+        """df should have property, defined_count, null_count, coverage_percentage."""
+        from mixpanel_data.types import PropertyCoverage, PropertyCoverageResult
+
+        coverage = (
+            PropertyCoverage("prop1", 100, 0, 100.0),
+            PropertyCoverage("prop2", 50, 50, 50.0),
+        )
+        result = PropertyCoverageResult(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_events=100,
+            coverage=coverage,
+        )
+
+        df = result.df
+        assert "property" in df.columns
+        assert "defined_count" in df.columns
+        assert "null_count" in df.columns
+        assert "coverage_percentage" in df.columns
+        assert len(df) == 2
+
+    def test_df_cached(self) -> None:
+        """df should be cached on first access."""
+        from mixpanel_data.types import PropertyCoverageResult
+
+        result = PropertyCoverageResult(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_events=0,
+            coverage=(),
+        )
+
+        df1 = result.df
+        df2 = result.df
+        assert df1 is df2
+
+    def test_to_dict_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import PropertyCoverage, PropertyCoverageResult
+
+        coverage = (PropertyCoverage("coupon_code", 100, 900, 10.0),)
+        result = PropertyCoverageResult(
+            event="Purchase",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            total_events=1000,
+            coverage=coverage,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+
+        assert "Purchase" in json_str
+        assert data["total_events"] == 1000
+        assert len(data["coverage"]) == 1

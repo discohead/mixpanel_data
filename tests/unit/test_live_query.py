@@ -1209,3 +1209,825 @@ class TestPropertyCounts:
                 from_date="2024-01-01",
                 to_date="2024-01-01",
             )
+
+
+# =============================================================================
+# JQL-Based Remote Discovery Methods
+# =============================================================================
+
+
+class TestPropertyDistribution:
+    """Tests for LiveQueryService.property_distribution()."""
+
+    def test_property_distribution_basic_query(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_distribution() should return PropertyDistributionResult."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {"value": "US", "count": 4523},
+                    {"value": "UK", "count": 2234},
+                    {"value": "DE", "count": 1567},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.property_distribution(
+            event="Purchase",
+            property="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        assert result.event == "Purchase"
+        assert result.property_name == "country"
+        assert result.from_date == "2024-01-01"
+        assert result.to_date == "2024-01-31"
+        assert result.total_count == 4523 + 2234 + 1567
+        assert len(result.values) == 3
+        assert result.values[0].value == "US"
+        assert result.values[0].count == 4523
+
+    def test_property_distribution_calculates_percentages(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_distribution() should calculate value percentages."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {"value": "US", "count": 50},
+                    {"value": "UK", "count": 50},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.property_distribution(
+            event="Purchase",
+            property="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        # Each should be 50%
+        assert result.values[0].percentage == 50.0
+        assert result.values[1].percentage == 50.0
+
+    def test_property_distribution_with_limit(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_distribution() should respect limit parameter."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            # Verify limit is passed in JQL params
+            content = request.content.decode()
+            assert "10" in content  # limit value should appear in script or params
+            return httpx.Response(
+                200,
+                json=[
+                    {"value": "US", "count": 100},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.property_distribution(
+            event="Purchase",
+            property="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            limit=10,
+        )
+
+        assert len(result.values) == 1
+
+    def test_property_distribution_empty_result(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_distribution() should handle empty results."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        live_query = live_query_factory(handler)
+        result = live_query.property_distribution(
+            event="Purchase",
+            property="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        assert result.total_count == 0
+        assert result.values == ()
+
+    def test_property_distribution_df_conversion(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_distribution() result should have working df property."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {"value": "US", "count": 100},
+                    {"value": "UK", "count": 50},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.property_distribution(
+            event="Purchase",
+            property="country",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        df = result.df
+        assert "value" in df.columns
+        assert "count" in df.columns
+        assert "percentage" in df.columns
+        assert len(df) == 2
+
+    def test_property_distribution_propagates_query_error(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_distribution() should propagate QueryError."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": "Script error"})
+
+        live_query = live_query_factory(handler)
+
+        with pytest.raises(QueryError):
+            live_query.property_distribution(
+                event="Purchase",
+                property="country",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+
+
+class TestNumericSummary:
+    """Tests for LiveQueryService.numeric_summary()."""
+
+    def test_numeric_summary_basic_query(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """numeric_summary() should return NumericPropertySummaryResult."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            # JQL returns [[summary_dict, percentiles_list, min, max]]
+            return httpx.Response(
+                200,
+                json=[
+                    [
+                        {
+                            "count": 10000,
+                            "sum": 1562300.0,
+                            "avg": 156.23,
+                            "stddev": 234.56,
+                            "sum_squares": 0.0,
+                        },
+                        [
+                            {"percentile": 25, "value": 45.0},
+                            {"percentile": 50, "value": 98.0},
+                            {"percentile": 75, "value": 189.0},
+                            {"percentile": 90, "value": 356.0},
+                            {"percentile": 95, "value": 567.0},
+                            {"percentile": 99, "value": 1234.0},
+                        ],
+                        1.0,
+                        9999.0,
+                    ]
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.numeric_summary(
+            event="Purchase",
+            property="amount",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        assert result.event == "Purchase"
+        assert result.property_name == "amount"
+        assert result.from_date == "2024-01-01"
+        assert result.to_date == "2024-01-31"
+        assert result.count == 10000
+        assert result.min == 1.0
+        assert result.max == 9999.0
+        assert result.avg == 156.23
+        assert result.stddev == 234.56
+        assert result.percentiles[50] == 98.0
+        assert result.percentiles[99] == 1234.0
+
+    def test_numeric_summary_custom_percentiles(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """numeric_summary() should support custom percentiles."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            # Verify custom percentiles are passed
+            content = request.content.decode()
+            # The percentile values should appear somewhere in the request
+            assert "10" in content or "90" in content
+            # JQL returns [[summary_dict, percentiles_list, min, max]]
+            return httpx.Response(
+                200,
+                json=[
+                    [
+                        {
+                            "count": 100,
+                            "sum": 5000.0,
+                            "avg": 50.0,
+                            "stddev": 10.0,
+                            "sum_squares": 0.0,
+                        },
+                        [
+                            {"percentile": 10, "value": 20.0},
+                            {"percentile": 90, "value": 80.0},
+                        ],
+                        10.0,
+                        100.0,
+                    ]
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.numeric_summary(
+            event="Purchase",
+            property="amount",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            percentiles=[10, 90],
+        )
+
+        assert 10 in result.percentiles
+        assert 90 in result.percentiles
+
+    def test_numeric_summary_empty_data(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """numeric_summary() should handle empty results."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            # JQL returns [[summary_dict, percentiles_list, min, max]]
+            return httpx.Response(
+                200,
+                json=[
+                    [
+                        {
+                            "count": 0,
+                            "sum": 0.0,
+                            "avg": 0.0,
+                            "stddev": 0.0,
+                            "sum_squares": 0.0,
+                        },
+                        [],
+                        None,
+                        None,
+                    ]
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.numeric_summary(
+            event="Purchase",
+            property="amount",
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        assert result.count == 0
+        assert result.percentiles == {}
+        assert result.min == 0.0
+        assert result.max == 0.0
+
+    def test_numeric_summary_propagates_query_error(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """numeric_summary() should propagate QueryError."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": "Invalid property"})
+
+        live_query = live_query_factory(handler)
+
+        with pytest.raises(QueryError):
+            live_query.numeric_summary(
+                event="Purchase",
+                property="invalid",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+
+
+class TestDailyCounts:
+    """Tests for LiveQueryService.daily_counts()."""
+
+    def test_daily_counts_basic_query(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """daily_counts() should return DailyCountsResult."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {"date": "2024-01-01", "event": "Purchase", "count": 523},
+                    {"date": "2024-01-01", "event": "Signup", "count": 89},
+                    {"date": "2024-01-02", "event": "Purchase", "count": 612},
+                    {"date": "2024-01-02", "event": "Signup", "count": 102},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.daily_counts(
+            from_date="2024-01-01",
+            to_date="2024-01-02",
+            events=["Purchase", "Signup"],
+        )
+
+        assert result.from_date == "2024-01-01"
+        assert result.to_date == "2024-01-02"
+        assert result.events == ("Purchase", "Signup")
+        assert len(result.counts) == 4
+        assert result.counts[0].date == "2024-01-01"
+        assert result.counts[0].event == "Purchase"
+        assert result.counts[0].count == 523
+
+    def test_daily_counts_all_events(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """daily_counts() should query all events when events=None."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {"date": "2024-01-01", "event": "AnyEvent", "count": 100},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.daily_counts(
+            from_date="2024-01-01",
+            to_date="2024-01-01",
+        )
+
+        assert result.events is None
+        assert len(result.counts) == 1
+
+    def test_daily_counts_empty_result(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """daily_counts() should handle empty results."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        live_query = live_query_factory(handler)
+        result = live_query.daily_counts(
+            from_date="2024-01-01",
+            to_date="2024-01-01",
+        )
+
+        assert result.counts == ()
+
+    def test_daily_counts_df_conversion(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """daily_counts() result should have working df property."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {"date": "2024-01-01", "event": "Purchase", "count": 100},
+                    {"date": "2024-01-02", "event": "Purchase", "count": 150},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.daily_counts(
+            from_date="2024-01-01",
+            to_date="2024-01-02",
+            events=["Purchase"],
+        )
+
+        df = result.df
+        assert "date" in df.columns
+        assert "event" in df.columns
+        assert "count" in df.columns
+        assert len(df) == 2
+
+    def test_daily_counts_propagates_query_error(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """daily_counts() should propagate QueryError."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": "Script error"})
+
+        live_query = live_query_factory(handler)
+
+        with pytest.raises(QueryError):
+            live_query.daily_counts(
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+
+
+class TestEngagementDistribution:
+    """Tests for LiveQueryService.engagement_distribution()."""
+
+    def test_engagement_distribution_basic_query(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """engagement_distribution() should return EngagementDistributionResult."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {"bucket_min": 1, "user_count": 5234},
+                    {"bucket_min": 2, "user_count": 4521},
+                    {"bucket_min": 5, "user_count": 2345},
+                    {"bucket_min": 10, "user_count": 1567},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.engagement_distribution(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        assert result.from_date == "2024-01-01"
+        assert result.to_date == "2024-01-31"
+        assert result.total_users == 5234 + 4521 + 2345 + 1567
+        assert len(result.buckets) == 4
+        assert result.buckets[0].bucket_min == 1
+        assert result.buckets[0].user_count == 5234
+
+    def test_engagement_distribution_calculates_percentages(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """engagement_distribution() should calculate bucket percentages."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {"bucket_min": 1, "user_count": 50},
+                    {"bucket_min": 5, "user_count": 50},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.engagement_distribution(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        # Each should be 50%
+        assert result.buckets[0].percentage == 50.0
+        assert result.buckets[1].percentage == 50.0
+
+    def test_engagement_distribution_with_events_filter(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """engagement_distribution() should filter by events."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[{"bucket_min": 1, "user_count": 100}],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.engagement_distribution(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            events=["Purchase", "Signup"],
+        )
+
+        assert result.events == ("Purchase", "Signup")
+
+    def test_engagement_distribution_custom_buckets(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """engagement_distribution() should support custom buckets."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            # Verify custom buckets are passed
+            content = request.content.decode()
+            assert "1" in content and "10" in content and "100" in content
+            return httpx.Response(
+                200,
+                json=[
+                    {"bucket_min": 1, "user_count": 100},
+                    {"bucket_min": 10, "user_count": 50},
+                    {"bucket_min": 100, "user_count": 10},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.engagement_distribution(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+            buckets=[1, 10, 100],
+        )
+
+        assert len(result.buckets) == 3
+
+    def test_engagement_distribution_empty_result(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """engagement_distribution() should handle empty results."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        live_query = live_query_factory(handler)
+        result = live_query.engagement_distribution(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        assert result.total_users == 0
+        assert result.buckets == ()
+
+    def test_engagement_distribution_df_conversion(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """engagement_distribution() result should have working df property."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {"bucket_min": 1, "user_count": 100},
+                    {"bucket_min": 5, "user_count": 50},
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.engagement_distribution(
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        df = result.df
+        assert "bucket_min" in df.columns
+        assert "bucket_label" in df.columns
+        assert "user_count" in df.columns
+        assert "percentage" in df.columns
+        assert len(df) == 2
+
+    def test_engagement_distribution_propagates_query_error(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """engagement_distribution() should propagate QueryError."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": "Script error"})
+
+        live_query = live_query_factory(handler)
+
+        with pytest.raises(QueryError):
+            live_query.engagement_distribution(
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+
+
+class TestPropertyCoverage:
+    """Tests for LiveQueryService.property_coverage()."""
+
+    def test_property_coverage_basic_query(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_coverage() should return PropertyCoverageResult."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "total": 10000,
+                        "properties": {
+                            "coupon_code": 2345,
+                            "referrer": 8901,
+                            "utm_source": 6789,
+                        },
+                    }
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.property_coverage(
+            event="Purchase",
+            properties=["coupon_code", "referrer", "utm_source"],
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        assert result.event == "Purchase"
+        assert result.from_date == "2024-01-01"
+        assert result.to_date == "2024-01-31"
+        assert result.total_events == 10000
+        assert len(result.coverage) == 3
+
+    def test_property_coverage_calculates_percentages(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_coverage() should calculate coverage percentages."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "total": 100,
+                        "properties": {
+                            "coupon_code": 25,
+                            "referrer": 75,
+                        },
+                    }
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.property_coverage(
+            event="Purchase",
+            properties=["coupon_code", "referrer"],
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        # Find the coupon_code coverage
+        coupon_coverage = next(
+            c for c in result.coverage if c.property == "coupon_code"
+        )
+        referrer_coverage = next(c for c in result.coverage if c.property == "referrer")
+
+        assert coupon_coverage.defined_count == 25
+        assert coupon_coverage.null_count == 75
+        assert coupon_coverage.coverage_percentage == 25.0
+        assert referrer_coverage.coverage_percentage == 75.0
+
+    def test_property_coverage_empty_result(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_coverage() should handle no events."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[{"total": 0, "properties": {}}],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.property_coverage(
+            event="Purchase",
+            properties=["coupon_code"],
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        assert result.total_events == 0
+
+    def test_property_coverage_df_conversion(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_coverage() result should have working df property."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "total": 100,
+                        "properties": {"prop1": 50, "prop2": 75},
+                    }
+                ],
+            )
+
+        live_query = live_query_factory(handler)
+        result = live_query.property_coverage(
+            event="Purchase",
+            properties=["prop1", "prop2"],
+            from_date="2024-01-01",
+            to_date="2024-01-31",
+        )
+
+        df = result.df
+        assert "property" in df.columns
+        assert "defined_count" in df.columns
+        assert "null_count" in df.columns
+        assert "coverage_percentage" in df.columns
+        assert len(df) == 2
+
+    def test_property_coverage_propagates_query_error(
+        self,
+        live_query_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], LiveQueryService
+        ],
+    ) -> None:
+        """property_coverage() should propagate QueryError."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": "Script error"})
+
+        live_query = live_query_factory(handler)
+
+        with pytest.raises(QueryError):
+            live_query.property_coverage(
+                event="Purchase",
+                properties=["coupon_code"],
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )

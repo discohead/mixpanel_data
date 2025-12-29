@@ -17,6 +17,10 @@ from mixpanel_data._literal_types import CountType, HourDayUnit, TimeUnit
 from mixpanel_data.types import (
     ActivityFeedResult,
     CohortInfo,
+    DailyCount,
+    DailyCountsResult,
+    EngagementBucket,
+    EngagementDistributionResult,
     EventCountsResult,
     FlowsResult,
     FrequencyResult,
@@ -25,8 +29,13 @@ from mixpanel_data.types import (
     JQLResult,
     NumericAverageResult,
     NumericBucketResult,
+    NumericPropertySummaryResult,
     NumericSumResult,
     PropertyCountsResult,
+    PropertyCoverage,
+    PropertyCoverageResult,
+    PropertyDistributionResult,
+    PropertyValueCount,
     RetentionResult,
     SavedReportResult,
     SegmentationResult,
@@ -908,6 +917,368 @@ class LiveQueryService:
         )
         return _transform_numeric_average(raw, event, from_date, to_date, on, unit)
 
+    # =========================================================================
+    # JQL-Based Remote Discovery Methods
+    # =========================================================================
+
+    def property_distribution(
+        self,
+        event: str,
+        property: str,
+        from_date: str,
+        to_date: str,
+        *,
+        limit: int = 20,
+    ) -> PropertyDistributionResult:
+        """Get distribution of values for a property.
+
+        Uses JQL to count occurrences of each property value, returning
+        counts and percentages sorted by frequency.
+
+        Args:
+            event: Event name to analyze.
+            property: Property name to get distribution for.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            limit: Maximum number of values to return. Default: 20.
+
+        Returns:
+            PropertyDistributionResult with value counts and percentages.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Script execution error.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            ```python
+            result = live_query.property_distribution(
+                event="Purchase",
+                property="country",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            for v in result.values:
+                print(f"{v.value}: {v.count} ({v.percentage:.1f}%)")
+            ```
+        """
+        script = """
+function main() {
+    return Events({
+        from_date: params.from_date,
+        to_date: params.to_date,
+        event_selectors: [{event: params.event}]
+    })
+    .filter(function(e) { return e.properties[params.property] !== undefined; })
+    .groupBy(['properties.' + params.property], mixpanel.reducer.count())
+    .map(function(item) {
+        return {value: item.key[0], count: item.value};
+    })
+    .sortDesc('count');
+}
+"""
+        params = {
+            "event": event,
+            "property": property,
+            "from_date": from_date,
+            "to_date": to_date,
+            "limit": limit,
+        }
+        raw = self._api_client.jql(script=script, params=params)
+        return _transform_property_distribution(
+            raw, event, property, from_date, to_date, limit
+        )
+
+    def numeric_summary(
+        self,
+        event: str,
+        property: str,
+        from_date: str,
+        to_date: str,
+        *,
+        percentiles: list[int] | None = None,
+    ) -> NumericPropertySummaryResult:
+        """Get statistical summary for a numeric property.
+
+        Uses JQL to compute count, min, max, avg, stddev, and percentiles
+        for a numeric property.
+
+        Args:
+            event: Event name to analyze.
+            property: Numeric property name.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            percentiles: Percentiles to compute. Default: [25, 50, 75, 90, 95, 99].
+
+        Returns:
+            NumericPropertySummaryResult with statistics.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Script execution error or non-numeric property.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            ```python
+            result = live_query.numeric_summary(
+                event="Purchase",
+                property="amount",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            print(f"Avg: {result.avg}, Median: {result.percentiles[50]}")
+            ```
+        """
+        if percentiles is None:
+            percentiles = [25, 50, 75, 90, 95, 99]
+
+        script = """
+function main() {
+    var propPath = 'properties.' + params.property;
+    return Events({
+        from_date: params.from_date,
+        to_date: params.to_date,
+        event_selectors: [{event: params.event}]
+    })
+    .filter(function(e) {
+        var val = e.properties[params.property];
+        return val !== undefined && val !== null && typeof val === 'number';
+    })
+    .reduce([
+        mixpanel.reducer.numeric_summary(propPath),
+        mixpanel.reducer.numeric_percentiles(propPath, params.percentiles),
+        mixpanel.reducer.min(propPath),
+        mixpanel.reducer.max(propPath)
+    ]);
+}
+"""
+        params = {
+            "event": event,
+            "property": property,
+            "from_date": from_date,
+            "to_date": to_date,
+            "percentiles": percentiles,
+        }
+        raw = self._api_client.jql(script=script, params=params)
+        return _transform_numeric_summary(raw, event, property, from_date, to_date)
+
+    def daily_counts(
+        self,
+        from_date: str,
+        to_date: str,
+        *,
+        events: list[str] | None = None,
+    ) -> DailyCountsResult:
+        """Get daily event counts.
+
+        Uses JQL to count events by day, optionally filtered to specific events.
+
+        Args:
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            events: Optional list of events to count. None = all events.
+
+        Returns:
+            DailyCountsResult with date/event/count tuples.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Script execution error.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            ```python
+            result = live_query.daily_counts(
+                from_date="2024-01-01",
+                to_date="2024-01-07",
+                events=["Purchase", "Signup"],
+            )
+            for c in result.counts:
+                print(f"{c.date} {c.event}: {c.count}")
+            ```
+        """
+        script = """
+function main() {
+    var selectors = params.events ?
+        params.events.map(function(e) { return {event: e}; }) :
+        [];
+    return Events({
+        from_date: params.from_date,
+        to_date: params.to_date,
+        event_selectors: selectors.length > 0 ? selectors : undefined
+    })
+    .groupBy([
+        mixpanel.numeric_bucket('time', mixpanel.daily_time_buckets),
+        'name'
+    ], mixpanel.reducer.count())
+    .map(function(item) {
+        return {
+            date: new Date(item.key[0]).toISOString().split('T')[0],
+            event: item.key[1],
+            count: item.value
+        };
+    })
+    .sortAsc('date');
+}
+"""
+        params: dict[str, Any] = {
+            "from_date": from_date,
+            "to_date": to_date,
+            "events": events,
+        }
+        raw = self._api_client.jql(script=script, params=params)
+        return _transform_daily_counts(raw, from_date, to_date, events)
+
+    def engagement_distribution(
+        self,
+        from_date: str,
+        to_date: str,
+        *,
+        events: list[str] | None = None,
+        buckets: list[int] | None = None,
+    ) -> EngagementDistributionResult:
+        """Get user engagement distribution.
+
+        Uses JQL to bucket users by their event count, showing how many
+        users performed N events.
+
+        Args:
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+            events: Optional list of events to count. None = all events.
+            buckets: Bucket boundaries. Default: [1, 2, 5, 10, 25, 50, 100].
+
+        Returns:
+            EngagementDistributionResult with user counts per bucket.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Script execution error.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            ```python
+            result = live_query.engagement_distribution(
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            for b in result.buckets:
+                print(f"{b.bucket_label}: {b.user_count} ({b.percentage:.1f}%)")
+            ```
+        """
+        if buckets is None:
+            buckets = [1, 2, 5, 10, 25, 50, 100]
+
+        script = """
+function main() {
+    var selectors = params.events ?
+        params.events.map(function(e) { return {event: e}; }) :
+        [];
+    return Events({
+        from_date: params.from_date,
+        to_date: params.to_date,
+        event_selectors: selectors.length > 0 ? selectors : undefined
+    })
+    .groupByUser(mixpanel.reducer.count())
+    .groupBy([
+        mixpanel.numeric_bucket('value', params.buckets)
+    ], mixpanel.reducer.count())
+    .map(function(item) {
+        return {bucket_min: item.key[0], user_count: item.value};
+    })
+    .sortAsc('bucket_min');
+}
+"""
+        params: dict[str, Any] = {
+            "from_date": from_date,
+            "to_date": to_date,
+            "events": events,
+            "buckets": buckets,
+        }
+        raw = self._api_client.jql(script=script, params=params)
+        return _transform_engagement_distribution(
+            raw, from_date, to_date, events, buckets
+        )
+
+    def property_coverage(
+        self,
+        event: str,
+        properties: list[str],
+        from_date: str,
+        to_date: str,
+    ) -> PropertyCoverageResult:
+        """Get property coverage statistics.
+
+        Uses JQL to count how often each property is defined (non-null)
+        vs undefined for the specified event.
+
+        Args:
+            event: Event name to analyze.
+            properties: List of property names to check.
+            from_date: Start date (YYYY-MM-DD).
+            to_date: End date (YYYY-MM-DD).
+
+        Returns:
+            PropertyCoverageResult with coverage statistics per property.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            QueryError: Script execution error.
+            RateLimitError: Rate limit exceeded.
+
+        Example:
+            ```python
+            result = live_query.property_coverage(
+                event="Purchase",
+                properties=["coupon_code", "referrer"],
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+            )
+            for c in result.coverage:
+                print(f"{c.property}: {c.coverage_percentage:.1f}% defined")
+            ```
+        """
+        script = """
+function main() {
+    return Events({
+        from_date: params.from_date,
+        to_date: params.to_date,
+        event_selectors: [{event: params.event}]
+    })
+    .reduce(function(accumulators, items) {
+        // JQL reduce pattern: accumulators[0] is the running accumulated result,
+        // while accumulators[1:] are partial results from parallel worker shards
+        // that need to be merged. We initialize from [0] then merge [1:] to avoid
+        // double-counting the accumulated value.
+        var result = accumulators[0] || {total: 0, properties: {}};
+        for (var i = 1; i < accumulators.length; i++) {
+            result.total += accumulators[i].total || 0;
+            for (var prop in accumulators[i].properties) {
+                result.properties[prop] = (result.properties[prop] || 0) +
+                    accumulators[i].properties[prop];
+            }
+        }
+        items.forEach(function(e) {
+            result.total++;
+            params.properties.forEach(function(prop) {
+                if (e.properties[prop] !== undefined && e.properties[prop] !== null) {
+                    result.properties[prop] = (result.properties[prop] || 0) + 1;
+                }
+            });
+        });
+        return result;
+    });
+}
+"""
+        params = {
+            "event": event,
+            "properties": properties,
+            "from_date": from_date,
+            "to_date": to_date,
+        }
+        raw = self._api_client.jql(script=script, params=params)
+        return _transform_property_coverage(raw, event, properties, from_date, to_date)
+
 
 # =============================================================================
 # Phase 008: Transformation Functions
@@ -1164,4 +1535,275 @@ def _transform_numeric_average(
         property_expr=on,
         unit=unit,
         results=results,
+    )
+
+
+# =============================================================================
+# JQL-Based Remote Discovery Transformation Functions
+# =============================================================================
+
+
+def _transform_property_distribution(
+    raw: list[dict[str, Any]],
+    event: str,
+    property: str,
+    from_date: str,
+    to_date: str,
+    limit: int,
+) -> PropertyDistributionResult:
+    """Transform raw JQL property distribution response.
+
+    Calculates percentages for each value based on total count.
+
+    Args:
+        raw: Raw JQL response (list of {value, count} dicts).
+        event: Event name queried.
+        property: Property name analyzed.
+        from_date: Query start date.
+        to_date: Query end date.
+        limit: Maximum number of values to include.
+
+    Returns:
+        Typed PropertyDistributionResult with values and percentages.
+    """
+    # Total count is computed from all results for accurate percentages
+    total_count = sum(item.get("count", 0) for item in raw)
+
+    # Apply limit after computing total (percentages are relative to full data)
+    limited_raw = raw[:limit]
+
+    def make_value_count(item: dict[str, Any]) -> PropertyValueCount:
+        count = item.get("count", 0)
+        return PropertyValueCount(
+            value=item.get("value"),
+            count=count,
+            percentage=(count / total_count * 100) if total_count > 0 else 0.0,
+        )
+
+    values = tuple(make_value_count(item) for item in limited_raw)
+
+    return PropertyDistributionResult(
+        event=event,
+        property_name=property,
+        from_date=from_date,
+        to_date=to_date,
+        total_count=total_count,
+        values=values,
+    )
+
+
+def _transform_numeric_summary(
+    raw: list[Any],
+    event: str,
+    property: str,
+    from_date: str,
+    to_date: str,
+) -> NumericPropertySummaryResult:
+    """Transform raw JQL numeric summary response.
+
+    JQL reduce with multiple reducers returns a nested list structure:
+    [[{summary_dict}, [{percentile_obj}, ...]]]
+
+    Args:
+        raw: Raw JQL response (nested list with summary and percentiles).
+        event: Event name queried.
+        property: Property name analyzed.
+        from_date: Query start date.
+        to_date: Query end date.
+
+    Returns:
+        Typed NumericPropertySummaryResult with statistics.
+    """
+    # JQL returns [[summary_dict, percentiles_list]] for multiple reducers
+    if not raw or not raw[0]:
+        return NumericPropertySummaryResult(
+            event=event,
+            property_name=property,
+            from_date=from_date,
+            to_date=to_date,
+            count=0,
+            min=0.0,
+            max=0.0,
+            sum=0.0,
+            avg=0.0,
+            stddev=0.0,
+            percentiles={},
+        )
+
+    inner = raw[0]
+
+    # Extract results from the inner array:
+    # [summary_dict, percentiles_list, min_value, max_value]
+    summary_data: dict[str, Any] = inner[0] if len(inner) > 0 else {}
+    percentiles_list: list[dict[str, Any]] = inner[1] if len(inner) > 1 else []
+    min_value: float = (
+        float(inner[2]) if len(inner) > 2 and inner[2] is not None else 0.0
+    )
+    max_value: float = (
+        float(inner[3]) if len(inner) > 3 and inner[3] is not None else 0.0
+    )
+
+    # Parse percentiles from list of {percentile: N, value: V} objects
+    percentiles = {
+        int(p.get("percentile", 0)): float(p.get("value", 0.0))
+        for p in percentiles_list
+    }
+
+    return NumericPropertySummaryResult(
+        event=event,
+        property_name=property,
+        from_date=from_date,
+        to_date=to_date,
+        count=summary_data.get("count", 0),
+        min=min_value,
+        max=max_value,
+        sum=float(summary_data.get("sum", 0.0)),
+        avg=float(summary_data.get("avg", 0.0)),
+        stddev=float(summary_data.get("stddev", 0.0)),
+        percentiles=percentiles,
+    )
+
+
+def _transform_daily_counts(
+    raw: list[dict[str, Any]],
+    from_date: str,
+    to_date: str,
+    events: list[str] | None,
+) -> DailyCountsResult:
+    """Transform raw JQL daily counts response.
+
+    Args:
+        raw: Raw JQL response (list of {date, event, count} dicts).
+        from_date: Query start date.
+        to_date: Query end date.
+        events: Events filter (or None for all).
+
+    Returns:
+        Typed DailyCountsResult with date/event/count tuples.
+    """
+    counts = tuple(
+        DailyCount(
+            date=item.get("date", ""),
+            event=item.get("event", ""),
+            count=item.get("count", 0),
+        )
+        for item in raw
+    )
+
+    return DailyCountsResult(
+        from_date=from_date,
+        to_date=to_date,
+        events=tuple(events) if events else None,
+        counts=counts,
+    )
+
+
+def _transform_engagement_distribution(
+    raw: list[dict[str, Any]],
+    from_date: str,
+    to_date: str,
+    events: list[str] | None,
+    buckets: list[int],
+) -> EngagementDistributionResult:
+    """Transform raw JQL engagement distribution response.
+
+    Calculates percentages and labels for each bucket.
+
+    Args:
+        raw: Raw JQL response (list of {bucket_min, user_count} dicts).
+        from_date: Query start date.
+        to_date: Query end date.
+        events: Events filter (or None for all).
+        buckets: Bucket boundaries used in query.
+
+    Returns:
+        Typed EngagementDistributionResult with buckets.
+    """
+    total_users = sum(item.get("user_count", 0) for item in raw)
+
+    def make_label(bucket_min: int, idx: int) -> str:
+        """Generate human-readable bucket label."""
+        if idx < len(buckets) - 1:
+            next_bucket = buckets[idx + 1]
+            if next_bucket == bucket_min + 1:
+                return str(bucket_min)
+            return f"{bucket_min}-{next_bucket - 1}"
+        return f"{bucket_min}+"
+
+    # Build bucket labels based on bucket boundaries
+    bucket_list = tuple(
+        EngagementBucket(
+            bucket_min=item.get("bucket_min", 0),
+            bucket_label=make_label(
+                item.get("bucket_min", 0),
+                next(
+                    (
+                        i
+                        for i, b in enumerate(buckets)
+                        if b == item.get("bucket_min", 0)
+                    ),
+                    len(buckets) - 1,
+                ),
+            ),
+            user_count=item.get("user_count", 0),
+            percentage=(item.get("user_count", 0) / total_users * 100)
+            if total_users > 0
+            else 0.0,
+        )
+        for item in raw
+    )
+
+    return EngagementDistributionResult(
+        from_date=from_date,
+        to_date=to_date,
+        events=tuple(events) if events else None,
+        total_users=total_users,
+        buckets=bucket_list,
+    )
+
+
+def _transform_property_coverage(
+    raw: list[dict[str, Any]],
+    event: str,
+    properties: list[str],
+    from_date: str,
+    to_date: str,
+) -> PropertyCoverageResult:
+    """Transform raw JQL property coverage response.
+
+    Calculates null counts and coverage percentages for each property.
+
+    Args:
+        raw: Raw JQL response (list with single {total, properties} dict).
+        event: Event name queried.
+        properties: Property names checked.
+        from_date: Query start date.
+        to_date: Query end date.
+
+    Returns:
+        Typed PropertyCoverageResult with coverage statistics.
+    """
+    # JQL reduce returns a list with one element
+    data = raw[0] if raw else {"total": 0, "properties": {}}
+    total_events = data.get("total", 0)
+    prop_counts = data.get("properties", {})
+
+    coverage = tuple(
+        PropertyCoverage(
+            property=prop,
+            defined_count=prop_counts.get(prop, 0),
+            null_count=total_events - prop_counts.get(prop, 0),
+            coverage_percentage=(prop_counts.get(prop, 0) / total_events * 100)
+            if total_events > 0
+            else 0.0,
+        )
+        for prop in properties
+    )
+
+    return PropertyCoverageResult(
+        event=event,
+        from_date=from_date,
+        to_date=to_date,
+        total_events=total_events,
+        coverage=coverage,
     )
