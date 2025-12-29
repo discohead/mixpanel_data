@@ -4,13 +4,13 @@
 [![Python](https://img.shields.io/pypi/pyversions/mixpanel_data)](https://pypi.org/project/mixpanel_data/)
 [![License](https://img.shields.io/github/license/discohead/mixpanel_data)](LICENSE)
 
-A Python library and CLI for working with Mixpanel analytics data—fetch once, query repeatedly with SQL, or stream directly to ETL pipelines.
+A complete programmable interface to Mixpanel analytics—Python library and CLI for discovery, querying, and data extraction.
 
 ## Why mixpanel_data?
 
-Every Mixpanel API call returns JSON that must be parsed, transformed, and reasoned about. For AI coding agents, this consumes valuable context window tokens. For data analysts, it means repetitive API calls.
+Mixpanel's web UI is powerful for interactive exploration, but programmatic access requires navigating multiple REST endpoints with different conventions. **mixpanel_data** provides a unified interface: discover your schema, run analytics queries, and extract data—all through consistent Python methods or CLI commands.
 
-**mixpanel_data** solves this by fetching data into a local [DuckDB](https://duckdb.org) database. Query it with SQL as many times as needed. Data lives on disk; only answers flow back.
+Core analytics—segmentation, funnels, retention, saved reports—plus capabilities like raw JQL execution and local SQL analysis via [DuckDB](https://duckdb.org).
 
 ## Installation
 
@@ -59,7 +59,7 @@ mp inspect funnels                     # Saved funnels
 ### 3. Fetch Events to Local Storage
 
 ```bash
-mp fetch events jan --from 2024-01-01 --to 2024-01-31
+mp fetch events jan --from 2025-01-01 --to 2025-01-31
 ```
 
 ### 4. Query with SQL
@@ -71,14 +71,14 @@ mp query sql "SELECT event_name, COUNT(*) FROM jan GROUP BY 1 ORDER BY 2 DESC" -
 ### 5. Run Live Analytics
 
 ```bash
-mp query segmentation --event Purchase --from 2024-01-01 --to 2024-01-31 --on country
+mp query segmentation --event Purchase --from 2025-01-01 --to 2025-01-31 --on country
 ```
 
 ### 6. Or Stream Directly (No Storage)
 
 ```bash
 # Stream events as JSONL for piping to other tools
-mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout | jq '.event_name'
+mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout | jq '.event_name'
 ```
 
 ## Python API
@@ -88,10 +88,31 @@ import mixpanel_data as mp
 
 ws = mp.Workspace()
 
-# Fetch events into local DuckDB
-ws.fetch_events("jan", from_date="2024-01-01", to_date="2024-01-31")
+# Discover what's in your project
+events = ws.list_events()
+props = ws.list_properties("Purchase")
+funnels = ws.list_funnels()
+cohorts = ws.list_cohorts()
 
-# Query with SQL — returns pandas DataFrame
+# Run live analytics queries
+result = ws.segmentation(
+    event=events[0].name,
+    from_date="2025-01-01",
+    to_date="2025-01-31",
+    on="properties.country"
+)
+print(result.df)  # pandas DataFrame
+
+# Query a saved funnel
+funnel = ws.funnel(
+    funnel_id=funnels[0].id,
+    from_date="2025-01-01",
+    to_date="2025-01-31"
+)
+
+# Fetch events into local DuckDB for SQL analysis
+ws.fetch_events("jan", from_date="2025-01-01", to_date="2025-01-31")
+
 df = ws.sql("""
     SELECT
         DATE_TRUNC('day', event_time) as day,
@@ -101,15 +122,6 @@ df = ws.sql("""
     GROUP BY 1, 2
     ORDER BY 1, 3 DESC
 """)
-
-# Or run live queries against Mixpanel API
-result = ws.segmentation(
-    event="Purchase",
-    from_date="2024-01-01",
-    to_date="2024-01-31",
-    on="properties.country"
-)
-print(result.df)
 ```
 
 ### Temporary Workspaces
@@ -119,13 +131,13 @@ For one-off analysis without persisting data:
 ```python
 # Ephemeral: temp file with compression (best for large datasets)
 with mp.Workspace.ephemeral() as ws:
-    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-31")
+    ws.fetch_events("events", from_date="2025-01-01", to_date="2025-01-31")
     total = ws.sql_scalar("SELECT COUNT(*) FROM events")
 # Database automatically deleted
 
 # In-memory: zero disk footprint (best for small datasets, testing)
 with mp.Workspace.memory() as ws:
-    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-07")
+    ws.fetch_events("events", from_date="2025-01-01", to_date="2025-01-07")
     total = ws.sql_scalar("SELECT COUNT(*) FROM events")
 # No files ever created
 ```
@@ -136,20 +148,20 @@ For ETL pipelines or one-time processing without storage:
 
 ```python
 # Stream events directly to external system
-for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
     send_to_warehouse(event)
 ```
 
 ## CLI Reference
 
-The `mp` CLI provides 33 commands across four groups:
+The `mp` CLI provides commands across four groups:
 
 | Group | Commands |
 |-------|----------|
 | `mp auth` | `list`, `add`, `remove`, `switch`, `show`, `test` |
 | `mp fetch` | `events`, `profiles` |
-| `mp query` | `sql`, `segmentation`, `funnel`, `retention`, `jql`, `event-counts`, `property-counts`, `activity-feed`, `insights`, `frequency`, `segmentation-numeric`, `segmentation-sum`, `segmentation-average` |
-| `mp inspect` | `events`, `properties`, `values`, `funnels`, `cohorts`, `top-events`, `lexicon-schemas`, `lexicon-schema`, `info`, `tables`, `schema`, `drop` |
+| `mp query` | `sql`, `segmentation`, `funnel`, `retention`, `jql`, `event-counts`, `property-counts`, `activity-feed`, `saved-report`, `flows`, `frequency`, `segmentation-numeric`, `segmentation-sum`, `segmentation-average` |
+| `mp inspect` | `events`, `properties`, `values`, `funnels`, `cohorts`, `bookmarks`, `top-events`, `info`, `tables`, `schema`, `drop`, `sample`, `summarize`, `breakdown` |
 
 All commands support `--format` (json, jsonl, table, csv, plain) and `--help`.
 
@@ -182,31 +194,17 @@ Full documentation: [discohead.github.io/mixpanel_data](https://discohead.github
 - [SQL Query Guide](https://discohead.github.io/mixpanel_data/guide/sql-queries/)
 - [Live Analytics](https://discohead.github.io/mixpanel_data/guide/live-analytics/)
 
-## For AI Agents
+## For Humans and Agents
 
-`mixpanel_data` is designed with AI coding agents in mind:
+The entire surface area is self-documenting. Every CLI command supports `--help` with complete argument descriptions. The Python API uses typed dataclasses for all return values—IDEs show you what fields are available. Exceptions include error codes and context for programmatic handling. This means both human developers and AI coding agents can explore capabilities without external documentation.
 
-- **Context preservation**: Fetch data once, query repeatedly without re-fetching
-- **Streaming for ETL**: Stream data directly to external systems with `--stdout`
-- **Structured output**: All commands support `--format json` for machine-readable responses
-- **Discoverable schema**: `mp inspect` commands reveal events, properties, and values before querying
-- **Local SQL**: Complex analysis via SQL instead of multiple API round-trips
-- **Predictable errors**: Typed exceptions with error codes for programmatic handling
+Key design features:
 
-Typical agent workflow:
-
-```bash
-# 1. Discover schema
-mp inspect events --format json
-mp inspect properties --event Purchase --format json
-
-# 2. Fetch relevant data (or stream with --stdout for ETL)
-mp fetch events data --from 2024-01-01 --to 2024-01-31
-
-# 3. Iterate with SQL queries
-mp query sql "SELECT ..." --format json
-mp query sql "SELECT ..." --format json  # No re-fetch needed
-```
+- **Discoverable schema**: `list_events()`, `list_properties()`, `list_funnels()`, `list_cohorts()`, `list_bookmarks()` reveal what's in your project before you query
+- **Consistent interfaces**: Same operations available as Python methods and CLI commands
+- **Structured output**: All CLI commands support `--format json` for machine-readable responses
+- **Local SQL iteration**: Fetch once, query repeatedly—no re-fetching needed
+- **Typed exceptions**: Error codes and context for programmatic handling
 
 ## Contributing
 
