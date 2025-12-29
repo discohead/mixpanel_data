@@ -91,6 +91,25 @@ _MIN_BATCH_SIZE = 100
 _MAX_BATCH_SIZE = 100_000
 
 
+def _validate_batch_size(batch_size: int) -> None:
+    """Validate batch_size is within the allowed range.
+
+    Args:
+        batch_size: Number of rows per commit.
+
+    Raises:
+        ValueError: If batch_size is outside the valid range.
+    """
+    if batch_size < _MIN_BATCH_SIZE:
+        raise ValueError(
+            f"batch_size must be at least {_MIN_BATCH_SIZE}, got {batch_size}"
+        )
+    if batch_size > _MAX_BATCH_SIZE:
+        raise ValueError(
+            f"batch_size must be at most {_MAX_BATCH_SIZE}, got {batch_size}"
+        )
+
+
 class Workspace:
     """Unified entry point for Mixpanel data operations.
 
@@ -809,14 +828,7 @@ class Workspace:
             ValueError: If batch_size is outside valid range (100-100000).
         """
         # Validate batch_size
-        if batch_size < _MIN_BATCH_SIZE:
-            raise ValueError(
-                f"batch_size must be at least {_MIN_BATCH_SIZE}, got {batch_size}"
-            )
-        if batch_size > _MAX_BATCH_SIZE:
-            raise ValueError(
-                f"batch_size must be at most {_MAX_BATCH_SIZE}, got {batch_size}"
-            )
+        _validate_batch_size(batch_size)
         # Create progress callback if requested (only for interactive terminals)
         progress_callback = None
         pbar = None
@@ -888,14 +900,7 @@ class Workspace:
             ValueError: If batch_size is outside valid range (100-100000).
         """
         # Validate batch_size
-        if batch_size < _MIN_BATCH_SIZE:
-            raise ValueError(
-                f"batch_size must be at least {_MIN_BATCH_SIZE}, got {batch_size}"
-            )
-        if batch_size > _MAX_BATCH_SIZE:
-            raise ValueError(
-                f"batch_size must be at most {_MAX_BATCH_SIZE}, got {batch_size}"
-            )
+        _validate_batch_size(batch_size)
 
         # Create progress callback if requested (only for interactive terminals)
         progress_callback = None
