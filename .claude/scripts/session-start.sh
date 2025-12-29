@@ -15,6 +15,12 @@ if ! command -v uv &> /dev/null; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
+# Install just if not available (command runner used by this project)
+if ! command -v just &> /dev/null; then
+  echo "Installing just command runner..."
+  curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to "$HOME/.local/bin"
+fi
+
 # Install dependencies
 uv sync --all-extras
 
