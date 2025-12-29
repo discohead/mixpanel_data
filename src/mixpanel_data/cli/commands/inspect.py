@@ -28,7 +28,7 @@ Local (uses DuckDB):
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal, cast
 
 import typer
 
@@ -451,8 +451,6 @@ def inspect_drop_all(
             raise typer.Exit(2)
 
     # Cast type_ to Literal for type safety
-    from typing import Literal, cast
-
     type_literal = cast(Literal["events", "profiles"] | None, type_)
 
     workspace.drop_all(type=type_literal)

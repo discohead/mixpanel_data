@@ -541,6 +541,22 @@ class TestInspectDropAll:
         data = json.loads(result.stdout)
         assert data["dropped_count"] == 0
 
+    def test_drop_all_invalid_type(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test dropping all tables with invalid type returns error."""
+        with patch(
+            "mixpanel_data.cli.commands.inspect.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["inspect", "drop-all", "--type", "invalid", "--force"],
+            )
+
+        assert result.exit_code == 3  # INVALID_ARGS
+        mock_workspace.drop_all.assert_not_called()
+
 
 class TestInspectLexiconSchemas:
     """Tests for mp inspect lexicon-schemas command."""
