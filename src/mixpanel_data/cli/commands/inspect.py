@@ -28,7 +28,7 @@ Local (uses DuckDB):
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, cast
+from typing import Annotated
 
 import typer
 
@@ -40,7 +40,11 @@ from mixpanel_data.cli.utils import (
     output_result,
     status_spinner,
 )
-from mixpanel_data.cli.validators import validate_count_type, validate_entity_type
+from mixpanel_data.cli.validators import (
+    validate_count_type,
+    validate_entity_type,
+    validate_table_type,
+)
 
 inspect_app = typer.Typer(
     name="inspect",
@@ -429,35 +433,28 @@ def inspect_drop_all(
         mp inspect drop-all -t profiles --force
     """
     # Validate type if provided
-    if type_ is not None and type_ not in ("events", "profiles"):
-        err_console.print(
-            f"[red]Invalid type: {type_}. Must be 'events' or 'profiles'.[/red]"
-        )
-        raise typer.Exit(3)
+    type_filter = validate_table_type(type_) if type_ is not None else None
 
     workspace = get_workspace(ctx)  # write access needed for drop
 
     # Get count before dropping for output
-    tables = workspace.storage.list_tables()
-    if type_ is not None:
-        tables = [t for t in tables if t.type == type_]
+    tables = workspace.tables()
+    if type_filter is not None:
+        tables = [t for t in tables if t.type == type_filter]
     count = len(tables)
 
     if not force:
-        type_msg = f" of type '{type_}'" if type_ else ""
+        type_msg = f" of type '{type_filter}'" if type_filter else ""
         confirm = typer.confirm(f"Drop all {count} tables{type_msg}?")
         if not confirm:
             err_console.print("[yellow]Cancelled[/yellow]")
             raise typer.Exit(2)
 
-    # Cast type_ to Literal for type safety
-    type_literal = cast(Literal["events", "profiles"] | None, type_)
-
-    workspace.drop_all(type=type_literal)
+    workspace.drop_all(type=type_filter)
 
     result: dict[str, str | int] = {"dropped_count": count}
-    if type_ is not None:
-        result["type_filter"] = type_
+    if type_filter is not None:
+        result["type_filter"] = type_filter
 
     output_result(ctx, result, format=format)
 

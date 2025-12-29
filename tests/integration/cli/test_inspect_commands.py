@@ -435,7 +435,7 @@ class TestInspectDropAll:
         mock_table1.name = "events1"
         mock_table2 = MagicMock()
         mock_table2.name = "profiles1"
-        mock_workspace.storage.list_tables.return_value = [mock_table1, mock_table2]
+        mock_workspace.tables.return_value = [mock_table1, mock_table2]
         with patch(
             "mixpanel_data.cli.commands.inspect.get_workspace",
             return_value=mock_workspace,
@@ -458,7 +458,7 @@ class TestInspectDropAll:
         mock_table = MagicMock()
         mock_table.name = "events1"
         mock_table.type = "events"
-        mock_workspace.storage.list_tables.return_value = [mock_table]
+        mock_workspace.tables.return_value = [mock_table]
         with patch(
             "mixpanel_data.cli.commands.inspect.get_workspace",
             return_value=mock_workspace,
@@ -488,7 +488,7 @@ class TestInspectDropAll:
         mock_workspace.drop_all.return_value = None
         mock_table = MagicMock()
         mock_table.name = "events1"
-        mock_workspace.storage.list_tables.return_value = [mock_table]
+        mock_workspace.tables.return_value = [mock_table]
         with patch(
             "mixpanel_data.cli.commands.inspect.get_workspace",
             return_value=mock_workspace,
@@ -508,7 +508,7 @@ class TestInspectDropAll:
         """Test dropping all tables cancelled when user declines."""
         mock_table = MagicMock()
         mock_table.name = "events1"
-        mock_workspace.storage.list_tables.return_value = [mock_table]
+        mock_workspace.tables.return_value = [mock_table]
         with patch(
             "mixpanel_data.cli.commands.inspect.get_workspace",
             return_value=mock_workspace,
@@ -527,7 +527,7 @@ class TestInspectDropAll:
     ) -> None:
         """Test dropping all tables when no tables exist."""
         mock_workspace.drop_all.return_value = None
-        mock_workspace.storage.list_tables.return_value = []
+        mock_workspace.tables.return_value = []
         with patch(
             "mixpanel_data.cli.commands.inspect.get_workspace",
             return_value=mock_workspace,
