@@ -2312,3 +2312,159 @@ class TestFetchEventsLimit:
             assert call_kwargs.get("limit") is None
         finally:
             ws.close()
+
+
+class TestLimitValidation:
+    """Tests for limit parameter validation."""
+
+    def test_fetch_events_rejects_limit_over_100000(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_events should raise ValueError if limit exceeds 100000."""
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            with pytest.raises(ValueError, match="limit must be at most 100000"):
+                ws.fetch_events(
+                    "events",
+                    from_date="2024-01-01",
+                    to_date="2024-01-31",
+                    limit=100001,
+                )
+        finally:
+            ws.close()
+
+    def test_fetch_events_rejects_limit_zero_or_negative(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_events should raise ValueError if limit is zero or negative."""
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            with pytest.raises(ValueError, match="limit must be at least 1"):
+                ws.fetch_events(
+                    "events",
+                    from_date="2024-01-01",
+                    to_date="2024-01-31",
+                    limit=0,
+                )
+
+            with pytest.raises(ValueError, match="limit must be at least 1"):
+                ws.fetch_events(
+                    "events",
+                    from_date="2024-01-01",
+                    to_date="2024-01-31",
+                    limit=-5,
+                )
+        finally:
+            ws.close()
+
+    def test_fetch_events_accepts_valid_limit(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_events should accept limit values in valid range."""
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            mock_fetcher = MagicMock()
+            mock_fetcher.fetch_events.return_value = FetchResult(
+                table="events",
+                rows=100,
+                type="events",
+                duration_seconds=1.5,
+                date_range=("2024-01-01", "2024-01-31"),
+                fetched_at=MagicMock(),
+            )
+            ws._fetcher = mock_fetcher
+
+            # Max limit should work
+            ws.fetch_events(
+                "events",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+                limit=100000,
+                progress=False,
+            )
+
+            # Min limit should work
+            ws.fetch_events(
+                "events",
+                from_date="2024-01-01",
+                to_date="2024-01-31",
+                limit=1,
+                progress=False,
+            )
+        finally:
+            ws.close()
+
+    def test_stream_events_rejects_limit_over_100000(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """stream_events should raise ValueError if limit exceeds 100000."""
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            with pytest.raises(ValueError, match="limit must be at most 100000"):
+                # Need to consume iterator to trigger validation
+                list(
+                    ws.stream_events(
+                        from_date="2024-01-01",
+                        to_date="2024-01-31",
+                        limit=100001,
+                    )
+                )
+        finally:
+            ws.close()
+
+    def test_stream_events_rejects_limit_zero_or_negative(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """stream_events should raise ValueError if limit is zero or negative."""
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            with pytest.raises(ValueError, match="limit must be at least 1"):
+                list(
+                    ws.stream_events(
+                        from_date="2024-01-01",
+                        to_date="2024-01-31",
+                        limit=0,
+                    )
+                )
+        finally:
+            ws.close()

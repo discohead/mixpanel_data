@@ -706,3 +706,71 @@ class TestBackwardCompatibility:
         assert result.exit_code == 0, f"Failed with: {result.output}"
         call_kwargs = mock_workspace.stream_events.call_args.kwargs
         assert call_kwargs.get("limit") == 1000
+
+
+class TestFetchEventsLimitValidation:
+    """Tests for CLI limit parameter validation."""
+
+    def test_fetch_events_rejects_limit_over_100000(
+        self,
+        cli_runner: CliRunner,
+    ) -> None:
+        """fetch events should reject limit > 100000 at CLI level."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "events",
+                "--from",
+                "2024-01-01",
+                "--to",
+                "2024-01-31",
+                "--limit",
+                "100001",
+            ],
+        )
+
+        assert result.exit_code == 2  # Typer validation error
+        assert "100000" in result.output or "Invalid value" in result.output
+
+    def test_fetch_events_rejects_limit_zero(
+        self,
+        cli_runner: CliRunner,
+    ) -> None:
+        """fetch events should reject limit = 0 at CLI level."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "events",
+                "--from",
+                "2024-01-01",
+                "--to",
+                "2024-01-31",
+                "--limit",
+                "0",
+            ],
+        )
+
+        assert result.exit_code == 2  # Typer validation error
+
+    def test_fetch_events_rejects_negative_limit(
+        self,
+        cli_runner: CliRunner,
+    ) -> None:
+        """fetch events should reject negative limit at CLI level."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "events",
+                "--from",
+                "2024-01-01",
+                "--to",
+                "2024-01-31",
+                "--limit",
+                "-5",
+            ],
+        )
+
+        assert result.exit_code == 2  # Typer validation error

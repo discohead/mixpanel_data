@@ -90,6 +90,10 @@ from mixpanel_data.types import (
 _MIN_BATCH_SIZE = 100
 _MAX_BATCH_SIZE = 100_000
 
+# Limit validation bounds (Mixpanel API restriction)
+_MIN_LIMIT = 1
+_MAX_LIMIT = 100_000
+
 
 def _validate_batch_size(batch_size: int) -> None:
     """Validate batch_size is within the allowed range.
@@ -108,6 +112,26 @@ def _validate_batch_size(batch_size: int) -> None:
         raise ValueError(
             f"batch_size must be at most {_MAX_BATCH_SIZE}, got {batch_size}"
         )
+
+
+def _validate_limit(limit: int | None) -> None:
+    """Validate limit is within the allowed range.
+
+    Mixpanel API restricts the limit parameter to a maximum of 100000 events.
+    This validation catches invalid values early to avoid wasting an API call.
+
+    Args:
+        limit: Maximum number of events to return, or None for no limit.
+
+    Raises:
+        ValueError: If limit is outside the valid range (1 to 100000).
+    """
+    if limit is None:
+        return
+    if limit < _MIN_LIMIT:
+        raise ValueError(f"limit must be at least {_MIN_LIMIT}, got {limit}")
+    if limit > _MAX_LIMIT:
+        raise ValueError(f"limit must be at most {_MAX_LIMIT}, got {limit}")
 
 
 class Workspace:
@@ -833,9 +857,12 @@ class Workspace:
             ConfigError: If API credentials not available.
             AuthenticationError: If credentials are invalid.
             ValueError: If batch_size is outside valid range (100-100000).
+            ValueError: If limit is outside valid range (1-100000).
         """
-        # Validate batch_size
+        # Validate parameters early to avoid wasted API calls
         _validate_batch_size(batch_size)
+        _validate_limit(limit)
+
         # Create progress callback if requested (only for interactive terminals)
         progress_callback = None
         pbar = None
@@ -996,6 +1023,7 @@ class Workspace:
             AuthenticationError: If credentials are invalid.
             RateLimitError: If rate limit exceeded after max retries.
             QueryError: If filter expression is invalid.
+            ValueError: If limit is outside valid range (1-100000).
 
         Example:
             ```python
@@ -1014,6 +1042,9 @@ class Workspace:
                 legacy_system.ingest(event)
             ```
         """
+        # Validate limit early to avoid wasted API calls
+        _validate_limit(limit)
+
         api_client = self._require_api_client()
         event_iterator = api_client.export_events(
             from_date=from_date,

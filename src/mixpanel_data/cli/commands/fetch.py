@@ -67,7 +67,13 @@ def fetch_events(
     ] = None,
     limit: Annotated[
         int | None,
-        typer.Option("--limit", "-l", help="Maximum events to return (max 100000)."),
+        typer.Option(
+            "--limit",
+            "-l",
+            help="Maximum events to return (max 100000).",
+            min=1,
+            max=100000,
+        ),
     ] = None,
     replace: Annotated[
         bool,
