@@ -26,8 +26,8 @@ Stream all events for a date range:
     ws = mp.Workspace()
 
     for event in ws.stream_events(
-        from_date="2024-01-01",
-        to_date="2024-01-31"
+        from_date="2025-01-01",
+        to_date="2025-01-31"
     ):
         print(f"{event['event_name']}: {event['distinct_id']}")
         # event_time is a datetime object
@@ -39,7 +39,7 @@ Stream all events for a date range:
 === "CLI"
 
     ```bash
-    mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout
+    mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout
     ```
 
 ### Filtering Events
@@ -51,16 +51,16 @@ Filter by event name or expression:
     ```python
     # Filter by event names
     for event in ws.stream_events(
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         events=["Purchase", "Signup"]
     ):
         process(event)
 
     # Filter with WHERE clause
     for event in ws.stream_events(
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         where='properties["country"]=="US"'
     ):
         process(event)
@@ -70,11 +70,11 @@ Filter by event name or expression:
 
     ```bash
     # Filter by event names
-    mp fetch events --from 2024-01-01 --to 2024-01-31 \
+    mp fetch events --from 2025-01-01 --to 2025-01-31 \
         --events "Purchase,Signup" --stdout
 
     # Filter with WHERE clause
-    mp fetch events --from 2024-01-01 --to 2024-01-31 \
+    mp fetch events --from 2025-01-01 --to 2025-01-31 \
         --where 'properties["country"]=="US"' --stdout
     ```
 
@@ -86,8 +86,8 @@ By default, streaming returns normalized data with `event_time` as a datetime. U
 
     ```python
     for event in ws.stream_events(
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         raw=True
     ):
         # event has {"event": "...", "properties": {...}} structure
@@ -98,7 +98,7 @@ By default, streaming returns normalized data with `event_time` as a datetime. U
 === "CLI"
 
     ```bash
-    mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout --raw
+    mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout --raw
     ```
 
 ## Streaming Profiles
@@ -143,17 +143,17 @@ The `--stdout` flag outputs JSONL (one JSON object per line), perfect for Unix p
 
 ```bash
 # Filter with jq
-mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout \
+mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout \
     | jq 'select(.event_name == "Purchase")'
 
 # Count events
-mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout | wc -l
+mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout | wc -l
 
 # Save to file
-mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout > events.jsonl
+mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout > events.jsonl
 
 # Process with custom script
-mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout \
+mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout \
     | python process_events.py
 
 # Extract specific fields
@@ -170,7 +170,7 @@ Events:
 {
   "event_name": "Purchase",
   "distinct_id": "user_123",
-  "event_time": "2024-01-15T10:30:00+00:00",
+  "event_time": "2025-01-15T10:30:00+00:00",
   "insert_id": "abc123",
   "properties": {
     "amount": 99.99,
@@ -184,7 +184,7 @@ Profiles:
 ```json
 {
   "distinct_id": "user_123",
-  "last_seen": "2024-01-15T14:30:00",
+  "last_seen": "2025-01-15T14:30:00",
   "properties": {
     "name": "Alice",
     "plan": "premium"
@@ -215,7 +215,7 @@ Profiles:
 {
   "$distinct_id": "user_123",
   "$properties": {
-    "$last_seen": "2024-01-15T14:30:00",
+    "$last_seen": "2025-01-15T14:30:00",
     "name": "Alice",
     "plan": "premium"
   }
@@ -235,7 +235,7 @@ from your_warehouse import send_batch
 ws = mp.Workspace()
 batch = []
 
-for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
     batch.append(event)
     if len(batch) >= 1000:
         send_batch(batch)
@@ -259,7 +259,7 @@ import mixpanel_data as mp
 ws = mp.Workspace()
 event_counts = Counter()
 
-for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
     event_counts[event["event_name"]] += 1
 
 print(event_counts.most_common(10))
@@ -274,7 +274,7 @@ Use `with` for automatic cleanup:
 import mixpanel_data as mp
 
 with mp.Workspace() as ws:
-    for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+    for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
         process(event)
 # No need to call ws.close()
 ```

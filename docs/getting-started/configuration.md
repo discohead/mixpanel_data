@@ -185,7 +185,7 @@ with mp.Workspace.ephemeral() as ws:
 For CLI, use the `--db` option:
 
 ```bash
-mp fetch events --db ./data/my_project.db --from 2024-01-01 --to 2024-01-31
+mp fetch events --db ./data/my_project.db --from 2025-01-01 --to 2025-01-31
 ```
 
 ## Next Steps

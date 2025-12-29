@@ -65,7 +65,9 @@ Verify credentials are working:
 
 ## Step 3: Explore Your Data
 
-Discover what events exist in your project:
+Before writing queries, survey your data landscape. Discovery commands let you see what exists in your Mixpanel project without guessing.
+
+### List Events
 
 === "CLI"
 
@@ -79,9 +81,85 @@ Discover what events exist in your project:
     import mixpanel_data as mp
 
     ws = mp.Workspace()
-    events = ws.events()
-    print(events)  # ['Login', 'Purchase', 'Signup', ...]
+    events = ws.list_events()
+    for e in events[:10]:
+        print(e.name)
     ```
+
+### Drill Into Properties
+
+Once you know an event name, see what properties it has:
+
+=== "CLI"
+
+    ```bash
+    mp inspect properties "Purchase"
+    ```
+
+=== "Python"
+
+    ```python
+    props = ws.list_properties("Purchase")
+    for p in props:
+        print(f"{p.name}: {p.type}")
+    ```
+
+### Sample Property Values
+
+See actual values a property contains:
+
+=== "CLI"
+
+    ```bash
+    mp inspect values "Purchase" "country"
+    ```
+
+=== "Python"
+
+    ```python
+    values = ws.list_property_values("Purchase", "country")
+    print(values)  # ['US', 'UK', 'DE', 'FR', ...]
+    ```
+
+### See What's Active
+
+Check today's top events by volume:
+
+=== "CLI"
+
+    ```bash
+    mp inspect top-events
+    ```
+
+=== "Python"
+
+    ```python
+    top = ws.top_events()
+    for e in top[:5]:
+        print(f"{e.name}: {e.count:,} events")
+    ```
+
+### Browse Saved Assets
+
+See funnels, cohorts, and saved reports already defined in Mixpanel:
+
+=== "CLI"
+
+    ```bash
+    mp inspect funnels
+    mp inspect cohorts
+    mp inspect bookmarks
+    ```
+
+=== "Python"
+
+    ```python
+    funnels = ws.list_funnels()
+    cohorts = ws.list_cohorts()
+    bookmarks = ws.list_bookmarks()
+    ```
+
+This discovery workflow ensures your queries reference real event names, valid properties, and actual values—no trial and error.
 
 ## Step 4: Fetch Events to Local Storage
 
@@ -90,7 +168,7 @@ Fetch a month of events into a local DuckDB database:
 === "CLI"
 
     ```bash
-    mp fetch events jan_events --from 2024-01-01 --to 2024-01-31
+    mp fetch events jan_events --from 2025-01-01 --to 2025-01-31
     ```
 
 === "Python"
@@ -101,8 +179,8 @@ Fetch a month of events into a local DuckDB database:
     ws = mp.Workspace()
     result = ws.fetch_events(
         name="jan_events",
-        from_date="2024-01-01",
-        to_date="2024-01-31"
+        from_date="2025-01-01",
+        to_date="2025-01-31"
     )
     print(f"Fetched {result.row_count} events in {result.duration_seconds:.1f}s")
     ```
@@ -189,7 +267,7 @@ For real-time analytics, query Mixpanel directly:
 === "CLI"
 
     ```bash
-    mp query segmentation --event Purchase --from 2024-01-01 --to 2024-01-31 --format table
+    mp query segmentation --event Purchase --from 2025-01-01 --to 2025-01-31 --format table
     ```
 
 === "Python"
@@ -201,8 +279,8 @@ For real-time analytics, query Mixpanel directly:
 
     result = ws.segmentation(
         event="Purchase",
-        from_date="2024-01-01",
-        to_date="2024-01-31"
+        from_date="2025-01-01",
+        to_date="2025-01-31"
     )
 
     # Access as DataFrame
@@ -217,10 +295,10 @@ For ETL pipelines or one-time processing, stream data directly without storing:
 
     ```bash
     # Stream events as JSONL
-    mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout
+    mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout
 
     # Pipe to other tools
-    mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout | jq '.event_name'
+    mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout | jq '.event_name'
     ```
 
 === "Python"
@@ -229,7 +307,7 @@ For ETL pipelines or one-time processing, stream data directly without storing:
     import mixpanel_data as mp
 
     ws = mp.Workspace()
-    for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+    for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
         send_to_warehouse(event)
     ws.close()
     ```
@@ -243,13 +321,13 @@ import mixpanel_data as mp
 
 # Ephemeral: uses temp file (best for large datasets, benefits from compression)
 with mp.Workspace.ephemeral() as ws:
-    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-31")
+    ws.fetch_events("events", from_date="2025-01-01", to_date="2025-01-31")
     total = ws.sql_scalar("SELECT COUNT(*) FROM events")
 # Database automatically deleted when context exits
 
 # In-memory: no files created (best for small datasets or zero disk footprint)
 with mp.Workspace.memory() as ws:
-    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-07")
+    ws.fetch_events("events", from_date="2025-01-01", to_date="2025-01-07")
     total = ws.sql_scalar("SELECT COUNT(*) FROM events")
 # Database gone - no files ever created
 ```

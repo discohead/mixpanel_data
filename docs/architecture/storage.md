@@ -109,24 +109,24 @@ This means API-only commands like `mp inspect events` never conflict with fetch 
 
 ```bash
 # Won't conflict with your main database
-mp fetch events --from 2024-01-01 --to 2024-01-07 --ephemeral
+mp fetch events --from 2025-01-01 --to 2025-01-07 --ephemeral
 ```
 
 ### Use Separate Paths for Parallel Work
 
 ```bash
 # Terminal 1
-mp fetch events --from 2024-01-01 --to 2024-06-30 --path ./h1.db
+mp fetch events --from 2025-01-01 --to 2025-06-30 --path ./h1.db
 
 # Terminal 2 (parallel)
-mp fetch events --from 2024-07-01 --to 2024-12-31 --path ./h2.db
+mp fetch events --from 2025-07-01 --to 2025-12-31 --path ./h2.db
 ```
 
 ### Combine into Single Commands
 
 ```bash
 # Instead of two fetches, use date range in one command
-mp fetch events --from 2024-01-01 --to 2024-12-31
+mp fetch events --from 2025-01-01 --to 2025-12-31
 ```
 
 ### Stream Instead of Store
@@ -135,7 +135,7 @@ If you don't need to query the data repeatedly:
 
 ```bash
 # No database, no locks
-mp fetch events --from 2024-01-01 --stdout | process_events.py
+mp fetch events --from 2025-01-01 --stdout | process_events.py
 ```
 
 ## Connection Lifecycle
@@ -145,7 +145,7 @@ The `StorageEngine` manages its DuckDB connection:
 ```python
 # Workspace as context manager ensures cleanup
 with Workspace() as ws:
-    ws.fetch_events(from_date="2024-01-01", to_date="2024-01-31")
+    ws.fetch_events(from_date="2025-01-01", to_date="2025-01-31")
     df = ws.sql("SELECT * FROM events LIMIT 10")
 # Connection closed, lock released
 

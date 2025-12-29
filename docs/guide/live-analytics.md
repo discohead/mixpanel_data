@@ -32,23 +32,23 @@ Time-series event counts with optional property segmentation:
     # Simple count over time
     result = ws.segmentation(
         event="Purchase",
-        from_date="2024-01-01",
-        to_date="2024-01-31"
+        from_date="2025-01-01",
+        to_date="2025-01-31"
     )
 
     # Segment by property
     result = ws.segmentation(
         event="Purchase",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         on="properties.country"
     )
 
     # With filtering
     result = ws.segmentation(
         event="Purchase",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         on="properties.country",
         where='properties["plan"] == "premium"',
         unit="week"  # day, week, month
@@ -62,10 +62,10 @@ Time-series event counts with optional property segmentation:
 
     ```bash
     # Simple segmentation
-    mp query segmentation --event Purchase --from 2024-01-01 --to 2024-01-31
+    mp query segmentation --event Purchase --from 2025-01-01 --to 2025-01-31
 
     # With property breakdown
-    mp query segmentation --event Purchase --from 2024-01-01 --to 2024-01-31 \
+    mp query segmentation --event Purchase --from 2025-01-01 --to 2025-01-31 \
         --on country --format table
     ```
 
@@ -73,7 +73,7 @@ Time-series event counts with optional property segmentation:
 
 ```python
 result.event          # "Purchase"
-result.dates          # ["2024-01-01", "2024-01-02", ...]
+result.dates          # ["2025-01-01", "2025-01-02", ...]
 result.values         # {"$overall": [100, 150, ...]}
 result.segments       # ["US", "UK", "DE", ...]
 result.df             # pandas DataFrame
@@ -95,15 +95,15 @@ Analyze conversion through a sequence of steps:
     # Query the funnel
     result = ws.funnel(
         funnel_id=12345,
-        from_date="2024-01-01",
-        to_date="2024-01-31"
+        from_date="2025-01-01",
+        to_date="2025-01-31"
     )
 
     # With segmentation
     result = ws.funnel(
         funnel_id=12345,
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         on="properties.country"
     )
 
@@ -119,7 +119,7 @@ Analyze conversion through a sequence of steps:
     mp inspect funnels
 
     # Query a funnel
-    mp query funnel --funnel-id 12345 --from 2024-01-01 --to 2024-01-31 --format table
+    mp query funnel --funnel-id 12345 --from 2025-01-01 --to 2025-01-31 --format table
     ```
 
 ### FunnelResult
@@ -147,8 +147,8 @@ Cohort-based retention analysis:
     result = ws.retention(
         born_event="Signup",
         return_event="Login",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         born_where='properties["source"] == "organic"',
         unit="week"
     )
@@ -165,8 +165,8 @@ Cohort-based retention analysis:
     mp query retention \
         --born-event Signup \
         --return-event Login \
-        --from 2024-01-01 \
-        --to 2024-01-31 \
+        --from 2025-01-01 \
+        --to 2025-01-31 \
         --unit week \
         --format table
     ```
@@ -180,7 +180,7 @@ result.cohorts         # [CohortInfo, ...]
 result.df              # DataFrame with retention matrix
 
 # Each cohort
-cohort.date            # "2024-01-01"
+cohort.date            # "2025-01-01"
 cohort.size            # 1000
 cohort.retention_rates # [1.0, 0.45, 0.32, 0.28, ...]
 ```
@@ -207,7 +207,7 @@ Run custom JQL scripts for advanced analysis:
 
     result = ws.jql(
         script=script,
-        params={"from_date": "2024-01-01", "to_date": "2024-01-31"}
+        params={"from_date": "2025-01-01", "to_date": "2025-01-31"}
     )
 
     print(result.data)  # Raw JQL result
@@ -218,7 +218,7 @@ Run custom JQL scripts for advanced analysis:
 
     ```bash
     # From file
-    mp query jql --script ./query.js --param from_date=2024-01-01 --param to_date=2024-01-31
+    mp query jql --script ./query.js --param from_date=2025-01-01 --param to_date=2025-01-31
 
     # Inline
     mp query jql --script 'function main() { return Events({...}).count(); }'
@@ -233,8 +233,8 @@ Multi-event time series comparison:
     ```python
     result = ws.event_counts(
         events=["Signup", "Purchase", "Churn"],
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         unit="day"
     )
 
@@ -247,7 +247,7 @@ Multi-event time series comparison:
     ```bash
     mp query event-counts \
         --event Signup --event Purchase --event Churn \
-        --from 2024-01-01 --to 2024-01-31 \
+        --from 2025-01-01 --to 2025-01-31 \
         --format table
     ```
 
@@ -261,8 +261,8 @@ Break down an event by property values:
     result = ws.property_counts(
         event="Purchase",
         property_name="country",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         limit=10
     )
 
@@ -275,7 +275,7 @@ Break down an event by property values:
     mp query property-counts \
         --event Purchase \
         --property country \
-        --from 2024-01-01 --to 2024-01-31 \
+        --from 2025-01-01 --to 2025-01-31 \
         --limit 10 \
         --format table
     ```
@@ -289,8 +289,8 @@ Get a user's event history:
     ```python
     result = ws.activity_feed(
         distinct_ids=["user_123", "user_456"],
-        from_date="2024-01-01",
-        to_date="2024-01-31"
+        from_date="2025-01-01",
+        to_date="2025-01-31"
     )
 
     for event in result.events:
@@ -303,7 +303,7 @@ Get a user's event history:
     ```bash
     mp query activity-feed \
         --distinct-id user_123 \
-        --from 2024-01-01 --to 2024-01-31 \
+        --from 2025-01-01 --to 2025-01-31 \
         --format json
     ```
 
@@ -404,8 +404,8 @@ Analyze how often users perform an event:
     ```python
     result = ws.frequency(
         event="Login",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         unit="month",
         addiction_unit="day"
     )
@@ -419,7 +419,7 @@ Analyze how often users perform an event:
     ```bash
     mp query frequency \
         --event Login \
-        --from 2024-01-01 --to 2024-01-31 \
+        --from 2025-01-01 --to 2025-01-31 \
         --format table
     ```
 
@@ -432,8 +432,8 @@ Aggregate numeric properties:
 ```python
 result = ws.segmentation_numeric(
     event="Purchase",
-    from_date="2024-01-01",
-    to_date="2024-01-31",
+    from_date="2025-01-01",
+    to_date="2025-01-31",
     on="properties.amount",
     type="general"  # or "linear", "logarithmic"
 )
@@ -444,8 +444,8 @@ result = ws.segmentation_numeric(
 ```python
 result = ws.segmentation_sum(
     event="Purchase",
-    from_date="2024-01-01",
-    to_date="2024-01-31",
+    from_date="2025-01-01",
+    to_date="2025-01-31",
     on="properties.amount"
 )
 # Total revenue per time period
@@ -456,8 +456,8 @@ result = ws.segmentation_sum(
 ```python
 result = ws.segmentation_average(
     event="Purchase",
-    from_date="2024-01-01",
-    to_date="2024-01-31",
+    from_date="2025-01-01",
+    to_date="2025-01-31",
     on="properties.amount"
 )
 # Average purchase amount per time period

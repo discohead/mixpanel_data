@@ -28,7 +28,7 @@ import mixpanel_data as mp
 
 try:
     ws = mp.Workspace()
-    result = ws.segmentation(event="Purchase", from_date="2024-01-01", to_date="2024-01-31")
+    result = ws.segmentation(event="Purchase", from_date="2025-01-01", to_date="2025-01-31")
 except mp.AuthenticationError as e:
     print(f"Auth failed: {e.message}")
 except mp.RateLimitError as e:

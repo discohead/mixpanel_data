@@ -241,8 +241,8 @@ Understand what values a property contains and how often they appear:
     result = ws.property_distribution(
         event="Purchase",
         property="country",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         limit=10,
     )
     print(f"Total: {result.total_count}")
@@ -253,8 +253,8 @@ Understand what values a property contains and how often they appear:
 === "CLI"
 
     ```bash
-    mp inspect distribution -e Purchase -p country --from 2024-01-01 --to 2024-01-31
-    mp inspect distribution -e Purchase -p country --from 2024-01-01 --to 2024-01-31 --limit 10
+    mp inspect distribution -e Purchase -p country --from 2025-01-01 --to 2025-01-31
+    mp inspect distribution -e Purchase -p country --from 2025-01-01 --to 2025-01-31 --limit 10
     ```
 
 ### Numeric Property Summary
@@ -267,8 +267,8 @@ Get statistical summary for numeric properties:
     result = ws.numeric_summary(
         event="Purchase",
         property="amount",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
     )
     print(f"Count: {result.count}")
     print(f"Range: {result.min} to {result.max}")
@@ -279,8 +279,8 @@ Get statistical summary for numeric properties:
 === "CLI"
 
     ```bash
-    mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31
-    mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31 --percentiles 25,50,75,90
+    mp inspect numeric -e Purchase -p amount --from 2025-01-01 --to 2025-01-31
+    mp inspect numeric -e Purchase -p amount --from 2025-01-01 --to 2025-01-31 --percentiles 25,50,75,90
     ```
 
 ### Daily Event Counts
@@ -291,8 +291,8 @@ See event activity over time:
 
     ```python
     result = ws.daily_counts(
-        from_date="2024-01-01",
-        to_date="2024-01-07",
+        from_date="2025-01-01",
+        to_date="2025-01-07",
         events=["Purchase", "Signup"],
     )
     for c in result.counts:
@@ -302,8 +302,8 @@ See event activity over time:
 === "CLI"
 
     ```bash
-    mp inspect daily --from 2024-01-01 --to 2024-01-07
-    mp inspect daily --from 2024-01-01 --to 2024-01-07 -e Purchase,Signup
+    mp inspect daily --from 2025-01-01 --to 2025-01-07
+    mp inspect daily --from 2025-01-01 --to 2025-01-07 -e Purchase,Signup
     ```
 
 ### User Engagement Distribution
@@ -314,8 +314,8 @@ Understand how engaged users are by their event count:
 
     ```python
     result = ws.engagement_distribution(
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
     )
     print(f"Total users: {result.total_users}")
     for b in result.buckets:
@@ -325,8 +325,8 @@ Understand how engaged users are by their event count:
 === "CLI"
 
     ```bash
-    mp inspect engagement --from 2024-01-01 --to 2024-01-31
-    mp inspect engagement --from 2024-01-01 --to 2024-01-31 --buckets 1,5,10,50,100
+    mp inspect engagement --from 2025-01-01 --to 2025-01-31
+    mp inspect engagement --from 2025-01-01 --to 2025-01-31 --buckets 1,5,10,50,100
     ```
 
 ### Property Coverage
@@ -339,8 +339,8 @@ Check data quality by seeing how often properties are defined:
     result = ws.property_coverage(
         event="Purchase",
         properties=["coupon_code", "referrer", "utm_source"],
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
     )
     print(f"Total events: {result.total_events}")
     for c in result.coverage:
@@ -350,7 +350,7 @@ Check data quality by seeing how often properties are defined:
 === "CLI"
 
     ```bash
-    mp inspect coverage -e Purchase -p coupon_code,referrer,utm_source --from 2024-01-01 --to 2024-01-31
+    mp inspect coverage -e Purchase -p coupon_code,referrer,utm_source --from 2025-01-01 --to 2025-01-31
     ```
 
 !!! tip "When to Use JQL-Based Discovery"
@@ -531,7 +531,7 @@ import mixpanel_data as mp
 ws = mp.Workspace()
 
 # Fetch data first
-ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-31")
+ws.fetch_events("events", from_date="2025-01-01", to_date="2025-01-31")
 
 # 1. Quick look at the data
 print(ws.sample("events", n=3))
@@ -648,7 +648,7 @@ for f in ws.funnels():
     print(f"  - {f.name} (ID: {f.funnel_id})")
 
 # 5. Now fetch and analyze
-ws.fetch_events("purchases", from_date="2024-01-01", to_date="2024-01-31",
+ws.fetch_events("purchases", from_date="2025-01-01", to_date="2025-01-31",
                 events=["Purchase"])
 
 df = ws.sql("""

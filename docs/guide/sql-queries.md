@@ -201,7 +201,7 @@ Query events with user profile data:
 
 ```python
 # First, fetch both
-ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-31")
+ws.fetch_events("events", from_date="2025-01-01", to_date="2025-01-31")
 ws.fetch_profiles("users")
 
 # Join them

@@ -16,8 +16,8 @@ Fetch all events for a date range:
     ws = mp.Workspace()
     result = ws.fetch_events(
         name="jan_events",
-        from_date="2024-01-01",
-        to_date="2024-01-31"
+        from_date="2025-01-01",
+        to_date="2025-01-31"
     )
 
     print(f"Fetched {result.row_count} events")
@@ -27,7 +27,7 @@ Fetch all events for a date range:
 === "CLI"
 
     ```bash
-    mp fetch events jan_events --from 2024-01-01 --to 2024-01-31
+    mp fetch events jan_events --from 2025-01-01 --to 2025-01-31
     ```
 
 ### Filtering Events
@@ -39,8 +39,8 @@ Fetch specific event types:
     ```python
     result = ws.fetch_events(
         name="purchases",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         events=["Purchase", "Checkout Started"]
     )
     ```
@@ -48,7 +48,7 @@ Fetch specific event types:
 === "CLI"
 
     ```bash
-    mp fetch events purchases --from 2024-01-01 --to 2024-01-31 \
+    mp fetch events purchases --from 2025-01-01 --to 2025-01-31 \
         --events Purchase,"Checkout Started"
     ```
 
@@ -61,8 +61,8 @@ Filter with Mixpanel expression syntax:
     ```python
     result = ws.fetch_events(
         name="premium_purchases",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         where='properties["plan"] == "premium"'
     )
     ```
@@ -70,7 +70,7 @@ Filter with Mixpanel expression syntax:
 === "CLI"
 
     ```bash
-    mp fetch events premium_purchases --from 2024-01-01 --to 2024-01-31 \
+    mp fetch events premium_purchases --from 2025-01-01 --to 2025-01-31 \
         --where 'properties["plan"] == "premium"'
     ```
 
@@ -83,8 +83,8 @@ Cap the number of events returned (max 100,000):
     ```python
     result = ws.fetch_events(
         name="sample_events",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         limit=10000
     )
     ```
@@ -92,7 +92,7 @@ Cap the number of events returned (max 100,000):
 === "CLI"
 
     ```bash
-    mp fetch events sample_events --from 2024-01-01 --to 2024-01-31 \
+    mp fetch events sample_events --from 2025-01-01 --to 2025-01-31 \
         --limit 10000
     ```
 
@@ -108,8 +108,8 @@ def on_progress(count: int) -> None:
 
 result = ws.fetch_events(
     name="events",
-    from_date="2024-01-01",
-    to_date="2024-01-31",
+    from_date="2025-01-01",
+    to_date="2025-01-31",
     progress_callback=on_progress
 )
 ```
@@ -126,16 +126,16 @@ Control the memory/IO tradeoff with `batch_size`:
     # Smaller batch size = less memory, more disk IO
     result = ws.fetch_events(
         name="events",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         batch_size=500
     )
 
     # Larger batch size = more memory, less disk IO
     result = ws.fetch_events(
         name="events",
-        from_date="2024-01-01",
-        to_date="2024-01-31",
+        from_date="2025-01-01",
+        to_date="2025-01-31",
         batch_size=5000
     )
     ```
@@ -143,7 +143,7 @@ Control the memory/IO tradeoff with `batch_size`:
 === "CLI"
 
     ```bash
-    mp fetch events --from 2024-01-01 --to 2024-01-31 --batch-size 500
+    mp fetch events --from 2025-01-01 --to 2025-01-31 --batch-size 500
     ```
 
 The default is 1000 rows per commit. Valid range: 100-100,000.
@@ -273,15 +273,15 @@ Drop and recreate a table with fresh data:
     ws.drop("events")
     result = ws.fetch_events(
         name="events",
-        from_date="2024-01-01",
-        to_date="2024-01-31"
+        from_date="2025-01-01",
+        to_date="2025-01-31"
     )
     ```
 
 === "CLI"
 
     ```bash
-    mp fetch events --from 2024-01-01 --to 2024-01-31 --replace
+    mp fetch events --from 2025-01-01 --to 2025-01-31 --replace
     ```
 
 ### Append Mode
@@ -294,15 +294,15 @@ Add data to an existing table. Duplicates (by `insert_id` for events, `distinct_
     # Initial fetch
     ws.fetch_events(
         name="events",
-        from_date="2024-01-01",
-        to_date="2024-01-31"
+        from_date="2025-01-01",
+        to_date="2025-01-31"
     )
 
     # Append more data
     ws.fetch_events(
         name="events",
-        from_date="2024-02-01",
-        to_date="2024-02-28",
+        from_date="2025-02-01",
+        to_date="2025-02-28",
         append=True
     )
     ```
@@ -311,10 +311,10 @@ Add data to an existing table. Duplicates (by `insert_id` for events, `distinct_
 
     ```bash
     # Initial fetch
-    mp fetch events --from 2024-01-01 --to 2024-01-31
+    mp fetch events --from 2025-01-01 --to 2025-01-31
 
     # Append more data
-    mp fetch events --from 2024-02-01 --to 2024-02-28 --append
+    mp fetch events --from 2025-02-01 --to 2025-02-28 --append
     ```
 
 !!! tip "Resuming Failed Fetches"
@@ -323,10 +323,10 @@ Add data to an existing table. Duplicates (by `insert_id` for events, `distinct_
     ```bash
     # Check the last event timestamp
     mp query sql "SELECT MAX(event_time) FROM events"
-    # 2024-01-15T14:30:00
+    # 2025-01-15T14:30:00
 
     # Resume from that point
-    mp fetch events --from 2024-01-15 --to 2024-01-31 --append
+    mp fetch events --from 2025-01-15 --to 2025-01-31 --append
     ```
 
     Overlapping date ranges are safe—duplicates are automatically skipped.
@@ -369,8 +369,8 @@ result.row_count        # 125000
 result.duration_seconds # 45.2
 
 # Metadata
-result.metadata.from_date    # "2024-01-01"
-result.metadata.to_date      # "2024-01-31"
+result.metadata.from_date    # "2025-01-01"
+result.metadata.to_date      # "2025-01-31"
 result.metadata.events       # ["Purchase", "Signup"] or None
 result.metadata.where        # 'properties["plan"]...' or None
 result.metadata.fetched_at   # datetime
@@ -414,21 +414,21 @@ For very large datasets, fetch in chunks using append mode:
 
     # Fetch first chunk
     ws.fetch_events(
-        name="events_2024",
-        from_date="2024-01-01",
-        to_date="2024-01-31"
+        name="events_2025",
+        from_date="2025-01-01",
+        to_date="2025-01-31"
     )
 
     # Append subsequent chunks
-    start = datetime.date(2024, 2, 1)
-    end = datetime.date(2024, 12, 31)
+    start = datetime.date(2025, 2, 1)
+    end = datetime.date(2025, 12, 31)
 
     current = start
     while current <= end:
         chunk_end = min(current + datetime.timedelta(days=30), end)
 
         ws.fetch_events(
-            name="events_2024",
+            name="events_2025",
             from_date=str(current),
             to_date=str(chunk_end),
             append=True  # Add to existing table
@@ -441,9 +441,9 @@ For very large datasets, fetch in chunks using append mode:
 
     ```bash
     # Fetch month by month, appending to a single table
-    mp fetch events events_2024 --from 2024-01-01 --to 2024-01-31
-    mp fetch events events_2024 --from 2024-02-01 --to 2024-02-29 --append
-    mp fetch events events_2024 --from 2024-03-01 --to 2024-03-31 --append
+    mp fetch events events_2025 --from 2025-01-01 --to 2025-01-31
+    mp fetch events events_2025 --from 2025-02-01 --to 2025-02-29 --append
+    mp fetch events events_2025 --from 2025-03-01 --to 2025-03-31 --append
     # ... continue for each month
     ```
 
@@ -452,8 +452,8 @@ For very large datasets, fetch in chunks using append mode:
     ```python
     import datetime
 
-    start = datetime.date(2024, 1, 1)
-    end = datetime.date(2024, 12, 31)
+    start = datetime.date(2025, 1, 1)
+    end = datetime.date(2025, 12, 31)
 
     current = start
     while current < end:
@@ -483,7 +483,7 @@ mixpanel_data offers three storage modes:
 
 ```python
 with mp.Workspace.ephemeral() as ws:
-    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-31")
+    ws.fetch_events("events", from_date="2025-01-01", to_date="2025-01-31")
     result = ws.sql("SELECT event_name, COUNT(*) FROM events GROUP BY 1")
 # Database automatically deleted
 ```
@@ -492,7 +492,7 @@ with mp.Workspace.ephemeral() as ws:
 
 ```python
 with mp.Workspace.memory() as ws:
-    ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-07")
+    ws.fetch_events("events", from_date="2025-01-01", to_date="2025-01-07")
     total = ws.sql_scalar("SELECT COUNT(*) FROM events")
 # Database gone - no files ever created
 ```
@@ -513,7 +513,7 @@ If you don't need to store data locally, use streaming instead:
 
 ```python
 # Stream directly without storage
-for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-31"):
+for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
     send_to_warehouse(event)
 ```
 

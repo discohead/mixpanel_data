@@ -19,10 +19,10 @@ The `fetch_events()` and `fetch_profiles()` methods support an `append` paramete
 
 ```python
 # Initial fetch
-ws.fetch_events(name="events", from_date="2024-01-01", to_date="2024-01-31")
+ws.fetch_events(name="events", from_date="2025-01-01", to_date="2025-01-31")
 
 # Append more data (duplicates are automatically skipped)
-ws.fetch_events(name="events", from_date="2024-02-01", to_date="2024-02-28", append=True)
+ws.fetch_events(name="events", from_date="2025-02-01", to_date="2025-02-28", append=True)
 ```
 
 This is useful for:

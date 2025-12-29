@@ -1,56 +1,167 @@
 # mixpanel_data
 
-A Python library and CLI for working with Mixpanel analytics data, designed for AI coding agents.
+A complete programmable interface to Mixpanel analytics—available as both a Python library and CLI.
 
-## The Problem
+## Why This Exists
 
-AI coding agents consume context window tokens when receiving Mixpanel API responses. A single query can return 30KB of JSON—tokens that could otherwise be used for reasoning and iteration.
+Mixpanel's web UI is built for interactive exploration. But many workflows need something different: scripts that run unattended, notebooks that combine Mixpanel data with other sources, agents that query analytics programmatically, or pipelines that move data between systems.
 
-## The Solution
+`mixpanel_data` provides direct programmatic access to Mixpanel's analytics platform. Core analytics—segmentation, funnels, retention, saved reports—plus capabilities like raw JQL execution and local SQL analysis are available as Python methods or shell commands.
 
-Fetch data once, store it locally in DuckDB, query repeatedly with SQL. Data lives outside the context window; only precise answers flow back in.
+## Two Interfaces, One Capability Set
 
-## Features
-
-- **Local Data Store** — Fetch events and profiles from Mixpanel, store in DuckDB, query with SQL
-- **Streaming** — Stream data directly without storage for ETL pipelines and one-time processing
-- **Live Queries** — Run Mixpanel reports (segmentation, funnels, retention) directly when fresh data is needed
-- **Data Discovery** — Introspect events, properties, values, saved funnels, and cohorts before writing queries
-- **Event Analytics** — Query multi-event time series and property breakdowns across date ranges
-- **Advanced Analytics** — User activity feeds, saved reports (Insights, Funnels, Flows), frequency analysis, numeric aggregations
-- **Python Library** — Import and use programmatically in scripts and notebooks
-- **CLI** — Compose into Unix pipelines, invoke from agents without writing Python
-
-## Quick Example
+**Python Library** — For notebooks, scripts, and applications:
 
 ```python
 import mixpanel_data as mp
 
-# Create workspace with stored credentials
 ws = mp.Workspace()
 
-# Fetch events into local DuckDB
-ws.fetch_events("jan_events", from_date="2024-01-01", to_date="2024-01-31")
+# Discover what's in your project
+events = ws.list_events()
+props = ws.list_properties("Purchase")
+values = ws.list_property_values("Purchase", "country")
+funnels = ws.list_funnels()
+cohorts = ws.list_cohorts()
+bookmarks = ws.list_bookmarks()
 
-# Query with SQL
-df = ws.sql("""
-    SELECT
-        DATE_TRUNC('day', event_time) as day,
-        event_name,
-        COUNT(*) as count
-    FROM jan_events
-    GROUP BY 1, 2
-    ORDER BY 1, 3 DESC
-""")
-
-# Or run live queries against Mixpanel API
-result = ws.segmentation(
-    event="Purchase",
-    from_date="2024-01-01",
-    to_date="2024-01-31",
+# Live queries—use discovered data to construct accurate queries
+segmentation = ws.segmentation(
+    event=events[0].name,
+    from_date="2025-01-01",
+    to_date="2025-01-31",
     on="properties.country"
 )
+
+funnel = ws.funnel(
+    funnel_id=funnels[0].id,
+    from_date="2025-01-01",
+    to_date="2025-01-31"
+)
+
+saved = ws.saved_report(bookmark_id=bookmarks[0].id)
+activity = ws.activity_feed(
+    distinct_id="user@example.com",
+    from_date="2025-01-01"
+)
+
+# Fetch data locally—use a cohort to scope profiles
+ws.fetch_events(
+    "jan_events",
+    from_date="2025-01-01",
+    to_date="2025-01-31"
+)
+ws.fetch_profiles("power_users", cohort_id=cohorts[0].id)
+
+# Query with full SQL power—joins, window functions, CTEs
+df = ws.sql("""
+    SELECT
+        e.properties->>'$.country' as country,
+        COUNT(DISTINCT e.distinct_id) as users,
+        COUNT(*) as events
+    FROM jan_events e
+    JOIN power_users u ON e.distinct_id = u.distinct_id
+    GROUP BY 1
+    ORDER BY 2 DESC
+""")
+
+# Results have .df for pandas interoperability
+segmentation.df
+funnel.df
+df.to_csv("export.csv")
+
+# Execute arbitrary JQL for custom analysis
+jql_result = ws.jql("""
+    function main() {
+        return Events({...}).groupBy([...])
+    }
+""")
 ```
+
+**CLI** — For shell scripts, pipelines, and agent tool calls:
+
+```bash
+# Discover your data landscape
+mp inspect events
+mp inspect properties "Purchase"
+mp inspect values "Purchase" "country"
+mp inspect top-events
+mp inspect funnels
+mp inspect cohorts
+mp inspect bookmarks
+
+# Live queries against Mixpanel API
+mp query segmentation "Purchase" \
+    --from 2025-01-01 --to 2025-01-31 --on country
+mp query funnel 12345 --from 2025-01-01 --to 2025-01-31
+mp query retention \
+    --born-event Signup --return-event Purchase --from 2025-01-01
+mp query activity-feed user@example.com --from 2025-01-01
+mp query saved-report 67890
+mp query frequency "Login" --from 2025-01-01
+
+# Fetch data locally
+mp fetch events jan_events --from 2025-01-01 --to 2025-01-31
+mp fetch profiles users --cohort-id 12345
+
+# Query locally with SQL
+mp query sql "SELECT event_name, COUNT(*) FROM jan_events GROUP BY 1"
+
+# Inspect local data
+mp inspect tables
+mp inspect schema jan_events
+mp inspect sample jan_events
+mp inspect summarize jan_events
+
+# Compose with Unix tools
+mp query segmentation "Purchase" --from 2025-01-01 --format json \
+    | jq '.data'
+mp fetch events --stream --from 2025-01-01 | wc -l
+```
+
+## Capabilities
+
+**Discovery** — Rapidly explore your project's data landscape:
+
+- List all events, drill into properties, sample actual values
+- Browse saved funnels, cohorts, and reports (bookmarks)
+- Access Lexicon definitions from your data dictionary
+- Analyze property distributions, coverage, and numeric statistics
+- Inspect top events by volume, daily trends, user engagement patterns
+
+Discovery commands let you survey what exists before writing queries—no guessing at event names or property values.
+
+**Live Queries** — Execute Mixpanel analytics directly:
+
+- Segmentation with filtering, grouping, and time bucketing
+- Funnel conversion analysis
+- Retention analysis
+- Saved reports (Insights, Funnels, Flows, Retention)
+- User activity feeds
+- Frequency and engagement analysis
+- Numeric aggregations (sum, average, bucket)
+- Raw JQL execution for custom analysis
+
+**Local Storage** — Fetch once, query repeatedly:
+
+- Store events and profiles in a local DuckDB database
+- Query with full SQL: joins, window functions, CTEs
+- Introspect tables, sample data, analyze distributions
+- Iterate on analysis without repeated API calls
+
+**Streaming** — Process data without storage:
+
+- Stream events directly for ETL pipelines
+- One-time processing without local persistence
+- Memory-efficient iteration over large datasets
+
+## For Humans and Agents
+
+The structured output and deterministic command interface make `mixpanel_data` particularly effective for AI coding agents—the same properties that make it scriptable for humans make it reliable for automated workflows.
+
+Discovery commands are particularly valuable: an agent can rapidly survey your data landscape—listing events, inspecting properties, sampling values—then construct accurate queries based on what actually exists rather than guessing.
+
+The tool is designed to be self-documenting: comprehensive `--help` on every command, complete docstrings on every method, full type annotations throughout, and rich exception messages that explain what went wrong and how to fix it. Agents can discover capabilities, learn correct usage, and recover from mistakes autonomously.
 
 ## Next Steps
 

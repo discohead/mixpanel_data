@@ -146,17 +146,87 @@ All commands support the `--format` option:
 | `csv` | CSV with headers | Spreadsheet export |
 | `plain` | Minimal text | Scripting |
 
-Example:
+### Format Examples
+
+Given this query:
 
 ```bash
-# Table output for terminal
-mp query sql "SELECT * FROM events LIMIT 10" --format table
+mp query sql "SELECT event_name, COUNT(*) as count FROM events GROUP BY 1 LIMIT 3"
+```
 
-# CSV for export
+**json** (default) — Pretty-printed, easy to read:
+
+```json
+[
+  {
+    "event_name": "Purchase",
+    "count": 1523
+  },
+  {
+    "event_name": "Signup",
+    "count": 892
+  },
+  {
+    "event_name": "Login",
+    "count": 4201
+  }
+]
+```
+
+**jsonl** — One object per line, ideal for streaming:
+
+```
+{"event_name": "Purchase", "count": 1523}
+{"event_name": "Signup", "count": 892}
+{"event_name": "Login", "count": 4201}
+```
+
+**table** — Rich ASCII table for terminal viewing:
+
+```
+┏━━━━━━━━━━━━━┳━━━━━━━┓
+┃ EVENT NAME  ┃ COUNT ┃
+┡━━━━━━━━━━━━━╇━━━━━━━┩
+│ Purchase    │ 1523  │
+│ Signup      │ 892   │
+│ Login       │ 4201  │
+└─────────────┴───────┘
+```
+
+**csv** — Headers plus comma-separated values:
+
+```csv
+event_name,count
+Purchase,1523
+Signup,892
+Login,4201
+```
+
+**plain** — Minimal output, one value per line:
+
+```
+Purchase
+Signup
+Login
+```
+
+### Choosing a Format
+
+```bash
+# Terminal viewing
+mp inspect events --format table
+
+# Export to spreadsheet
 mp query sql "SELECT * FROM events" --format csv > events.csv
 
-# JSONL for streaming processing
-mp query sql "SELECT * FROM events" --format jsonl | jq '.event_name'
+# Pipe to jq for processing
+mp query segmentation "Purchase" --from 2025-01-01 --format json | jq '.values'
+
+# Count results
+mp inspect events --format plain | wc -l
+
+# Stream to another tool
+mp query sql "SELECT * FROM events" --format jsonl | python process.py
 ```
 
 ## Exit Codes
@@ -195,30 +265,30 @@ mp inspect events
 mp inspect properties --event Purchase
 
 # 3. Fetch data
-mp fetch events jan --from 2024-01-01 --to 2024-01-31
+mp fetch events jan --from 2025-01-01 --to 2025-01-31
 
 # 4. Query locally
 mp query sql "SELECT event_name, COUNT(*) FROM jan GROUP BY 1" --format table
 
 # 5. Run live queries
-mp query segmentation --event Purchase --from 2024-01-01 --to 2024-01-31 --format table
+mp query segmentation --event Purchase --from 2025-01-01 --to 2025-01-31 --format table
 ```
 
 ### Incremental Fetching
 
 ```bash
 # Fetch initial data
-mp fetch events events --from 2024-01-01 --to 2024-01-31
+mp fetch events events --from 2025-01-01 --to 2025-01-31
 
 # Append more data later
-mp fetch events events --from 2024-02-01 --to 2024-02-28 --append
+mp fetch events events --from 2025-02-01 --to 2025-02-28 --append
 
 # Resume after a crash (overlapping dates are safe)
 mp query sql "SELECT MAX(event_time) FROM events"
-mp fetch events events --from 2024-02-15 --to 2024-02-28 --append
+mp fetch events events --from 2025-02-15 --to 2025-02-28 --append
 
 # Replace with fresh data
-mp fetch events events --from 2024-01-01 --to 2024-02-28 --replace
+mp fetch events events --from 2025-01-01 --to 2025-02-28 --replace
 ```
 
 ### Piping and Scripting
@@ -228,7 +298,7 @@ mp fetch events events --from 2024-01-01 --to 2024-02-28 --replace
 mp query sql "SELECT * FROM events" --format csv > events.csv
 
 # Process with jq
-mp query segmentation --event Login --from 2024-01-01 --to 2024-01-31 --format json \
+mp query segmentation --event Login --from 2025-01-01 --to 2025-01-31 --format json \
     | jq '.values."$overall"'
 
 # Count lines
@@ -241,7 +311,7 @@ Stream data directly without storing locally:
 
 ```bash
 # Stream events as JSONL
-mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout
+mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout
 
 # Stream profiles
 mp fetch profiles --stdout
@@ -253,14 +323,14 @@ mp fetch profiles --stdout --cohort 12345
 mp fetch profiles --stdout --output-properties '$email,$name,plan'
 
 # Pipe to jq for filtering
-mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout \
+mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout \
     | jq 'select(.event_name == "Purchase")'
 
 # Save to file
-mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout > events.jsonl
+mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout > events.jsonl
 
 # Raw Mixpanel API format
-mp fetch events --from 2024-01-01 --to 2024-01-31 --stdout --raw
+mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout --raw
 ```
 
 ## Full Command Reference
