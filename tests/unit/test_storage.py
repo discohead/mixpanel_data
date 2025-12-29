@@ -1809,10 +1809,10 @@ def test_create_events_table_skips_duplicate_insert_ids(tmp_path: Path) -> None:
             metadata=metadata,
         )
 
-        # Row count reflects attempted inserts (3), not unique rows
-        assert row_count == 3
+        # Row count reflects actual inserts (2), not attempted inserts (3)
+        assert row_count == 2
 
-        # But table should only have 2 unique rows
+        # Verify table count matches
         actual_count = storage.execute_scalar("SELECT COUNT(*) FROM test_events")
         assert actual_count == 2
 
@@ -1906,10 +1906,10 @@ def test_create_profiles_table_skips_duplicate_distinct_ids(tmp_path: Path) -> N
             metadata=metadata,
         )
 
-        # Row count reflects attempted inserts (3), not unique rows
-        assert row_count == 3
+        # Row count reflects actual inserts (2), not attempted inserts (3)
+        assert row_count == 2
 
-        # But table should only have 2 unique rows
+        # Verify table count matches
         actual_count = storage.execute_scalar("SELECT COUNT(*) FROM test_profiles")
         assert actual_count == 2
 
@@ -1994,12 +1994,286 @@ def test_create_events_table_handles_many_duplicates(tmp_path: Path) -> None:
             metadata=metadata,
         )
 
-        # Row count reflects all 300 attempted inserts
-        assert row_count == 300
+        # Row count should match actual inserted rows, not attempted inserts
+        assert row_count == 100
 
-        # But table should only have 100 unique rows
+        # Verify the table count matches
         actual_count = storage.execute_scalar("SELECT COUNT(*) FROM test_events")
         assert actual_count == 100
+
+
+def test_create_events_table_row_count_matches_actual_inserts(tmp_path: Path) -> None:
+    """Test that returned row_count equals actual inserted rows, not batch size."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create events with 50% duplicates
+        events = [
+            {
+                "event_name": "Event",
+                "event_time": datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+                "distinct_id": "user_1",
+                "insert_id": "unique_1",
+                "properties": {},
+            },
+            {
+                "event_name": "Event",
+                "event_time": datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+                "distinct_id": "user_1",
+                "insert_id": "unique_1",  # Duplicate
+                "properties": {},
+            },
+            {
+                "event_name": "Event",
+                "event_time": datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+                "distinct_id": "user_2",
+                "insert_id": "unique_2",
+                "properties": {},
+            },
+            {
+                "event_name": "Event",
+                "event_time": datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+                "distinct_id": "user_2",
+                "insert_id": "unique_2",  # Duplicate
+                "properties": {},
+            },
+        ]
+
+        metadata = TableMetadata(
+            type="events",
+            fetched_at=datetime.now(UTC),
+            from_date="2024-01-15",
+            to_date="2024-01-15",
+        )
+
+        row_count = storage.create_events_table(
+            name="test_events",
+            data=iter(events),
+            metadata=metadata,
+        )
+
+        # Row count should be 2 (actual inserts), not 4 (attempted inserts)
+        assert row_count == 2
+        assert storage.execute_scalar("SELECT COUNT(*) FROM test_events") == 2
+
+
+def test_create_profiles_table_row_count_matches_actual_inserts(tmp_path: Path) -> None:
+    """Test that returned row_count equals actual inserted rows for profiles."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create profiles with duplicates
+        profiles = [
+            {
+                "distinct_id": "user_1",
+                "properties": {"name": "Alice"},
+                "last_seen": datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+            },
+            {
+                "distinct_id": "user_1",  # Duplicate
+                "properties": {"name": "Alice Updated"},
+                "last_seen": datetime(2024, 1, 15, 11, 0, tzinfo=UTC),
+            },
+            {
+                "distinct_id": "user_2",
+                "properties": {"name": "Bob"},
+                "last_seen": datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+            },
+        ]
+
+        metadata = TableMetadata(
+            type="profiles",
+            fetched_at=datetime.now(UTC),
+        )
+
+        row_count = storage.create_profiles_table(
+            name="test_profiles",
+            data=iter(profiles),
+            metadata=metadata,
+        )
+
+        # Row count should be 2 (actual inserts), not 3 (attempted inserts)
+        assert row_count == 2
+        assert storage.execute_scalar("SELECT COUNT(*) FROM test_profiles") == 2
+
+
+def test_append_events_table_row_count_matches_actual_inserts(tmp_path: Path) -> None:
+    """Test that append row_count equals actual inserted rows."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create initial table
+        initial_events = [
+            {
+                "event_name": "Event",
+                "event_time": datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+                "distinct_id": "user_1",
+                "insert_id": "existing_id",
+                "properties": {},
+            },
+        ]
+
+        metadata = TableMetadata(
+            type="events",
+            fetched_at=datetime.now(UTC),
+            from_date="2024-01-15",
+            to_date="2024-01-15",
+        )
+
+        storage.create_events_table("test_events", iter(initial_events), metadata)
+
+        # Append with mix of duplicates and new events
+        append_events = [
+            {
+                "event_name": "Event",
+                "event_time": datetime(2024, 1, 16, 10, 0, tzinfo=UTC),
+                "distinct_id": "user_1",
+                "insert_id": "existing_id",  # Duplicate of initial
+                "properties": {},
+            },
+            {
+                "event_name": "Event",
+                "event_time": datetime(2024, 1, 16, 10, 0, tzinfo=UTC),
+                "distinct_id": "user_2",
+                "insert_id": "new_id_1",
+                "properties": {},
+            },
+            {
+                "event_name": "Event",
+                "event_time": datetime(2024, 1, 16, 10, 0, tzinfo=UTC),
+                "distinct_id": "user_2",
+                "insert_id": "new_id_1",  # Duplicate within append
+                "properties": {},
+            },
+            {
+                "event_name": "Event",
+                "event_time": datetime(2024, 1, 16, 10, 0, tzinfo=UTC),
+                "distinct_id": "user_3",
+                "insert_id": "new_id_2",
+                "properties": {},
+            },
+        ]
+
+        append_metadata = TableMetadata(
+            type="events",
+            fetched_at=datetime.now(UTC),
+            from_date="2024-01-16",
+            to_date="2024-01-16",
+        )
+
+        row_count = storage.append_events_table(
+            "test_events", iter(append_events), append_metadata
+        )
+
+        # Should be 2 (new_id_1 and new_id_2), not 4 (all attempted)
+        assert row_count == 2
+        assert storage.execute_scalar("SELECT COUNT(*) FROM test_events") == 3
+
+
+def test_append_profiles_table_row_count_matches_actual_inserts(tmp_path: Path) -> None:
+    """Test that append row_count equals actual inserted rows for profiles."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create initial table
+        initial_profiles = [
+            {
+                "distinct_id": "user_1",
+                "properties": {"name": "Alice"},
+                "last_seen": datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+            },
+        ]
+
+        metadata = TableMetadata(
+            type="profiles",
+            fetched_at=datetime.now(UTC),
+        )
+
+        storage.create_profiles_table("test_profiles", iter(initial_profiles), metadata)
+
+        # Append with duplicates
+        append_profiles = [
+            {
+                "distinct_id": "user_1",  # Duplicate of initial
+                "properties": {"name": "Alice Updated"},
+                "last_seen": datetime(2024, 1, 16, 10, 0, tzinfo=UTC),
+            },
+            {
+                "distinct_id": "user_2",
+                "properties": {"name": "Bob"},
+                "last_seen": datetime(2024, 1, 16, 10, 0, tzinfo=UTC),
+            },
+        ]
+
+        row_count = storage.append_profiles_table(
+            "test_profiles", iter(append_profiles), metadata
+        )
+
+        # Should be 1 (user_2 only), not 2 (all attempted)
+        assert row_count == 1
+        assert storage.execute_scalar("SELECT COUNT(*) FROM test_profiles") == 2
+
+
+def test_progress_callback_reports_actual_inserted_rows(tmp_path: Path) -> None:
+    """Test that progress callback receives accurate row counts."""
+    from datetime import datetime
+
+    from mixpanel_data.types import TableMetadata
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create events with duplicates, using small batch size to trigger callbacks
+        events = []
+        for i in range(10):
+            events.append(
+                {
+                    "event_name": "Event",
+                    "event_time": datetime(2024, 1, 15, 10, 0, tzinfo=UTC),
+                    "distinct_id": f"user_{i}",
+                    "insert_id": f"id_{i % 5}",  # Only 5 unique IDs
+                    "properties": {},
+                }
+            )
+
+        metadata = TableMetadata(
+            type="events",
+            fetched_at=datetime.now(UTC),
+            from_date="2024-01-15",
+            to_date="2024-01-15",
+        )
+
+        progress_values: list[int] = []
+
+        def progress_callback(count: int) -> None:
+            progress_values.append(count)
+
+        row_count = storage.create_events_table(
+            name="test_events",
+            data=iter(events),
+            metadata=metadata,
+            progress_callback=progress_callback,
+            batch_size=3,  # Small batch to trigger multiple callbacks
+        )
+
+        # Final row count should be 5 (unique insert_ids)
+        assert row_count == 5
+
+        # Progress should report cumulative actual inserts, not attempted
+        # The exact values depend on batch boundaries, but final should be 5
+        if progress_values:
+            assert progress_values[-1] == 5
 
 
 # =============================================================================

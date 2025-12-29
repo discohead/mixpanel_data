@@ -74,6 +74,30 @@ class TestNormalizeOnExpression:
         assert normalize_on_expression("日本語") == 'properties["日本語"]'
         assert normalize_on_expression("émoji🎉") == 'properties["émoji🎉"]'
 
+    # Category 5: Special character escaping
+
+    @pytest.mark.parametrize(
+        ("name_with_quotes", "expected"),
+        [
+            ('my"property', 'properties["my\\"property"]'),
+            ('"quoted"', 'properties["\\"quoted\\""]'),
+            ('a"b"c', 'properties["a\\"b\\"c"]'),
+            ('say "hello"', 'properties["say \\"hello\\""]'),
+        ],
+    )
+    def test_escapes_double_quotes_in_property_names(
+        self, name_with_quotes: str, expected: str
+    ) -> None:
+        """Property names containing double quotes should be escaped."""
+        assert normalize_on_expression(name_with_quotes) == expected
+
+    def test_backslash_before_quote_escaping(self) -> None:
+        """Backslash before quote should be handled correctly."""
+        # A property name ending with backslash followed by quote
+        result = normalize_on_expression('path\\to\\"file')
+        # The quote should be escaped, and existing backslashes preserved
+        assert result == 'properties["path\\\\to\\\\\\"file"]'
+
     # Category 4: Idempotency
 
     def test_idempotent_for_bare_names(self) -> None:

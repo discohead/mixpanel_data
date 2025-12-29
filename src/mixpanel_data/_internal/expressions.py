@@ -27,7 +27,8 @@ def normalize_on_expression(on: str) -> str:
 
     Returns:
         The normalized expression. Bare names are wrapped in properties["..."],
-        while existing expressions pass through unchanged.
+        while existing expressions pass through unchanged. Double quotes and
+        backslashes in bare property names are escaped to produce valid syntax.
 
     Examples:
         >>> normalize_on_expression("Source")
@@ -36,7 +37,12 @@ def normalize_on_expression(on: str) -> str:
         'properties["Source"]'
         >>> normalize_on_expression('properties["Type"] == "Event"')
         'properties["Type"] == "Event"'
+        >>> normalize_on_expression('my"property')
+        'properties["my\\\\"property"]'
     """
     if any(accessor in on for accessor in _FILTER_EXPR_ACCESSORS):
         return on
-    return f'properties["{on}"]'
+    # Escape backslashes first, then double quotes, to produce valid syntax.
+    # Order matters: escaping quotes first would double-escape the backslash.
+    escaped = on.replace("\\", "\\\\").replace('"', '\\"')
+    return f'properties["{escaped}"]'

@@ -538,9 +538,9 @@ class StorageEngine:
                 Lower values use less memory but have more disk I/O overhead.
 
         Returns:
-            Total number of rows inserted.
+            Total number of rows actually inserted (excludes duplicates skipped
+            by INSERT OR IGNORE).
         """
-        total_rows = 0
         batch: list[tuple[str, str, str, str, str]] = []
         quoted_name = _quote_identifier(name)
         # Use INSERT OR IGNORE to skip duplicates silently.
@@ -548,6 +548,13 @@ class StorageEngine:
         # so duplicate insert_ids are expected. We deduplicate on insert
         # to match Mixpanel's query-time behavior.
         insert_sql = f"INSERT OR IGNORE INTO {quoted_name} VALUES (?, ?, ?, ?, ?)"
+        count_sql = f"SELECT COUNT(*) FROM {quoted_name}"
+
+        # Get initial row count to compute actual inserts accurately.
+        # INSERT OR IGNORE silently skips duplicates, so len(batch) would
+        # overcount when duplicates exist.
+        result = self.connection.execute(count_sql).fetchone()
+        initial_count: int = result[0] if result else 0
 
         for record in data:
             # Validate record
@@ -576,23 +583,27 @@ class StorageEngine:
                 self.connection.executemany(insert_sql, batch)
                 self.connection.execute("COMMIT")
                 self.connection.execute("BEGIN TRANSACTION")
-                total_rows += len(batch)
                 batch = []
 
-                # Call progress callback
+                # Call progress callback with actual inserted count
                 if progress_callback is not None:
-                    progress_callback(total_rows)
+                    result = self.connection.execute(count_sql).fetchone()
+                    current_count: int = result[0] if result else 0
+                    progress_callback(current_count - initial_count)
 
         # Insert remaining records
         if batch:
             self.connection.executemany(insert_sql, batch)
-            total_rows += len(batch)
 
             # Final progress callback
             if progress_callback is not None:
-                progress_callback(total_rows)
+                result = self.connection.execute(count_sql).fetchone()
+                progress_callback((result[0] if result else 0) - initial_count)
 
-        return total_rows
+        # Return actual inserted count (current - initial)
+        result = self.connection.execute(count_sql).fetchone()
+        final_count: int = result[0] if result else 0
+        return final_count - initial_count
 
     def _batch_insert_profiles(
         self,
@@ -615,14 +626,21 @@ class StorageEngine:
                 Lower values use less memory but have more disk I/O overhead.
 
         Returns:
-            Total number of rows inserted.
+            Total number of rows actually inserted (excludes duplicates skipped
+            by INSERT OR IGNORE).
         """
-        total_rows = 0
         batch: list[tuple[str, str, str]] = []
         quoted_name = _quote_identifier(name)
         # Use INSERT OR IGNORE to skip duplicates silently.
         # Duplicate distinct_ids can occur in profile exports.
         insert_sql = f"INSERT OR IGNORE INTO {quoted_name} VALUES (?, ?, ?)"
+        count_sql = f"SELECT COUNT(*) FROM {quoted_name}"
+
+        # Get initial row count to compute actual inserts accurately.
+        # INSERT OR IGNORE silently skips duplicates, so len(batch) would
+        # overcount when duplicates exist.
+        result = self.connection.execute(count_sql).fetchone()
+        initial_count: int = result[0] if result else 0
 
         for record in data:
             # Validate record
@@ -649,23 +667,27 @@ class StorageEngine:
                 self.connection.executemany(insert_sql, batch)
                 self.connection.execute("COMMIT")
                 self.connection.execute("BEGIN TRANSACTION")
-                total_rows += len(batch)
                 batch = []
 
-                # Call progress callback
+                # Call progress callback with actual inserted count
                 if progress_callback is not None:
-                    progress_callback(total_rows)
+                    result = self.connection.execute(count_sql).fetchone()
+                    current_count: int = result[0] if result else 0
+                    progress_callback(current_count - initial_count)
 
         # Insert remaining records
         if batch:
             self.connection.executemany(insert_sql, batch)
-            total_rows += len(batch)
 
             # Final progress callback
             if progress_callback is not None:
-                progress_callback(total_rows)
+                result = self.connection.execute(count_sql).fetchone()
+                progress_callback((result[0] if result else 0) - initial_count)
 
-        return total_rows
+        # Return actual inserted count (current - initial)
+        result = self.connection.execute(count_sql).fetchone()
+        final_count: int = result[0] if result else 0
+        return final_count - initial_count
 
     def _record_metadata(
         self, table_name: str, metadata: TableMetadata, row_count: int
