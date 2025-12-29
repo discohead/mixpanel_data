@@ -154,18 +154,17 @@ for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
 
 ## CLI Reference
 
-The `mp` CLI provides commands across four groups:
+**`mp auth`** — Manage accounts: `list`, `add`, `remove`, `switch`, `show`, `test`
 
-| Group | Commands |
-|-------|----------|
-| `mp auth` | `list`, `add`, `remove`, `switch`, `show`, `test` |
-| `mp fetch` | `events`, `profiles` |
-| `mp query` | `sql`, `segmentation`, `funnel`, `retention`, `jql`, `event-counts`, `property-counts`, `activity-feed`, `saved-report`, `flows`, `frequency`, `segmentation-numeric`, `segmentation-sum`, `segmentation-average` |
-| `mp inspect` | `events`, `properties`, `values`, `funnels`, `cohorts`, `bookmarks`, `top-events`, `info`, `tables`, `schema`, `drop`, `sample`, `summarize`, `breakdown` |
+**`mp fetch`** — Extract data: `events`, `profiles` (add `--stdout` to stream as JSONL)
 
-All commands support `--format` (json, jsonl, table, csv, plain) and `--help`.
+**`mp query`** — Run analytics: `sql`, `segmentation`, `funnel`, `retention`, `jql`, `saved-report`, `flows`, and 7 more
 
-`mp fetch` commands also support `--stdout` (stream as JSONL) and `--raw` (raw API format).
+**`mp inspect`** — Discover schema: `events`, `properties`, `funnels`, `cohorts`, `bookmarks`; local DB: `tables`, `schema`, `drop`, and 5 more
+
+All commands support `--format` (`json`, `jsonl`, `table`, `csv`, `plain`) and `--help`.
+
+See [CLI Reference](https://discohead.github.io/mixpanel_data/cli/) for complete documentation.
 
 ## DuckDB JSON Queries
 
