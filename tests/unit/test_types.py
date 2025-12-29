@@ -1002,3 +1002,117 @@ class TestTableMetadata:
 
         with pytest.raises(dataclasses.FrozenInstanceError):
             metadata.type = "events"  # type: ignore[misc]
+
+
+# =============================================================================
+# SQLResult Tests
+# =============================================================================
+
+
+class TestSQLResult:
+    """Tests for SQLResult dataclass."""
+
+    def test_basic_creation(self) -> None:
+        """Test creating an SQLResult with columns and rows."""
+        from mixpanel_data.types import SQLResult
+
+        result = SQLResult(
+            columns=["name", "age"],
+            rows=[("Alice", 30), ("Bob", 25)],
+        )
+
+        assert result.columns == ["name", "age"]
+        assert result.rows == [("Alice", 30), ("Bob", 25)]
+
+    def test_immutable(self) -> None:
+        """SQLResult should be immutable (frozen)."""
+        from mixpanel_data.types import SQLResult
+
+        result = SQLResult(columns=["x"], rows=[(1,)])
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.columns = ["y"]  # type: ignore[misc]
+
+    def test_len_returns_row_count(self) -> None:
+        """len(SQLResult) should return number of rows."""
+        from mixpanel_data.types import SQLResult
+
+        result = SQLResult(
+            columns=["a", "b"],
+            rows=[(1, 2), (3, 4), (5, 6)],
+        )
+
+        assert len(result) == 3
+
+    def test_iter_yields_rows(self) -> None:
+        """Iterating SQLResult should yield row tuples."""
+        from mixpanel_data.types import SQLResult
+
+        result = SQLResult(
+            columns=["x", "y"],
+            rows=[(1, 2), (3, 4)],
+        )
+
+        rows = list(result)
+        assert rows == [(1, 2), (3, 4)]
+
+    def test_to_dicts_converts_rows_to_list_of_dicts(self) -> None:
+        """to_dicts() should convert rows to list of dicts with column keys."""
+        from mixpanel_data.types import SQLResult
+
+        result = SQLResult(
+            columns=["name", "count"],
+            rows=[("Alice", 10), ("Bob", 20)],
+        )
+
+        dicts = result.to_dicts()
+
+        assert dicts == [
+            {"name": "Alice", "count": 10},
+            {"name": "Bob", "count": 20},
+        ]
+
+    def test_to_dicts_empty_result(self) -> None:
+        """to_dicts() should return empty list for empty result."""
+        from mixpanel_data.types import SQLResult
+
+        result = SQLResult(columns=["x", "y"], rows=[])
+
+        assert result.to_dicts() == []
+
+    def test_to_dicts_single_column(self) -> None:
+        """to_dicts() should work with single column."""
+        from mixpanel_data.types import SQLResult
+
+        result = SQLResult(columns=["value"], rows=[(1,), (2,), (3,)])
+
+        dicts = result.to_dicts()
+
+        assert dicts == [{"value": 1}, {"value": 2}, {"value": 3}]
+
+    def test_to_dict_serializable(self) -> None:
+        """to_dict() should be JSON serializable."""
+        from mixpanel_data.types import SQLResult
+
+        result = SQLResult(
+            columns=["event", "count"],
+            rows=[("Signup", 100), ("Login", 200)],
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+
+        assert "columns" in json_str
+        assert "rows" in json_str
+        assert data["columns"] == ["event", "count"]
+        assert data["rows"] == [["Signup", 100], ["Login", 200]]
+        assert data["row_count"] == 2
+
+    def test_empty_columns_and_rows(self) -> None:
+        """SQLResult should handle empty columns and rows."""
+        from mixpanel_data.types import SQLResult
+
+        result = SQLResult(columns=[], rows=[])
+
+        assert len(result) == 0
+        assert result.to_dicts() == []

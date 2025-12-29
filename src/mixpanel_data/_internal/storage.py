@@ -26,7 +26,13 @@ from mixpanel_data.exceptions import (
     TableExistsError,
     TableNotFoundError,
 )
-from mixpanel_data.types import ColumnInfo, TableInfo, TableMetadata, TableSchema
+from mixpanel_data.types import (
+    ColumnInfo,
+    SQLResult,
+    TableInfo,
+    TableMetadata,
+    TableSchema,
+)
 
 # Module-level logger for cleanup operations
 _logger = logging.getLogger(__name__)
@@ -1211,17 +1217,17 @@ class StorageEngine:
                 response_body={"query": sql, "error": str(e)},
             ) from e
 
-    def execute_rows(self, sql: str) -> list[tuple[Any, ...]]:
-        """Execute SQL and return list of tuples.
+    def execute_rows(self, sql: str) -> SQLResult:
+        """Execute SQL and return structured result with column metadata.
 
-        Useful when you need to iterate over results without pandas overhead,
-        or when working with code that expects tuple-based results.
+        Returns an SQLResult containing both column names and row data,
+        enabling proper formatting for CLI output and JSON serialization.
 
         Args:
             sql: SQL query string.
 
         Returns:
-            List of row tuples.
+            SQLResult with columns and rows.
 
         Raises:
             QueryError: If query execution fails.
@@ -1231,26 +1237,27 @@ class StorageEngine:
 
             ```python
             storage = StorageEngine(path=Path("data.db"))
-            rows = storage.execute_rows("SELECT event_name, COUNT(*) FROM events GROUP BY event_name")
-            for event_name, count in rows:
+            result = storage.execute_rows(
+                "SELECT event_name, COUNT(*) as cnt FROM events GROUP BY event_name"
+            )
+            print(result.columns)  # ['event_name', 'cnt']
+            for event_name, count in result.rows:
                 print(f"{event_name}: {count}")
             ```
 
-            Get specific rows:
+            Convert to dicts for JSON output:
 
             ```python
-            rows = storage.execute_rows('''
-                SELECT distinct_id, event_name, event_time
-                FROM events
-                WHERE event_name = 'Page View'
-                LIMIT 5
-            ''')
-            for distinct_id, event_name, event_time in rows:
-                print(f"{distinct_id} - {event_name} at {event_time}")
+            result = storage.execute_rows("SELECT name, age FROM users")
+            for row in result.to_dicts():
+                print(row)  # {'name': 'Alice', 'age': 30}
             ```
         """
         try:
-            return self.connection.execute(sql).fetchall()
+            cursor = self.connection.execute(sql)
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            return SQLResult(columns=columns, rows=rows)
         except duckdb.Error as e:
             raise QueryError(
                 f"Query execution failed: {e}",

@@ -48,6 +48,86 @@ Derived from headers array in the API response:
 """
 
 
+# =============================================================================
+# SQL Query Result Type
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class SQLResult:
+    """Result from a SQL query with column metadata.
+
+    Provides structured access to SQL query results including column names
+    and row data. Supports conversion to list of dicts for JSON serialization
+    and CLI output formatting.
+
+    Attributes:
+        columns: List of column names from the query.
+        rows: List of row tuples containing the data.
+
+    Example:
+        ```python
+        result = ws.sql_rows("SELECT name, age FROM users")
+        print(result.columns)  # ['name', 'age']
+        for row in result.rows:
+            print(dict(zip(result.columns, row)))
+
+        # Or convert to dicts directly:
+        for row in result.to_dicts():
+            print(row)  # {'name': 'Alice', 'age': 30}
+        ```
+    """
+
+    columns: list[str]
+    """List of column names from the query."""
+
+    rows: list[tuple[Any, ...]]
+    """List of row tuples containing the data."""
+
+    def to_dicts(self) -> list[dict[str, Any]]:
+        """Convert rows to list of dicts with column names as keys.
+
+        Returns:
+            List of dictionaries, one per row, with column names as keys.
+
+        Example:
+            ```python
+            result = SQLResult(columns=["x", "y"], rows=[(1, 2), (3, 4)])
+            dicts = result.to_dicts()
+            # [{"x": 1, "y": 2}, {"x": 3, "y": 4}]
+            ```
+        """
+        return [dict(zip(self.columns, row, strict=True)) for row in self.rows]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize result for JSON output.
+
+        Returns:
+            Dictionary with columns, rows (as lists), and row_count.
+        """
+        return {
+            "columns": self.columns,
+            "rows": [list(row) for row in self.rows],
+            "row_count": len(self.rows),
+        }
+
+    def __len__(self) -> int:
+        """Return number of rows.
+
+        Returns:
+            Count of rows in the result.
+        """
+        return len(self.rows)
+
+    def __iter__(self) -> Any:
+        """Iterate over rows.
+
+        Yields:
+            Row tuples from the result.
+        """
+        return iter(self.rows)
+
+
 @dataclass(frozen=True)
 class FetchResult:
     """Result of a data fetch operation.

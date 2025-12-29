@@ -57,6 +57,7 @@ from mixpanel_data.types import (
     SavedReportResult,
     SavedReportType,
     SegmentationResult,
+    SQLResult,
     SummaryResult,
     TableInfo,
     TableMetadata,
@@ -96,6 +97,7 @@ __all__ = [
     # Result types
     "FetchResult",
     "SegmentationResult",
+    "SQLResult",
     "FunnelResult",
     "FunnelStep",
     "RetentionResult",

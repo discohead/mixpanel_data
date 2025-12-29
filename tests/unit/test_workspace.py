@@ -368,11 +368,13 @@ class TestBasicWorkflow:
         finally:
             ws.close()
 
-    def test_sql_rows_returns_tuples(
+    def test_sql_rows_returns_sql_result(
         self,
         workspace_factory: Callable[..., Workspace],
     ) -> None:
-        """T026: Test sql_rows() returning tuples."""
+        """T026: Test sql_rows() returning SQLResult with columns and rows."""
+        from mixpanel_data.types import SQLResult
+
         ws = workspace_factory()
         try:
             # Create a test table
@@ -383,12 +385,18 @@ class TestBasicWorkflow:
                 "INSERT INTO rows_table VALUES (1, 'A'), (2, 'B')"
             )
 
-            rows = ws.sql_rows("SELECT * FROM rows_table ORDER BY id")
+            result = ws.sql_rows("SELECT * FROM rows_table ORDER BY id")
 
-            assert isinstance(rows, list)
-            assert len(rows) == 2
-            assert rows[0] == (1, "A")
-            assert rows[1] == (2, "B")
+            # Should return SQLResult
+            assert isinstance(result, SQLResult)
+            assert result.columns == ["id", "name"]
+            assert len(result) == 2
+            assert result.rows[0] == (1, "A")
+            assert result.rows[1] == (2, "B")
+
+            # to_dicts should work correctly
+            dicts = result.to_dicts()
+            assert dicts == [{"id": 1, "name": "A"}, {"id": 2, "name": "B"}]
         finally:
             ws.close()
 

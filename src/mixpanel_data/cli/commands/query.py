@@ -111,7 +111,8 @@ def query_sql(
             output_result(ctx, {"value": result}, format=format)
     else:
         result = workspace.sql_rows(sql_query)
-        output_result(ctx, result, format=format)
+        # Convert SQLResult to list of dicts for proper output formatting
+        output_result(ctx, result.to_dicts(), format=format)
 
 
 @query_app.command("segmentation")

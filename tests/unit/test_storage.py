@@ -1601,12 +1601,14 @@ def test_execute_scalar_returns_none_for_null(tmp_path: Path) -> None:
 
 
 # =============================================================================
-# T051: Unit test for execute_rows() returning list of tuples
+# T051: Unit test for execute_rows() returning SQLResult
 # =============================================================================
 
 
-def test_execute_rows_returns_list_of_tuples(tmp_path: Path) -> None:
-    """Test that execute_rows() returns a list of tuples."""
+def test_execute_rows_returns_sql_result(tmp_path: Path) -> None:
+    """Test that execute_rows() returns SQLResult with columns and rows."""
+    from mixpanel_data.types import SQLResult
+
     db_path = tmp_path / "test.db"
     with StorageEngine(path=db_path, read_only=False) as storage:
         # Create test data
@@ -1615,37 +1617,48 @@ def test_execute_rows_returns_list_of_tuples(tmp_path: Path) -> None:
             "INSERT INTO test VALUES (1, 'hello'), (2, 'world'), (3, 'test')"
         )
 
-        # Execute query and get rows
-        rows = storage.execute_rows("SELECT * FROM test ORDER BY id")
+        # Execute query and get result
+        result = storage.execute_rows("SELECT * FROM test ORDER BY id")
 
-        # Should return list of tuples
-        assert isinstance(rows, list)
-        assert len(rows) == 3
-        assert all(isinstance(row, tuple) for row in rows)
+        # Should return SQLResult
+        assert isinstance(result, SQLResult)
+
+        # Should have correct columns
+        assert result.columns == ["id", "value"]
+
+        # Should have correct rows
+        assert len(result) == 3
+        assert all(isinstance(row, tuple) for row in result.rows)
 
         # Verify data
-        assert rows[0] == (1, "hello")
-        assert rows[1] == (2, "world")
-        assert rows[2] == (3, "test")
+        assert result.rows[0] == (1, "hello")
+        assert result.rows[1] == (2, "world")
+        assert result.rows[2] == (3, "test")
 
 
-def test_execute_rows_returns_empty_list_for_empty_result(tmp_path: Path) -> None:
-    """Test that execute_rows() returns empty list for empty result."""
+def test_execute_rows_returns_empty_sql_result_for_empty_table(tmp_path: Path) -> None:
+    """Test that execute_rows() returns SQLResult with empty rows for empty table."""
+    from mixpanel_data.types import SQLResult
+
     db_path = tmp_path / "test.db"
     with StorageEngine(path=db_path, read_only=False) as storage:
         # Create empty table
         storage.connection.execute("CREATE TABLE test (id INTEGER, value VARCHAR)")
 
         # Execute query with no results
-        rows = storage.execute_rows("SELECT * FROM test")
+        result = storage.execute_rows("SELECT * FROM test")
 
-        # Should return empty list
-        assert isinstance(rows, list)
-        assert len(rows) == 0
+        # Should return SQLResult with empty rows
+        assert isinstance(result, SQLResult)
+        assert result.columns == ["id", "value"]
+        assert len(result) == 0
+        assert result.rows == []
 
 
 def test_execute_rows_handles_single_column(tmp_path: Path) -> None:
     """Test that execute_rows() handles single column queries."""
+    from mixpanel_data.types import SQLResult
+
     db_path = tmp_path / "test.db"
     with StorageEngine(path=db_path, read_only=False) as storage:
         # Create test data
@@ -1653,13 +1666,57 @@ def test_execute_rows_handles_single_column(tmp_path: Path) -> None:
         storage.connection.execute("INSERT INTO test VALUES (1, 'a'), (2, 'b')")
 
         # Execute single column query
-        rows = storage.execute_rows("SELECT id FROM test ORDER BY id")
+        result = storage.execute_rows("SELECT id FROM test ORDER BY id")
 
-        # Should return list of tuples with single value
-        assert isinstance(rows, list)
-        assert len(rows) == 2
-        assert rows[0] == (1,)
-        assert rows[1] == (2,)
+        # Should return SQLResult with single column
+        assert isinstance(result, SQLResult)
+        assert result.columns == ["id"]
+        assert len(result) == 2
+        assert result.rows[0] == (1,)
+        assert result.rows[1] == (2,)
+
+
+def test_execute_rows_preserves_column_aliases(tmp_path: Path) -> None:
+    """Test that execute_rows() preserves column aliases from query."""
+    from mixpanel_data.types import SQLResult
+
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create test data
+        storage.connection.execute("CREATE TABLE events (event_name VARCHAR)")
+        storage.connection.execute(
+            "INSERT INTO events VALUES ('Signup'), ('Login'), ('Purchase')"
+        )
+
+        # Execute query with aliases
+        result = storage.execute_rows(
+            "SELECT event_name as name, COUNT(*) as cnt FROM events GROUP BY 1"
+        )
+
+        # Should preserve the aliases
+        assert isinstance(result, SQLResult)
+        assert result.columns == ["name", "cnt"]
+
+
+def test_execute_rows_to_dicts_integration(tmp_path: Path) -> None:
+    """Test that execute_rows().to_dicts() produces correct output."""
+    db_path = tmp_path / "test.db"
+    with StorageEngine(path=db_path, read_only=False) as storage:
+        # Create test data
+        storage.connection.execute("CREATE TABLE users (name VARCHAR, age INTEGER)")
+        storage.connection.execute(
+            "INSERT INTO users VALUES ('Alice', 30), ('Bob', 25)"
+        )
+
+        # Execute query and convert to dicts
+        result = storage.execute_rows("SELECT name, age FROM users ORDER BY name")
+        dicts = result.to_dicts()
+
+        # Should convert correctly
+        assert dicts == [
+            {"name": "Alice", "age": 30},
+            {"name": "Bob", "age": 25},
+        ]
 
 
 # =============================================================================

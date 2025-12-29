@@ -47,6 +47,7 @@ from mixpanel_data.types import (
     SavedCohort,
     SavedReportResult,
     SegmentationResult,
+    SQLResult,
     SummaryResult,
     TopEvent,
     UserEvent,
@@ -1491,3 +1492,81 @@ class TestHelperTypeProperties:
         data = result.to_dict()
         json_str = json.dumps(data)
         assert isinstance(json_str, str)
+
+
+# =============================================================================
+# SQLResult Property Tests
+# =============================================================================
+
+
+# Strategy for valid column names (non-empty printable identifiers)
+column_names = st.text(
+    alphabet=st.characters(categories=("L", "N")),
+    min_size=1,
+    max_size=30,
+).filter(lambda s: s and s[0].isalpha())
+
+
+class TestSQLResultPBT:
+    """Property-based tests for SQLResult."""
+
+    @given(
+        columns=st.lists(column_names, min_size=1, max_size=10, unique=True),
+        num_rows=st.integers(min_value=0, max_value=20),
+    )
+    def test_sql_result_len_matches_rows(
+        self, columns: list[str], num_rows: int
+    ) -> None:
+        """len(SQLResult) should always equal len(rows)."""
+        # Generate rows matching column count
+        rows = [
+            tuple(f"val_{i}_{j}" for j in range(len(columns))) for i in range(num_rows)
+        ]
+        result = SQLResult(columns=columns, rows=rows)
+        assert len(result) == num_rows
+        assert len(result) == len(result.rows)
+
+    @given(
+        columns=st.lists(column_names, min_size=1, max_size=5, unique=True),
+        num_rows=st.integers(min_value=0, max_value=10),
+    )
+    def test_sql_result_to_dicts_has_correct_keys(
+        self, columns: list[str], num_rows: int
+    ) -> None:
+        """to_dicts() should produce dicts with exactly the column names as keys."""
+        rows = [
+            tuple(f"val_{i}_{j}" for j in range(len(columns))) for i in range(num_rows)
+        ]
+        result = SQLResult(columns=columns, rows=rows)
+        dicts = result.to_dicts()
+
+        assert len(dicts) == num_rows
+        for d in dicts:
+            assert set(d.keys()) == set(columns)
+
+    @given(
+        columns=st.lists(column_names, min_size=1, max_size=5, unique=True),
+    )
+    def test_sql_result_to_dict_json_serializable(self, columns: list[str]) -> None:
+        """SQLResult.to_dict() should always be JSON-serializable."""
+        rows = [tuple(f"val_{j}" for j in range(len(columns)))]
+        result = SQLResult(columns=columns, rows=rows)
+        data = result.to_dict()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+        assert data["row_count"] == 1
+        assert data["columns"] == columns
+
+    @given(
+        columns=st.lists(column_names, min_size=1, max_size=5, unique=True),
+        num_rows=st.integers(min_value=0, max_value=10),
+    )
+    def test_sql_result_iter_yields_all_rows(
+        self, columns: list[str], num_rows: int
+    ) -> None:
+        """Iterating SQLResult should yield all rows in order."""
+        rows = [tuple(i for _ in range(len(columns))) for i in range(num_rows)]
+        result = SQLResult(columns=columns, rows=rows)
+
+        iterated = list(result)
+        assert iterated == rows

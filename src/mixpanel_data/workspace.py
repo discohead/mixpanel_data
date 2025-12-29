@@ -79,6 +79,7 @@ from mixpanel_data.types import (
     SavedCohort,
     SavedReportResult,
     SegmentationResult,
+    SQLResult,
     SummaryResult,
     TableInfo,
     TableSchema,
@@ -1160,17 +1161,29 @@ class Workspace:
         """
         return self.storage.execute_scalar(query)
 
-    def sql_rows(self, query: str) -> list[tuple[Any, ...]]:
-        """Execute SQL query and return results as list of tuples.
+    def sql_rows(self, query: str) -> SQLResult:
+        """Execute SQL query and return structured result with column metadata.
 
         Args:
             query: SQL query string.
 
         Returns:
-            List of row tuples.
+            SQLResult with column names and row tuples.
 
         Raises:
             QueryError: If query is invalid.
+
+        Example:
+            ```python
+            result = ws.sql_rows("SELECT name, age FROM users")
+            print(result.columns)  # ['name', 'age']
+            for row in result.rows:
+                print(row)  # ('Alice', 30)
+
+            # Or convert to dicts for JSON output:
+            for row in result.to_dicts():
+                print(row)  # {'name': 'Alice', 'age': 30}
+            ```
         """
         return self.storage.execute_rows(query)
 
@@ -1780,7 +1793,7 @@ class Workspace:
             FROM "{table}"
         """
         agg_result = self.storage.execute_rows(agg_sql)
-        total_events, total_users, min_time, max_time = agg_result[0]
+        total_events, total_users, min_time, max_time = agg_result.rows[0]
 
         # Handle empty table
         if total_events == 0:
@@ -1911,7 +1924,8 @@ class Workspace:
                 FROM "{table}"
                 ORDER BY key
             """
-            rows = self.storage.execute_rows(sql)
+            result = self.storage.execute_rows(sql)
+            rows = result.rows
 
         return [str(row[0]) for row in rows]
 
@@ -1986,7 +2000,7 @@ class Workspace:
                 status_code=0,
             ) from e
 
-        count, null_count, unique_count = stats_result[0]
+        count, null_count, unique_count = stats_result.rows[0]
 
         # Calculate percentages
         null_pct = (null_count / total_rows * 100) if total_rows > 0 else 0.0
@@ -2001,8 +2015,10 @@ class Workspace:
             ORDER BY cnt DESC
             LIMIT {top_n}
         """
-        top_rows = self.storage.execute_rows(top_sql)
-        top_values: list[tuple[Any, int]] = [(row[0], int(row[1])) for row in top_rows]
+        top_result = self.storage.execute_rows(top_sql)
+        top_values: list[tuple[Any, int]] = [
+            (row[0], int(row[1])) for row in top_result.rows
+        ]
 
         # Detect column type to determine if numeric stats apply
         type_sql = (
@@ -2010,7 +2026,7 @@ class Workspace:
         )
         try:
             type_result = self.storage.execute_rows(type_sql)
-            dtype = str(type_result[0][0]) if type_result else "UNKNOWN"
+            dtype = str(type_result.rows[0][0]) if type_result.rows else "UNKNOWN"
         except Exception:
             dtype = "UNKNOWN"
 
@@ -2045,27 +2061,12 @@ class Workspace:
             """
             try:
                 numeric_result = self.storage.execute_rows(numeric_sql)
-                if numeric_result:
-                    min_val = (
-                        float(numeric_result[0][0])
-                        if numeric_result[0][0] is not None
-                        else None
-                    )
-                    max_val = (
-                        float(numeric_result[0][1])
-                        if numeric_result[0][1] is not None
-                        else None
-                    )
-                    mean_val = (
-                        float(numeric_result[0][2])
-                        if numeric_result[0][2] is not None
-                        else None
-                    )
-                    std_val = (
-                        float(numeric_result[0][3])
-                        if numeric_result[0][3] is not None
-                        else None
-                    )
+                if numeric_result.rows:
+                    row = numeric_result.rows[0]
+                    min_val = float(row[0]) if row[0] is not None else None
+                    max_val = float(row[1]) if row[1] is not None else None
+                    mean_val = float(row[2]) if row[2] is not None else None
+                    std_val = float(row[3]) if row[3] is not None else None
             except Exception:
                 # Not numeric, skip
                 pass

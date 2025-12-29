@@ -24,6 +24,7 @@ from mixpanel_data.types import (
     RetentionResult,
     SavedReportResult,
     SegmentationResult,
+    SQLResult,
     UserEvent,
 )
 
@@ -35,7 +36,9 @@ class TestQuerySql:
         self, cli_runner: CliRunner, mock_workspace: MagicMock
     ) -> None:
         """Test SQL query with inline argument."""
-        mock_workspace.sql_rows.return_value = [{"count": 100}]
+        mock_workspace.sql_rows.return_value = SQLResult(
+            columns=["count"], rows=[(100,)]
+        )
 
         with patch(
             "mixpanel_data.cli.commands.query.get_workspace",
@@ -63,7 +66,9 @@ class TestQuerySql:
         sql_file = tmp_path / "query.sql"
         sql_file.write_text("SELECT * FROM events LIMIT 10")
 
-        mock_workspace.sql_rows.return_value = [{"event": "Signup"}]
+        mock_workspace.sql_rows.return_value = SQLResult(
+            columns=["event"], rows=[("Signup",)]
+        )
 
         with patch(
             "mixpanel_data.cli.commands.query.get_workspace",
