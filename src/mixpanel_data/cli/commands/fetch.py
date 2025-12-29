@@ -101,6 +101,9 @@ def fetch_events(
     Events are stored in a DuckDB table for SQL querying. A progress bar
     shows fetch progress (disable with --no-progress or --quiet).
 
+    **Note:** This is a long-running operation. For large date ranges, chunk
+    into smaller ranges with --append, or run in the background.
+
     Use --events to filter by event name (comma-separated list).
     Use --where for Mixpanel expression filters (e.g., 'properties["country"]=="US"').
     Use --replace to drop and recreate an existing table.
@@ -238,6 +241,9 @@ def fetch_profiles(
 
     Profiles are stored in a DuckDB table for SQL querying. A progress bar
     shows fetch progress (disable with --no-progress or --quiet).
+
+    **Note:** This is a long-running operation. For large profile sets,
+    consider running in the background.
 
     Use --where for Mixpanel expression filters on profile properties.
     Use --replace to drop and recreate an existing table.

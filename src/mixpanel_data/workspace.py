@@ -804,6 +804,11 @@ class Workspace:
     ) -> FetchResult:
         """Fetch events from Mixpanel and store in local database.
 
+        Note:
+            This is a potentially long-running operation that streams data from
+            Mixpanel's Export API. For large date ranges, consider chunking into
+            smaller ranges with ``append=True``, or running in a background process.
+
         Args:
             name: Table name to create or append to (default: "events").
             from_date: Start date (YYYY-MM-DD).
@@ -879,6 +884,11 @@ class Workspace:
         batch_size: int = 1000,
     ) -> FetchResult:
         """Fetch user profiles from Mixpanel and store in local database.
+
+        Note:
+            This is a potentially long-running operation that streams data from
+            Mixpanel's Engage API. For large profile sets, consider running in a
+            background process.
 
         Args:
             name: Table name to create or append to (default: "profiles").
