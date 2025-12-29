@@ -18,6 +18,7 @@ Local (uses DuckDB):
 - tables: List local tables
 - schema: Show table schema
 - drop: Drop a table
+- drop-all: Drop all tables
 - sample: Show random sample rows
 - summarize: Show statistical summary
 - breakdown: Show event distribution
@@ -49,7 +50,7 @@ inspect_app = typer.Typer(
   lexicon-schemas, lexicon-schema
 
 Local (uses DuckDB):
-  info, tables, schema, drop, sample, summarize, breakdown, keys, column""",
+  info, tables, schema, drop, drop-all, sample, summarize, breakdown, keys, column""",
     no_args_is_help=True,
     rich_markup_mode="markdown",
 )
@@ -398,6 +399,69 @@ def inspect_drop(
     workspace.drop(table)
 
     output_result(ctx, {"dropped": table}, format=format)
+
+
+@inspect_app.command("drop-all")
+@handle_errors
+def inspect_drop_all(
+    ctx: typer.Context,
+    type_: Annotated[
+        str | None,
+        typer.Option(
+            "--type", "-t", help="Only drop tables of this type: events or profiles."
+        ),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Skip confirmation prompt."),
+    ] = False,
+    format: FormatOption = "json",
+) -> None:
+    """Drop all tables from the local database.
+
+    Permanently removes all tables and their data. Use --type to filter
+    by table type. Use --force to skip the confirmation prompt.
+
+    Examples:
+
+        mp inspect drop-all --force
+        mp inspect drop-all --type events --force
+        mp inspect drop-all -t profiles --force
+    """
+    # Validate type if provided
+    if type_ is not None and type_ not in ("events", "profiles"):
+        err_console.print(
+            f"[red]Invalid type: {type_}. Must be 'events' or 'profiles'.[/red]"
+        )
+        raise typer.Exit(3)
+
+    workspace = get_workspace(ctx)  # write access needed for drop
+
+    # Get count before dropping for output
+    tables = workspace.storage.list_tables()
+    if type_ is not None:
+        tables = [t for t in tables if t.type == type_]
+    count = len(tables)
+
+    if not force:
+        type_msg = f" of type '{type_}'" if type_ else ""
+        confirm = typer.confirm(f"Drop all {count} tables{type_msg}?")
+        if not confirm:
+            err_console.print("[yellow]Cancelled[/yellow]")
+            raise typer.Exit(2)
+
+    # Cast type_ to Literal for type safety
+    from typing import Literal, cast
+
+    type_literal = cast(Literal["events", "profiles"] | None, type_)
+
+    workspace.drop_all(type=type_literal)
+
+    result: dict[str, str | int] = {"dropped_count": count}
+    if type_ is not None:
+        result["type_filter"] = type_
+
+    output_result(ctx, result, format=format)
 
 
 @inspect_app.command("lexicon-schemas")
