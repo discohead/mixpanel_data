@@ -29,8 +29,18 @@ from mixpanel_data._internal.config import ConfigManager, Credentials
 _FIXED_USERNAME = "test_user"
 _FIXED_PROJECT_ID = "12345"
 _FIXED_REGION = "us"
-# Include "Credentials" to avoid false positives where secret is substring of class name
-_FIXED_VALUES = {_FIXED_USERNAME, _FIXED_PROJECT_ID, _FIXED_REGION, "Credentials"}
+# Include class name and field names to avoid false positives where secret
+# is a substring of repr output structure (not an actual security leak)
+_REPR_STRUCTURAL_STRINGS = {
+    _FIXED_USERNAME,
+    _FIXED_PROJECT_ID,
+    _FIXED_REGION,
+    "Credentials",  # Class name
+    "username",  # Field name
+    "secret",  # Field name
+    "project_id",  # Field name
+    "region",  # Field name
+}
 
 # Strategy for valid UTF-8 text (excludes surrogates which can't be encoded)
 _valid_utf8_text = st.text(
@@ -40,14 +50,14 @@ _valid_utf8_text = st.text(
 )
 
 # Strategy for secrets that are long enough to not match by coincidence,
-# don't contain the redaction placeholder, and aren't substrings of fixed field values
+# don't contain the redaction placeholder, and aren't substrings of repr structural elements
 secrets = _valid_utf8_text.filter(
     lambda s: (
         len(s) >= 4
         and "***" not in s
         and s.strip()
-        and s not in _FIXED_VALUES
-        and not any(s in v for v in _FIXED_VALUES)  # Not a substring of fixed values
+        and s not in _REPR_STRUCTURAL_STRINGS
+        and not any(s in v for v in _REPR_STRUCTURAL_STRINGS)  # Not a substring
     )
 )
 
