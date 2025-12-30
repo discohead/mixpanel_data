@@ -468,22 +468,108 @@ class JQLResult:
     def df(self) -> pd.DataFrame:
         """Convert result to DataFrame.
 
-        The structure depends on the JQL query results.
+        The structure depends on the JQL query results. Common patterns:
+
+        - groupBy results: {key: [...], value: X} -> expanded to columns
+        - Multiple reducers: {key: [...], value: [X, Y, Z]} -> value_0, value_1, value_2
+        - Simple dicts: preserved as-is
+        - Other structures: wrapped in "value" column
+
+        Returns:
+            DataFrame representation of JQL results.
         """
         if self._df_cache is not None:
             return self._df_cache
 
-        # If raw is a list of dicts, convert directly
-        if self._raw and isinstance(self._raw[0], dict):
-            result_df = pd.DataFrame(self._raw)
-        elif self._raw:
-            # For other structures, wrap in a DataFrame
-            result_df = pd.DataFrame({"value": self._raw})
-        else:
-            result_df = pd.DataFrame()
-
+        result_df = self._convert_to_dataframe(self._raw)
         object.__setattr__(self, "_df_cache", result_df)
         return result_df
+
+    def _convert_to_dataframe(self, raw: list[Any]) -> pd.DataFrame:
+        """Convert raw JQL results to DataFrame.
+
+        Args:
+            raw: Raw JQL result data.
+
+        Returns:
+            DataFrame representation.
+        """
+        if not raw:
+            return pd.DataFrame()
+
+        # Detect groupBy structure: {key: [...], value: X}
+        if self._is_groupby_structure(raw):
+            return self._expand_groupby_structure(raw)
+
+        # Special case: nested list of dicts (e.g., from percentiles after flatten)
+        # Structure: [[{percentile: 50, value: 118}, ...]]
+        if (
+            len(raw) == 1
+            and isinstance(raw[0], list)
+            and raw[0]
+            and isinstance(raw[0][0], dict)
+        ):
+            return pd.DataFrame(raw[0])
+
+        # Handle list of dicts (already good structure or after .map())
+        # But first check if ALL items are dicts to avoid pandas errors
+        if isinstance(raw[0], dict) and all(isinstance(item, dict) for item in raw):
+            try:
+                return pd.DataFrame(raw)
+            except (ValueError, TypeError):
+                # Mixed dict structures, wrap safely
+                return pd.DataFrame({"value": raw})
+
+        # For other structures (lists, scalars, mixed types), wrap in value column
+        return pd.DataFrame({"value": raw})
+
+    def _is_groupby_structure(self, raw: list[Any]) -> bool:
+        """Check if raw data has groupBy structure {key: [...], value: X}.
+
+        Args:
+            raw: Raw JQL result data.
+
+        Returns:
+            True if data matches groupBy pattern.
+        """
+        if not raw or not isinstance(raw[0], dict):
+            return False
+
+        first = raw[0]
+        # Must have exactly "key" and "value" fields
+        return set(first.keys()) == {"key", "value"} and isinstance(first["key"], list)
+
+    def _expand_groupby_structure(self, raw: list[dict[str, Any]]) -> pd.DataFrame:
+        """Expand groupBy {key: [...], value: X} structure to columns.
+
+        Args:
+            raw: List of groupBy result objects.
+
+        Returns:
+            DataFrame with expanded key and value columns.
+        """
+        rows = []
+        for item in raw:
+            row_dict: dict[str, Any] = {}
+
+            # Expand key array into key_0, key_1, key_2, ...
+            keys = item["key"]
+            for i, key_val in enumerate(keys):
+                row_dict[f"key_{i}"] = key_val
+
+            # Handle value - could be scalar or array (multiple reducers)
+            value = item["value"]
+            if isinstance(value, list):
+                # Multiple reducers: expand to value_0, value_1, value_2
+                for i, val in enumerate(value):
+                    row_dict[f"value_{i}"] = val
+            else:
+                # Single reducer: just "value"
+                row_dict["value"] = value
+
+            rows.append(row_dict)
+
+        return pd.DataFrame(rows)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize for JSON output."""

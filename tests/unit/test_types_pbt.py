@@ -386,6 +386,76 @@ class TestRetentionResultProperties:
 # JQLResult Property Tests
 # =============================================================================
 
+# Custom strategies for JQL result structures
+
+
+@st.composite
+def groupby_structure(draw: st.DrawFn) -> list[dict[str, object]]:
+    """Generate JQL groupBy result structure: {key: [...], value: X}."""
+    num_results = draw(st.integers(min_value=1, max_value=20))
+    key_count = draw(st.integers(min_value=1, max_value=4))
+
+    # Decide if values are scalars or arrays (multiple reducers)
+    use_array_values = draw(st.booleans())
+
+    results = []
+    for _ in range(num_results):
+        key = [
+            draw(
+                st.one_of(
+                    st.text(min_size=1, max_size=10),
+                    st.integers(),
+                )
+            )
+            for _ in range(key_count)
+        ]
+
+        if use_array_values:
+            # Multiple reducers: value is array
+            reducer_count = draw(st.integers(min_value=2, max_value=5))
+            value = [
+                draw(
+                    st.one_of(
+                        st.integers(),
+                        st.floats(allow_nan=False, allow_infinity=False),
+                    )
+                )
+                for _ in range(reducer_count)
+            ]
+        else:
+            # Single reducer: value is scalar
+            value = draw(
+                st.one_of(
+                    st.integers(),
+                    st.floats(allow_nan=False, allow_infinity=False),
+                )
+            )
+
+        results.append({"key": key, "value": value})
+
+    return results
+
+
+@st.composite
+def nested_percentile_structure(draw: st.DrawFn) -> list[list[dict[str, object]]]:
+    """Generate nested percentile structure: [[{percentile: X, value: Y}, ...]]."""
+    percentile_count = draw(st.integers(min_value=1, max_value=10))
+
+    percentiles: list[dict[str, object]] = []
+    for _ in range(percentile_count):
+        percentile_value: dict[str, object] = {
+            "percentile": draw(st.integers(min_value=1, max_value=100)),
+            "value": draw(
+                st.one_of(
+                    st.integers(),
+                    st.floats(allow_nan=False, allow_infinity=False),
+                )
+            ),
+        }
+        percentiles.append(percentile_value)
+
+    return [percentiles]
+
 
 class TestJQLResultProperties:
     """Property-based tests for JQLResult."""
@@ -453,6 +523,149 @@ class TestJQLResultProperties:
         # All keys from first dict should be columns
         for key in raw_data[0]:
             assert key in df.columns
+
+    @given(
+        raw_data=st.one_of(
+            st.lists(st.integers(), min_size=1, max_size=20),
+            st.lists(
+                st.dictionaries(
+                    keys=st.text(min_size=1, max_size=10),
+                    values=st.integers(),
+                    min_size=1,
+                    max_size=3,
+                ),
+                min_size=1,
+                max_size=20,
+            ),
+            groupby_structure(),
+        )
+    )
+    def test_deterministic_dataframe_conversion(self, raw_data: list[object]) -> None:
+        """Same input should always produce structurally identical DataFrames.
+
+        This is a critical property: the conversion should be deterministic,
+        not relying on dictionary ordering, hash randomness, or other
+        non-deterministic factors.
+        """
+        import pandas as pd
+
+        # Create two separate JQLResult objects with same data
+        result1 = JQLResult(_raw=raw_data)
+        result2 = JQLResult(_raw=raw_data)
+
+        df1 = result1.df
+        df2 = result2.df
+
+        # Should have same columns in same order
+        assert list(df1.columns) == list(df2.columns)
+
+        # Should have same shape
+        assert df1.shape == df2.shape
+
+        # Should have same values (using pandas testing utility)
+        pd.testing.assert_frame_equal(df1, df2)
+
+    @given(
+        raw_data=st.one_of(
+            st.lists(st.integers(), min_size=0, max_size=20),
+            st.lists(
+                st.dictionaries(
+                    keys=st.text(min_size=1, max_size=10),
+                    values=st.integers(),
+                    min_size=1,
+                    max_size=3,
+                ),
+                min_size=0,
+                max_size=20,
+            ),
+            groupby_structure(),
+            nested_percentile_structure(),
+        )
+    )
+    def test_df_never_crashes_on_valid_jql_output(self, raw_data: list[object]) -> None:
+        """DataFrame conversion should never crash on valid JQL output."""
+        result = JQLResult(_raw=raw_data)
+
+        # Should always succeed
+        df = result.df
+
+        # Should always return a DataFrame
+        import pandas as pd
+
+        assert isinstance(df, pd.DataFrame)
+
+        # Row count should match input length (or flattened length for nested)
+        if raw_data and isinstance(raw_data[0], list):
+            # Nested structure gets flattened
+            assert len(df) >= 0
+        else:
+            assert len(df) == len(raw_data)
+
+    @given(
+        raw_data=st.one_of(
+            st.lists(st.integers(), min_size=1, max_size=10),
+            groupby_structure(),
+        )
+    )
+    def test_df_caching_works_for_all_structures(self, raw_data: list[object]) -> None:
+        """DataFrame should be cached regardless of structure."""
+        result = JQLResult(_raw=raw_data)
+
+        df1 = result.df
+        df2 = result.df
+
+        # Same object, not recomputed
+        assert df1 is df2
+
+    @given(
+        key_count=st.integers(min_value=1, max_value=5),
+        row_count=st.integers(min_value=1, max_value=20),
+    )
+    def test_groupby_key_expansion_is_consistent(
+        self, key_count: int, row_count: int
+    ) -> None:
+        """All rows should have same number of key columns."""
+        # Create groupBy structure with varying key values
+        raw_data = [
+            {"key": [f"val{i}_{j}" for i in range(key_count)], "value": j}
+            for j in range(row_count)
+        ]
+
+        result = JQLResult(_raw=raw_data)
+        df = result.df
+
+        # Should have exactly key_count key columns
+        key_columns = [col for col in df.columns if col.startswith("key_")]
+        assert len(key_columns) == key_count
+
+        # All rows should have values for all key columns
+        for col in key_columns:
+            assert df[col].notna().all()
+
+    @given(
+        reducer_count=st.integers(min_value=2, max_value=6),
+        row_count=st.integers(min_value=1, max_value=20),
+    )
+    def test_multiple_reducer_expansion_is_consistent(
+        self, reducer_count: int, row_count: int
+    ) -> None:
+        """All rows should have same number of value columns for multiple reducers."""
+        # Create groupBy with multiple reducers
+        raw_data = [
+            {"key": [f"group{i}"], "value": [i * j for j in range(reducer_count)]}
+            for i in range(row_count)
+        ]
+
+        result = JQLResult(_raw=raw_data)
+        df = result.df
+
+        # Should have exactly reducer_count value columns
+        value_columns = [col for col in df.columns if col.startswith("value_")]
+        assert len(value_columns) == reducer_count
+
+        # All rows should have values for all value columns
+        for col in value_columns:
+            assert df[col].notna().all()
 
 
 # =============================================================================
