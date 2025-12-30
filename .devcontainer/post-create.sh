@@ -23,7 +23,7 @@ fi
 
 # Register the venv as a Jupyter kernel for JupyterLab
 echo "Registering Jupyter kernel..."
-uv run python -m ipykernel install --user --name mixpanel_data --display-name "mixpanel_data"
+uv run python -m ipykernel install --user --name "$(grep -E '^name\s*=' pyproject.toml | cut -d '"' -f 2)" --display-name "$(grep -E '^name\s*=' pyproject.toml | cut -d '"' -f 2)"
 
 echo "Development environment ready!"
 echo ""
