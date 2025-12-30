@@ -10,10 +10,8 @@ on:
     #   - "pyproject.toml"
 jobs:
   claude-review:
-    # Only run when the "claude-review" label is applied by the repository owner
-    if: |
-      github.event.label.name == 'claude-review' &&
-      github.event.sender.login == github.repository_owner
+    # Only run when the "claude-review" label is applied by someone with write access
+    if: github.event.label.name == 'claude-review'
 
     runs-on: ubuntu-latest
     permissions:
