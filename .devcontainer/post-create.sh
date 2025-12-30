@@ -21,6 +21,10 @@ if [ -f "/workspace/.pre-commit-config.yaml" ]; then
     uv run pre-commit install
 fi
 
+# Register the venv as a Jupyter kernel for JupyterLab
+echo "Registering Jupyter kernel..."
+uv run python -m ipykernel install --user --name mixpanel_data --display-name "mixpanel_data"
+
 echo "Development environment ready!"
 echo ""
 echo "Run 'just' to see available commands, or use:"

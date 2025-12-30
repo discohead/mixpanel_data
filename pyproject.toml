@@ -53,7 +53,9 @@ docs = [
     "mkdocs-llmstxt>=0.2.0",
     "mkdocs-llmstxt-md>=0.1.0",
 ]
-notebook = []
+notebook = [
+    "ipykernel>=6.0",
+]
 
 [project.scripts]
 mp = "mixpanel_data.cli.main:app"
