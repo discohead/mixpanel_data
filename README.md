@@ -1,7 +1,7 @@
 # mixpanel_data
 
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/github/license/discohead/mixpanel_data)](LICENSE)
+[![License](https://img.shields.io/github/license/jaredmcfarland/mixpanel_data)](LICENSE)
 
 > **⚠️ Pre-release Software**: This package is under active development and not yet published to PyPI. APIs may change between versions.
 
@@ -18,7 +18,7 @@ Core analytics—segmentation, funnels, retention, saved reports—plus capabili
 Install directly from GitHub (package not yet published to PyPI):
 
 ```bash
-pip install git+https://github.com/discohead/mixpanel_data.git
+pip install git+https://github.com/jaredmcfarland/mixpanel_data.git
 ```
 
 Requires Python 3.11+. Verify installation:
@@ -167,7 +167,7 @@ for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
 
 All commands support `--format` (`json`, `jsonl`, `table`, `csv`, `plain`) and `--help`.
 
-See [CLI Reference](https://discohead.github.io/mixpanel_data/cli/) for complete documentation.
+See [CLI Reference](https://jaredmcfarland.github.io/mixpanel_data/cli/) for complete documentation.
 
 ## DuckDB JSON Queries
 
@@ -186,15 +186,15 @@ SELECT SUM(CAST(properties->>'$.amount' AS DECIMAL)) FROM events
 
 ## Documentation
 
-Full documentation: [discohead.github.io/mixpanel_data](https://discohead.github.io/mixpanel_data/)
+Full documentation: [jaredmcfarland.github.io/mixpanel_data](https://jaredmcfarland.github.io/mixpanel_data/)
 
-- [Installation](https://discohead.github.io/mixpanel_data/getting-started/installation/)
-- [Quick Start](https://discohead.github.io/mixpanel_data/getting-started/quickstart/)
-- [CLI Reference](https://discohead.github.io/mixpanel_data/cli/)
-- [Python API](https://discohead.github.io/mixpanel_data/api/)
-- [Streaming Guide](https://discohead.github.io/mixpanel_data/guide/streaming/)
-- [SQL Query Guide](https://discohead.github.io/mixpanel_data/guide/sql-queries/)
-- [Live Analytics](https://discohead.github.io/mixpanel_data/guide/live-analytics/)
+- [Installation](https://jaredmcfarland.github.io/mixpanel_data/getting-started/installation/)
+- [Quick Start](https://jaredmcfarland.github.io/mixpanel_data/getting-started/quickstart/)
+- [CLI Reference](https://jaredmcfarland.github.io/mixpanel_data/cli/)
+- [Python API](https://jaredmcfarland.github.io/mixpanel_data/api/)
+- [Streaming Guide](https://jaredmcfarland.github.io/mixpanel_data/guide/streaming/)
+- [SQL Query Guide](https://jaredmcfarland.github.io/mixpanel_data/guide/sql-queries/)
+- [Live Analytics](https://jaredmcfarland.github.io/mixpanel_data/guide/live-analytics/)
 
 ## For Humans and Agents
 

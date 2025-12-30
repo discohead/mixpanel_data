@@ -9,13 +9,13 @@ Fetch Mixpanel data once into local DuckDB, then query repeatedly with SQL—pre
 
 ## Documentation Access
 
-Full documentation is hosted at **https://discohead.github.io/mixpanel_data/** with LLM-optimized access:
+Full documentation is hosted at **https://jaredmcfarland.github.io/mixpanel_data/** with LLM-optimized access:
 
 | Resource | URL | Use Case |
 |----------|-----|----------|
-| **llms.txt** | `https://discohead.github.io/mixpanel_data/llms.txt` | Index of all docs with descriptions |
-| **llms-full.txt** | `https://discohead.github.io/mixpanel_data/llms-full.txt` | Complete documentation (~400KB) |
-| **Individual pages** | `https://discohead.github.io/mixpanel_data/{path}/index.md` | Specific topic deep-dive |
+| **llms.txt** | `https://jaredmcfarland.github.io/mixpanel_data/llms.txt` | Index of all docs with descriptions |
+| **llms-full.txt** | `https://jaredmcfarland.github.io/mixpanel_data/llms-full.txt` | Complete documentation (~400KB) |
+| **Individual pages** | `https://jaredmcfarland.github.io/mixpanel_data/{path}/index.md` | Specific topic deep-dive |
 
 ### When to Fetch Documentation
 

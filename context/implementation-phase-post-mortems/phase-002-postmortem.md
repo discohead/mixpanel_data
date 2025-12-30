@@ -3,7 +3,7 @@
 **Branch:** `002-api-client`
 **Status:** Complete
 **Date:** 2024-12-21
-**PR:** https://github.com/discohead/mixpanel_data/pull/7
+**PR:** https://github.com/jaredmcfarland/mixpanel_data/pull/7
 
 ---
 
