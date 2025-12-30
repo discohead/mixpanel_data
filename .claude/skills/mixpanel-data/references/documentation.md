@@ -5,7 +5,7 @@ Complete guide to accessing mixpanel_data documentation programmatically.
 ## Base URL
 
 ```
-https://discohead.github.io/mixpanel_data/
+https://jaredmcfarland.github.io/mixpanel_data/
 ```
 
 ## LLM-Optimized Endpoints
@@ -13,7 +13,7 @@ https://discohead.github.io/mixpanel_data/
 ### llms.txt (Index)
 
 ```
-https://discohead.github.io/mixpanel_data/llms.txt
+https://jaredmcfarland.github.io/mixpanel_data/llms.txt
 ```
 
 A structured index file (~3KB) containing:
@@ -27,7 +27,7 @@ A structured index file (~3KB) containing:
 ### llms-full.txt (Complete Documentation)
 
 ```
-https://discohead.github.io/mixpanel_data/llms-full.txt
+https://jaredmcfarland.github.io/mixpanel_data/llms-full.txt
 ```
 
 Complete documentation (~400KB, ~15,000 lines) containing:
@@ -43,8 +43,8 @@ Complete documentation (~400KB, ~15,000 lines) containing:
 Each HTML page has a corresponding `.md` file at the same path:
 
 ```
-HTML: https://discohead.github.io/mixpanel_data/guide/fetching/
-MD:   https://discohead.github.io/mixpanel_data/guide/fetching/index.md
+HTML: https://jaredmcfarland.github.io/mixpanel_data/guide/fetching/
+MD:   https://jaredmcfarland.github.io/mixpanel_data/guide/fetching/index.md
 ```
 
 ### Complete Page List
@@ -117,15 +117,15 @@ Using WebFetch tool:
 
 ```
 # Get the index to find relevant pages
-WebFetch(url="https://discohead.github.io/mixpanel_data/llms.txt",
+WebFetch(url="https://jaredmcfarland.github.io/mixpanel_data/llms.txt",
          prompt="Find pages related to funnel analysis")
 
 # Get specific page for details
-WebFetch(url="https://discohead.github.io/mixpanel_data/guide/live-analytics/index.md",
+WebFetch(url="https://jaredmcfarland.github.io/mixpanel_data/guide/live-analytics/index.md",
          prompt="Extract the funnel() method signature and all parameters")
 
 # Get complete docs for comprehensive search
-WebFetch(url="https://discohead.github.io/mixpanel_data/llms-full.txt",
+WebFetch(url="https://jaredmcfarland.github.io/mixpanel_data/llms-full.txt",
          prompt="Find all methods that accept a where parameter")
 ```
 

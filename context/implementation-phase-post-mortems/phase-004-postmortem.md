@@ -3,7 +3,7 @@
 **Branch:** `004-discovery-service`
 **Status:** Complete
 **Date:** 2025-12-21
-**PR:** https://github.com/discohead/mixpanel_data/pull/10
+**PR:** https://github.com/jaredmcfarland/mixpanel_data/pull/10
 
 ---
 

@@ -20,7 +20,7 @@ The repository includes a devcontainer with Python 3.11, uv, just, and all devel
 
 ```bash
 # Clone the repository
-git clone https://github.com/discohead/mixpanel_data.git
+git clone https://github.com/jaredmcfarland/mixpanel_data.git
 cd mixpanel_data
 
 # Install dependencies

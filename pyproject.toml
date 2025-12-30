@@ -9,9 +9,7 @@ description = "Python library for working with Mixpanel analytics data, designed
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-authors = [
-    { name = "Jared McFarland" },
-]
+authors = [{ name = "Jared McFarland" }]
 keywords = ["mixpanel", "analytics", "data", "duckdb", "ai", "agents"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -53,16 +51,14 @@ docs = [
     "mkdocs-llmstxt>=0.2.0",
     "mkdocs-llmstxt-md>=0.1.0",
 ]
-notebook = [
-    "ipykernel>=6.0",
-]
+notebook = ["ipykernel>=6.0"]
 
 [project.scripts]
 mp = "mixpanel_data.cli.main:app"
 
 [project.urls]
-Homepage = "https://github.com/discohead/mixpanel_data"
-Repository = "https://github.com/discohead/mixpanel_data"
+Homepage = "https://github.com/jaredmcfarland/mixpanel_data"
+Repository = "https://github.com/jaredmcfarland/mixpanel_data"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mixpanel_data"]
@@ -88,7 +84,7 @@ select = [
     "SIM", # flake8-simplify
 ]
 ignore = [
-    "E501",  # line too long (handled by formatter)
+    "E501", # line too long (handled by formatter)
 ]
 
 [tool.ruff.lint.isort]

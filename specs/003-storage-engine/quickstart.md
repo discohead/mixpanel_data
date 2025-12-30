@@ -11,7 +11,7 @@
 pip install mixpanel_data
 
 # Or install from source
-git clone https://github.com/discohead/mixpanel_data
+git clone https://github.com/jaredmcfarland/mixpanel_data
 cd mixpanel_data
 pip install -e .
 ```
@@ -410,5 +410,5 @@ with StorageEngine(path=Path("data.db")) as storage:
 ## Support
 
 For issues, questions, or contributions:
-- GitHub Issues: https://github.com/discohead/mixpanel_data/issues
-- Documentation: https://github.com/discohead/mixpanel_data/blob/main/README.md
+- GitHub Issues: https://github.com/jaredmcfarland/mixpanel_data/issues
+- Documentation: https://github.com/jaredmcfarland/mixpanel_data/blob/main/README.md
