@@ -53,9 +53,7 @@ docs = [
     "mkdocs-llmstxt>=0.2.0",
     "mkdocs-llmstxt-md>=0.1.0",
 ]
-notebook = [
-    "jupyterlab>=4.0",
-]
+notebook = []
 
 [project.scripts]
 mp = "mixpanel_data.cli.main:app"

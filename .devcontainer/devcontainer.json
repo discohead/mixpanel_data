@@ -21,6 +21,7 @@
         "charliermarsh.ruff",
         "ms-python.mypy-type-checker",
         "ms-python.debugpy",
+        "ms-toolsai.jupyter",
         "tamasfe.even-better-toml",
         "eamodio.gitlens",
         "usernamehw.errorlens"

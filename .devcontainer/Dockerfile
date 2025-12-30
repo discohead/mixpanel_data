@@ -32,6 +32,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 # Install uv (fast Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
+# Install JupyterLab system-wide for GitHub Codespaces
+RUN pip install --no-cache-dir jupyterlab
+
 # Set up command history persistence and Claude config directory
 ARG USERNAME=vscode
 RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
