@@ -10,7 +10,11 @@
   },
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/eitsupi/devcontainer-features/duckdb-cli:1": {}
+    "ghcr.io/eitsupi/devcontainer-features/duckdb-cli:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "installTools": false,
+      "installJupyterlab": true
+    }
   },
   "customizations": {
     "vscode": {
@@ -21,6 +25,7 @@
         "charliermarsh.ruff",
         "ms-python.mypy-type-checker",
         "ms-python.debugpy",
+        "ms-toolsai.jupyter",
         "tamasfe.even-better-toml",
         "eamodio.gitlens",
         "usernamehw.errorlens"
