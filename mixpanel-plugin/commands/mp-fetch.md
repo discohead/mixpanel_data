@@ -1,7 +1,7 @@
 ---
 description: Interactive wizard to fetch Mixpanel events into local DuckDB with validation
 allowed-tools: Bash(mp fetch:*), Bash(mp inspect:*)
-argument-hint: [from-date] [to-date] [table-name]
+argument-hint: [YYYY-MM-DD] [YYYY-MM-DD] [table-name]
 ---
 
 # Fetch Mixpanel Events

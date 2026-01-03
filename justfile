@@ -145,3 +145,56 @@ docs-deploy:
 # Clean documentation build artifacts
 docs-clean:
     rm -rf site/
+
+# === Plugin Development ===
+
+# Validate plugin structure (JSON, YAML, references)
+plugin-validate:
+    @./mixpanel-plugin/scripts/validate.sh mixpanel-plugin
+
+# Check version sync between plugin.json and marketplace.json
+plugin-check-version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PLUGIN_VERSION=$(jq -r '.version' mixpanel-plugin/.claude-plugin/plugin.json)
+    MARKETPLACE_VERSION=$(jq -r '.plugins[0].version' mixpanel-plugin/.claude-plugin/marketplace.json)
+    if [ "$PLUGIN_VERSION" = "$MARKETPLACE_VERSION" ]; then
+        echo "✓ Versions match: $PLUGIN_VERSION"
+    else
+        echo "✗ Version mismatch:"
+        echo "  plugin.json:            $PLUGIN_VERSION"
+        echo "  marketplace.json (dev): $MARKETPLACE_VERSION"
+        exit 1
+    fi
+
+# Plugin statistics
+plugin-stats:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "📊 Plugin statistics:"
+    echo ""
+
+    # Commands
+    CMD_COUNT=$(ls -1 mixpanel-plugin/commands/*.md 2>/dev/null | wc -l)
+    CMD_LINES=$(wc -l mixpanel-plugin/commands/*.md 2>/dev/null | tail -1 | awk '{print $1}')
+    echo "Commands:    $CMD_COUNT files, $CMD_LINES lines"
+
+    # Skills
+    SKILL_COUNT=$(find mixpanel-plugin/skills -name "*.md" -type f 2>/dev/null | wc -l)
+    SKILL_LINES=$(find mixpanel-plugin/skills -name "*.md" -type f 2>/dev/null | xargs wc -l | tail -1 | awk '{print $1}')
+    echo "Skills:      $SKILL_COUNT files, $SKILL_LINES lines"
+
+    # Agents (if any)
+    AGENT_LINES=0
+    if [ -d mixpanel-plugin/agents ]; then
+        AGENT_COUNT=$(find mixpanel-plugin/agents -name "*.md" -type f 2>/dev/null | wc -l)
+        if [ "$AGENT_COUNT" -gt 0 ]; then
+            AGENT_LINES=$(find mixpanel-plugin/agents -name "*.md" -type f | xargs wc -l | tail -1 | awk '{print $1}')
+            echo "Agents:      $AGENT_COUNT files, $AGENT_LINES lines"
+        fi
+    fi
+
+    # Total
+    TOTAL_LINES=$((CMD_LINES + SKILL_LINES + AGENT_LINES))
+    echo ""
+    echo "Total:       $TOTAL_LINES lines"
