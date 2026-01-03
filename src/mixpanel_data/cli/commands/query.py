@@ -31,6 +31,7 @@ from mixpanel_data.cli.utils import (
     get_workspace,
     handle_errors,
     output_result,
+    present_result,
     status_spinner,
 )
 from mixpanel_data.cli.validators import (
@@ -180,9 +181,7 @@ def query_segmentation(
             where=where,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("funnel")
@@ -236,9 +235,7 @@ def query_funnel(
             on=on,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("retention")
@@ -324,9 +321,7 @@ def query_retention(
             unit=validated_unit,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("jql")
@@ -389,9 +384,7 @@ def query_jql(
             params=params if params else None,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("event-counts")
@@ -456,9 +449,7 @@ def query_event_counts(
             unit=validated_unit,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("property-counts")
@@ -532,9 +523,7 @@ def query_property_counts(
             limit=limit,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("activity-feed")
@@ -584,9 +573,7 @@ def query_activity_feed(
             to_date=to_date,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("saved-report")
@@ -651,9 +638,7 @@ def query_flows(
     with status_spinner(ctx, "Querying flows report..."):
         result = workspace.query_flows(bookmark_id=bookmark_id)
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("frequency")
@@ -720,9 +705,7 @@ def query_frequency(
             where=where,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("segmentation-numeric")
@@ -799,9 +782,7 @@ def query_segmentation_numeric(
             where=where,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("segmentation-sum")
@@ -867,9 +848,7 @@ def query_segmentation_sum(
             where=where,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)
 
 
 @query_app.command("segmentation-average")
@@ -935,6 +914,4 @@ def query_segmentation_average(
             where=where,
         )
 
-    # Use normalized format for tables, nested dict for other formats
-    data = result.to_table_dict() if format == "table" else result.to_dict()
-    output_result(ctx, data, format=format)
+    present_result(ctx, result, format)

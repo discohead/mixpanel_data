@@ -17,9 +17,11 @@ Usage:
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from datetime import datetime
 
+import pandas as pd
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -124,9 +126,6 @@ class TestResultWithDataFrameProperties:
         self, num_rows: int, num_cols: int
     ) -> None:
         """to_table_dict() should always return a list, never None or other type."""
-        import dataclasses
-
-        import pandas as pd
 
         @dataclasses.dataclass(frozen=True)
         class TestResult(ResultWithDataFrame):
@@ -151,9 +150,6 @@ class TestResultWithDataFrameProperties:
     )
     def test_all_elements_are_dicts(self, num_rows: int, num_cols: int) -> None:
         """Every element in to_table_dict() output should be a dict."""
-        import dataclasses
-
-        import pandas as pd
 
         @dataclasses.dataclass(frozen=True)
         class TestResult(ResultWithDataFrame):
@@ -169,9 +165,6 @@ class TestResultWithDataFrameProperties:
 
     def test_empty_dataframe_returns_empty_list(self) -> None:
         """to_table_dict() should return empty list for empty DataFrame."""
-        import dataclasses
-
-        import pandas as pd
 
         @dataclasses.dataclass(frozen=True)
         class EmptyResult(ResultWithDataFrame):
@@ -191,9 +184,6 @@ class TestResultWithDataFrameProperties:
     )
     def test_row_count_matches_dataframe(self, num_rows: int, num_cols: int) -> None:
         """Length of to_table_dict() should equal number of DataFrame rows."""
-        import dataclasses
-
-        import pandas as pd
 
         @dataclasses.dataclass(frozen=True)
         class TestResult(ResultWithDataFrame):
@@ -225,9 +215,6 @@ class TestResultWithDataFrameProperties:
         self, num_rows: int, col_names: list[str]
     ) -> None:
         """All DataFrame column names should appear as keys in output dicts."""
-        import dataclasses
-
-        import pandas as pd
 
         @dataclasses.dataclass(frozen=True)
         class TestResult(ResultWithDataFrame):
@@ -249,9 +236,6 @@ class TestResultWithDataFrameProperties:
     )
     def test_output_is_json_serializable(self, num_rows: int, num_cols: int) -> None:
         """to_table_dict() output should always be JSON-serializable."""
-        import dataclasses
-
-        import pandas as pd
 
         @dataclasses.dataclass(frozen=True)
         class TestResult(ResultWithDataFrame):
@@ -278,9 +262,6 @@ class TestResultWithDataFrameProperties:
     )
     def test_deterministic_conversion(self, num_rows: int, num_cols: int) -> None:
         """Same DataFrame should always produce identical output."""
-        import dataclasses
-
-        import pandas as pd
 
         @dataclasses.dataclass(frozen=True)
         class TestResult(ResultWithDataFrame):
@@ -319,9 +300,6 @@ class TestResultWithDataFrameProperties:
     )
     def test_handles_various_data_types(self, values: list[object]) -> None:
         """Should handle DataFrames with various column types."""
-        import dataclasses
-
-        import pandas as pd
 
         @dataclasses.dataclass(frozen=True)
         class TestResult(ResultWithDataFrame):
@@ -783,8 +761,6 @@ class TestJQLResultProperties:
         not relying on dictionary ordering, hash randomness, or other
         non-deterministic factors.
         """
-        import pandas as pd
-
         # Create two separate JQLResult objects with same data
         result1 = JQLResult(_raw=raw_data)
         result2 = JQLResult(_raw=raw_data)
@@ -826,8 +802,6 @@ class TestJQLResultProperties:
         df = result.df
 
         # Should always return a DataFrame
-        import pandas as pd
-
         assert isinstance(df, pd.DataFrame)
 
         # Row count should match input length (or flattened length for nested)
@@ -2103,8 +2077,6 @@ class TestPropertyValueCountProperties:
     def test_immutable(self, count: int, percentage: float) -> None:
         """PropertyValueCount should be immutable (frozen dataclass)."""
         result = PropertyValueCount(value="test", count=count, percentage=percentage)
-
-        import dataclasses
 
         import pytest
 

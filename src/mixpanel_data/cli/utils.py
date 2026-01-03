@@ -15,7 +15,7 @@ import os
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from enum import IntEnum
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 import typer
 from rich.console import Console
@@ -41,6 +41,14 @@ from mixpanel_data.exceptions import (
 if TYPE_CHECKING:
     from mixpanel_data._internal.config import ConfigManager
     from mixpanel_data.workspace import Workspace
+
+
+class ResultWithTableAndDict(Protocol):
+    """Protocol for result objects that support both table and dict output."""
+
+    def to_table_dict(self) -> list[dict[str, Any]]: ...
+    def to_dict(self) -> dict[str, Any]: ...
+
 
 # Console instances for stdout/stderr separation
 # Data output goes to stdout; progress/errors go to stderr
@@ -309,6 +317,35 @@ def get_config(ctx: typer.Context) -> ConfigManager:
         ctx.obj["config"] = ConfigManager()
     config: ConfigManager = ctx.obj["config"]
     return config
+
+
+def present_result(
+    ctx: typer.Context,
+    result: ResultWithTableAndDict,
+    format: str,
+) -> None:
+    """Select appropriate dict format and output the result.
+
+    For table format, uses normalized to_table_dict() for readable output.
+    For other formats (json, jsonl, csv, plain), uses to_dict() to preserve
+    the original nested structure.
+
+    This centralizes the logic for choosing between to_table_dict() and
+    to_dict(), eliminating duplication across all query commands.
+
+    Args:
+        ctx: Typer context with global options in obj dict.
+        result: Result object with to_table_dict() and to_dict() methods.
+        format: Output format (e.g., "table", "json", "jsonl", "csv", "plain").
+
+    Example:
+        with status_spinner(ctx, "Running segmentation query..."):
+            result = workspace.segmentation(...)
+
+        present_result(ctx, result, format)
+    """
+    data = result.to_table_dict() if format == "table" else result.to_dict()
+    output_result(ctx, data, format=format)
 
 
 def output_result(
