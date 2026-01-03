@@ -1,6 +1,6 @@
 ---
 name: mixpanel-data
-description: Analyze Mixpanel analytics data using the mixpanel_data Python library or mp CLI. Use when working with Mixpanel event data, user profiles, funnels, retention, cohorts, segmentation queries, JQL scripts, or SQL analysis on local DuckDB. Supports filter expressions for WHERE/ON clauses, JQL (JavaScript Query Language) for complex transformations, Python scripts with pandas integration, and CLI pipelines with jq/Unix tools. Triggers on mentions of Mixpanel, event analytics, funnel analysis, retention curves, user behavior tracking, JQL queries, filter expressions, or requests to fetch/query analytics data.
+description: Analyze Mixpanel analytics data using the mixpanel_data Python library or mp CLI. Use when working with Mixpanel event data, user profiles, funnels, retention, cohorts, segmentation queries, JQL scripts, or SQL analysis on local DuckDB. Triggers on mentions of Mixpanel, event analytics, funnel analysis, retention curves, user behavior tracking, JQL queries, filter expressions, 'fetch data from Mixpanel', 'query Mixpanel with SQL', 'run DuckDB queries on events', 'analyze user behavior', 'export Mixpanel data', 'mp command', or requests to work with analytics pipelines. Supports filter expressions for WHERE/ON clauses, JQL (JavaScript Query Language) for complex transformations, Python scripts with pandas integration, and CLI pipelines with jq/Unix tools.
 ---
 
 # Mixpanel Data Analysis
@@ -41,6 +41,18 @@ Full documentation is hosted at **https://jaredmcfarland.github.io/mixpanel_data
 | `/api/exceptions/index.md` | Exception hierarchy |
 | `/api/types/index.md` | Result types |
 | `/cli/commands/index.md` | CLI command reference |
+
+## Reference Files Guide
+
+When you need detailed information, read these reference files:
+
+| File | When to Read |
+|------|--------------|
+| [library-api.md](references/library-api.md) | Complete Python API signatures, parameters, return types for all Workspace methods |
+| [cli-commands.md](references/cli-commands.md) | Full CLI command reference with all options and examples |
+| [query-expressions.md](references/query-expressions.md) | Complete filter expression syntax, JQL reference, built-in reducers, bucketing |
+| [patterns.md](references/patterns.md) | JSON property queries in DuckDB, pandas integration, jq/Unix pipelines, data science workflows |
+| [documentation.md](references/documentation.md) | How to fetch external documentation from llms.txt, page URLs, fetch strategy |
 
 ## When to Use
 
@@ -97,105 +109,41 @@ mp fetch events --stdout | jq -r '[.event, .distinct_id] | @csv' > events.csv
 
 ## JSON Property Access (Critical)
 
-Events and profiles store properties as JSON. Access with:
+Events and profiles store properties as JSON. Access with `properties->>'$.fieldname'`:
 
 ```sql
 -- DuckDB SQL (local queries)
 SELECT properties->>'$.country' as country FROM events
-SELECT CAST(properties->>'$.amount' AS DOUBLE) as amount FROM events
 WHERE properties->>'$.plan' = 'premium'
 ```
 
-```python
-# Python streaming
-for event in ws.stream_events(from_date="2024-01-01", to_date="2024-01-01"):
-    print(event["properties"]["country"])
-```
-
-```bash
-# CLI + jq
-mp fetch events --stdout | jq '.properties.country'
-mp fetch events --stdout | jq 'select(.properties.plan == "premium")'
-```
+For complete JSON query patterns (type casting, filtering, aggregation), see [references/patterns.md](references/patterns.md).
 
 ## Filter Expressions (WHERE/ON)
 
 Filter expressions use SQL-like syntax for filtering and segmenting data in API calls.
 
-### ON Parameter (Segmentation)
-Accepts bare property names (auto-wrapped) or full expressions:
+**ON Parameter** (segmentation): Accepts bare property names (auto-wrapped) or full expressions
 ```bash
-# Bare name (auto-wrapped to properties["country"])
 mp query segmentation -e Purchase --on country
-
-# Full expression
-mp query segmentation -e Purchase --on 'properties["country"]'
 ```
 
-```python
-ws.segmentation("Purchase", from_date="2024-01-01", to_date="2024-01-31", on="country")
-```
-
-### WHERE Parameter (Filtering)
-Always uses full expression syntax:
+**WHERE Parameter** (filtering): Always uses full expression syntax
 ```bash
 mp fetch events --where 'properties["amount"] > 100 and properties["plan"] in ["premium", "enterprise"]'
-mp query segmentation -e Purchase --on country --where 'properties["amount"] > 100'
 ```
 
-```python
-ws.fetch_events("events", from_date="2024-01-01", to_date="2024-01-31",
-                where='properties["country"] == "US"')
-ws.segmentation("Purchase", from_date="2024-01-01", to_date="2024-01-31",
-                on="country", where='properties["amount"] > 100')
-```
-
-### Expression Syntax
-```javascript
-// Comparison
-properties["age"] > 18
-properties["status"] != "deleted"
-
-// Logical
-properties["plan"] == "premium" and properties["active"] == true
-properties["source"] == "web" or properties["source"] == "mobile"
-
-// Set operations
-properties["country"] in ["US", "CA", "UK"]
-
-// Existence
-defined(properties["email"])
-```
+For complete expression syntax (comparison, logical, set operations, existence functions, date/time functions), see [references/query-expressions.md](references/query-expressions.md).
 
 ## JQL (JavaScript Query Language)
 
-Full JavaScript-based query language for complex transformations.
-
-```javascript
-function main() {
-    return Events({
-        from_date: '2024-01-01',
-        to_date: '2024-01-31',
-        event_selectors: [{event: 'Purchase'}]
-    })
-    .groupBy(['properties.country'], [
-        mixpanel.reducer.count(),
-        mixpanel.reducer.sum('properties.amount')
-    ])
-    .sortDesc('value');
-}
-```
+Full JavaScript-based query language for complex transformations. Use `Events()`, `People()`, `join()` with transformations like `.filter()`, `.map()`, `.groupBy()`, `.reduce()`.
 
 ```bash
-mp query jql script.js --param from_date=2024-01-01 --param to_date=2024-01-31
+mp query jql script.js --param from_date=2024-01-01
 ```
 
-```python
-result = ws.jql(script, params={"from_date": "2024-01-01", "to_date": "2024-01-31"})
-df = result.df
-```
-
-For complete filter expression and JQL reference, see [references/query-expressions.md](references/query-expressions.md).
+For complete JQL reference (data sources, transformations, built-in reducers, bucketing, common patterns), see [references/query-expressions.md](references/query-expressions.md).
 
 ## Credentials
 
@@ -264,90 +212,28 @@ mp query funnel 12345 --from 2024-01-01 --to 2024-01-31
 mp query retention --born "Sign Up" --return "Purchase" --from 2024-01-01 --to 2024-01-31
 ```
 
-## Data Storage Schema
+## Data Storage
 
-Events table:
-```sql
-CREATE TABLE events (
-    event_name VARCHAR NOT NULL,
-    event_time TIMESTAMP NOT NULL,
-    distinct_id VARCHAR NOT NULL,
-    insert_id VARCHAR PRIMARY KEY,
-    properties JSON
-)
-```
+Events: `(event_name, event_time, distinct_id, insert_id PRIMARY KEY, properties JSON)`
+Profiles: `(distinct_id PRIMARY KEY, properties JSON, last_seen)`
 
-Profiles table:
-```sql
-CREATE TABLE profiles (
-    distinct_id VARCHAR PRIMARY KEY,
-    properties JSON,
-    last_seen TIMESTAMP
-)
-```
+Full schema and query patterns in [references/patterns.md](references/patterns.md).
 
 ## Output Formats (CLI)
 
-| Format | Use Case |
-|--------|----------|
-| `--format json` | Machine processing (default) |
-| `--format jsonl` | Streaming pipelines |
-| `--format table` | Human inspection |
-| `--format csv` | Spreadsheets |
-| `--format plain` | Minimal output |
+`--format json` (default), `jsonl`, `table`, `csv`, `plain`
 
-## API Reference Summary
+## API Overview
 
-### Discovery Methods
-| Method | Description |
-|--------|-------------|
-| `events()` | List all event names |
-| `properties(event)` | List properties for an event |
-| `property_values(name, event, limit)` | Sample property values |
-| `funnels()` | List saved funnels |
-| `cohorts()` | List saved cohorts |
-| `top_events(type, limit)` | Today's trending events |
-| `list_bookmarks(type)` | Saved reports by type |
+The Workspace class provides three main capability areas:
 
-### Fetching Methods
-| Method | Description |
-|--------|-------------|
-| `fetch_events(name, from_date, to_date, ...)` | Fetch events to table |
-| `fetch_profiles(name, ...)` | Fetch profiles to table |
-| `stream_events(...)` | Iterator without storage |
-| `stream_profiles(...)` | Iterator without storage |
+1. **Discovery**: `events()`, `properties()`, `funnels()`, `cohorts()` - Explore project schema
+2. **Data Fetching**: `fetch_events()`, `fetch_profiles()`, `stream_*()` - Get data locally or stream
+3. **Analytics**: `segmentation()`, `funnel()`, `retention()`, `jql()` - Live queries and analysis
+4. **Local SQL**: `sql()`, `sql_scalar()`, `sql_rows()` - Query DuckDB with SQL
+5. **Introspection**: `info()`, `tables()`, `sample()`, `summarize()` - Inspect local data
 
-### Local Query Methods
-| Method | Description |
-|--------|-------------|
-| `sql(query)` | Execute SQL, return DataFrame |
-| `sql_scalar(query)` | Execute SQL, return single value |
-| `sql_rows(query)` | Execute SQL, return list of tuples |
-
-### Live Query Methods
-| Method | Description |
-|--------|-------------|
-| `segmentation(event, from_date, to_date, on, unit, where)` | Time-series breakdown |
-| `funnel(funnel_id, from_date, to_date, unit, on)` | Funnel conversion |
-| `retention(born_event, return_event, ...)` | Cohort retention |
-| `jql(script, params)` | Custom JQL script |
-| `event_counts(events, from_date, to_date, type, unit)` | Multi-event counts |
-
-### Introspection Methods
-| Method | Description |
-|--------|-------------|
-| `info()` | Workspace metadata |
-| `tables()` | List tables with row counts |
-| `table_schema(table)` | Column definitions |
-| `sample(table, n)` | Random sample rows |
-| `summarize(table)` | Column statistics |
-| `event_breakdown(table)` | Per-event statistics |
-
-For complete method signatures, see [references/library-api.md](references/library-api.md).
-For CLI commands, see [references/cli-commands.md](references/cli-commands.md).
-For filter expressions and JQL, see [references/query-expressions.md](references/query-expressions.md).
-For pandas/jq integration patterns, see [references/patterns.md](references/patterns.md).
-For documentation access and URLs, see [references/documentation.md](references/documentation.md).
+For complete method signatures and parameters, see [references/library-api.md](references/library-api.md).
 
 ## Common Errors
 

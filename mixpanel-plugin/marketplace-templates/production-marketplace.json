@@ -1,0 +1,35 @@
+{
+  "name": "mixpanel-data-marketplace",
+  "description": "Official marketplace for Mixpanel Data Claude Code plugins",
+  "owner": {
+    "name": "Jared McFarland",
+    "url": "https://github.com/jaredmcfarland"
+  },
+  "plugins": [
+    {
+      "name": "mixpanel-data",
+      "description": "Mixpanel analytics data integration for Claude Code - fetch, query, and analyze event data with interactive commands and comprehensive guidance",
+      "version": "1.0.0",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/jaredmcfarland/mixpanel_data.git",
+        "subdirectory": "mixpanel-plugin"
+      },
+      "author": {
+        "name": "Jared McFarland",
+        "email": "jaredcolin@gmail.com",
+        "url": "https://github.com/jaredmcfarland"
+      },
+      "keywords": [
+        "mixpanel",
+        "analytics",
+        "data-analysis",
+        "duckdb",
+        "sql",
+        "jql",
+        "event-tracking",
+        "user-analytics"
+      ]
+    }
+  ]
+}

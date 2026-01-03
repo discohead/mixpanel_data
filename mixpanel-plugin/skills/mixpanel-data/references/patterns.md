@@ -3,6 +3,7 @@
 Common patterns for integrating mixpanel_data with pandas, jq, and Unix pipelines.
 
 ## Table of Contents
+- Data Storage Schema
 - JSON Property Queries in DuckDB
 - pandas Integration
 - jq Processing
@@ -10,6 +11,28 @@ Common patterns for integrating mixpanel_data with pandas, jq, and Unix pipeline
 - Date Range Chunking
 - Multi-Account Workflows
 - Data Science Workflows
+
+## Data Storage Schema
+
+### Events Table
+```sql
+CREATE TABLE events (
+    event_name VARCHAR NOT NULL,
+    event_time TIMESTAMP NOT NULL,
+    distinct_id VARCHAR NOT NULL,
+    insert_id VARCHAR PRIMARY KEY,
+    properties JSON
+)
+```
+
+### Profiles Table
+```sql
+CREATE TABLE profiles (
+    distinct_id VARCHAR PRIMARY KEY,
+    properties JSON,
+    last_seen TIMESTAMP
+)
+```
 
 ## JSON Property Queries in DuckDB
 

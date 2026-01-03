@@ -1,0 +1,23 @@
+{
+  "name": "mixpanel-data",
+  "version": "1.0.0",
+  "description": "Mixpanel analytics data integration for Claude Code - fetch, query, and analyze event data with interactive commands and comprehensive guidance",
+  "author": {
+    "name": "Jared McFarland",
+    "email": "jaredcolin@gmail.com",
+    "url": "https://github.com/jaredmcfarland"
+  },
+  "license": "MIT",
+  "homepage": "https://jaredmcfarland.github.io/mixpanel_data/",
+  "repository": "https://github.com/jaredmcfarland/mixpanel_data",
+  "keywords": [
+    "mixpanel",
+    "analytics",
+    "data-analysis",
+    "duckdb",
+    "sql",
+    "jql",
+    "event-tracking",
+    "user-analytics"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "mixpanel-data-dev",
+  "description": "Development marketplace for Mixpanel Data plugin",
+  "owner": {
+    "name": "Jared McFarland",
+    "url": "https://github.com/jaredmcfarland"
+  },
+  "plugins": [
+    {
+      "name": "mixpanel-data",
+      "description": "Mixpanel analytics data integration for Claude Code - fetch, query, and analyze event data with interactive commands and comprehensive guidance",
+      "version": "1.0.0",
+      "source": "./",
+      "author": {
+        "name": "Jared McFarland",
+        "email": "jaredcolin@gmail.com",
+        "url": "https://github.com/jaredmcfarland"
+      },
+      "keywords": [
+        "mixpanel",
+        "analytics",
+        "data-analysis"
+      ]
+    }
+  ]
+}
