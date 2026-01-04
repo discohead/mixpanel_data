@@ -570,100 +570,114 @@ class TestApplyJqFilter:
         """Test extracting a single field from dict (T006)."""
         json_str = '{"name": "test", "count": 42}'
         result = _apply_jq_filter(json_str, ".name")
-        assert result.strip() == '"test"'
+        assert result == ["test"]
 
     def test_nested_field_extraction(self) -> None:
         """Test extracting nested fields."""
         json_str = '{"user": {"name": "alice", "id": 1}}'
         result = _apply_jq_filter(json_str, ".user.name")
-        assert result.strip() == '"alice"'
+        assert result == ["alice"]
 
     def test_list_iteration(self) -> None:
         """Test iterating over list elements (T007)."""
         json_str = '[{"name": "a"}, {"name": "b"}, {"name": "c"}]'
         result = _apply_jq_filter(json_str, ".[].name")
-        # Multiple results should be wrapped in array
-        parsed = json.loads(result)
-        assert parsed == ["a", "b", "c"]
+        # Multiple results returned as list
+        assert result == ["a", "b", "c"]
 
     def test_list_indexing(self) -> None:
         """Test accessing list by index."""
         json_str = '["first", "second", "third"]'
         result = _apply_jq_filter(json_str, ".[1]")
-        assert result.strip() == '"second"'
+        assert result == ["second"]
 
     def test_select_filter(self) -> None:
         """Test filtering with select() (T008)."""
         json_str = '[{"name": "a", "active": true}, {"name": "b", "active": false}]'
         result = _apply_jq_filter(json_str, ".[] | select(.active)")
-        parsed = json.loads(result)
         # Should only return the active item
-        assert parsed == {"name": "a", "active": True}
+        assert result == [{"name": "a", "active": True}]
 
     def test_select_filter_multiple_results(self) -> None:
         """Test select() returning multiple results."""
         json_str = '[{"v": 1}, {"v": 5}, {"v": 10}, {"v": 15}]'
         result = _apply_jq_filter(json_str, ".[] | select(.v > 3)")
-        parsed = json.loads(result)
-        assert parsed == [{"v": 5}, {"v": 10}, {"v": 15}]
+        assert result == [{"v": 5}, {"v": 10}, {"v": 15}]
 
     def test_length_filter(self) -> None:
         """Test length filter (T009)."""
         json_str = '["a", "b", "c", "d", "e"]'
         result = _apply_jq_filter(json_str, "length")
-        assert result.strip() == "5"
+        assert result == [5]
 
     def test_length_filter_on_object(self) -> None:
         """Test length filter on object (counts keys)."""
         json_str = '{"a": 1, "b": 2, "c": 3}'
         result = _apply_jq_filter(json_str, "length")
-        assert result.strip() == "3"
+        assert result == [3]
 
-    def test_single_result_not_wrapped(self) -> None:
-        """Test that single result is not wrapped in array (T010)."""
+    def test_single_result_returns_list(self) -> None:
+        """Test that single result is returned as single-element list."""
         json_str = '{"name": "solo"}'
         result = _apply_jq_filter(json_str, ".name")
-        # Single result should be the value directly, not ["solo"]
-        assert result.strip() == '"solo"'
+        # Results always returned as list, caller formats
+        assert result == ["solo"]
 
-    def test_multiple_results_wrapped_in_array(self) -> None:
-        """Test that multiple results are wrapped in array (T010)."""
+    def test_multiple_results_as_list(self) -> None:
+        """Test that multiple results are returned as list."""
         json_str = '[{"x": 1}, {"x": 2}, {"x": 3}]'
         result = _apply_jq_filter(json_str, ".[].x")
-        parsed = json.loads(result)
-        assert parsed == [1, 2, 3]
+        assert result == [1, 2, 3]
 
     def test_identity_filter(self) -> None:
         """Test identity filter '.' returns input unchanged."""
         json_str = '{"key": "value"}'
         result = _apply_jq_filter(json_str, ".")
-        parsed = json.loads(result)
-        assert parsed == {"key": "value"}
+        assert result == [{"key": "value"}]
 
     def test_keys_filter(self) -> None:
         """Test keys filter extracts object keys."""
         json_str = '{"b": 1, "a": 2, "c": 3}'
         result = _apply_jq_filter(json_str, "keys")
-        parsed = json.loads(result)
-        assert set(parsed) == {"a", "b", "c"}
+        # Result is list containing one element (the keys array)
+        assert len(result) == 1
+        assert set(result[0]) == {"a", "b", "c"}
 
     def test_map_filter(self) -> None:
         """Test map transformation."""
         json_str = "[1, 2, 3]"
         result = _apply_jq_filter(json_str, "map(. * 2)")
-        parsed = json.loads(result)
-        assert parsed == [2, 4, 6]
+        # map() returns single array result
+        assert result == [[2, 4, 6]]
 
     def test_slice_filter(self) -> None:
         """Test array slicing."""
         json_str = "[0, 1, 2, 3, 4, 5]"
         result = _apply_jq_filter(json_str, ".[:3]")
-        parsed = json.loads(result)
-        assert parsed == [0, 1, 2]
+        # slice returns single array result
+        assert result == [[0, 1, 2]]
 
 
 class TestApplyJqFilterErrors:
     """Tests for _apply_jq_filter error handling (User Story 2)."""
+
+    def test_invalid_json_input_raises_exit(self) -> None:
+        """Test that invalid JSON input raises typer.Exit with clean message."""
+        invalid_json = "not valid json {"
+        with pytest.raises(click.exceptions.Exit) as exc:
+            _apply_jq_filter(invalid_json, ".")
+        assert exc.value.exit_code == ExitCode.INVALID_ARGS
+
+    def test_invalid_json_error_message(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test that invalid JSON error message is helpful."""
+        invalid_json = '{"unclosed": '
+        with pytest.raises(click.exceptions.Exit):
+            _apply_jq_filter(invalid_json, ".")
+
+        captured = capsys.readouterr()
+        assert "invalid json" in captured.err.lower()
 
     def test_invalid_syntax_raises_exit(self) -> None:
         """Test that invalid jq syntax raises typer.Exit (T016)."""
@@ -760,6 +774,24 @@ class TestOutputResultFormatValidation:
             output_result(ctx, [{"a": 1}], format="jsonl", jq_filter=".[0]")
             mock_console.print.assert_called_once()
 
+    def test_jq_filter_jsonl_outputs_per_line(self) -> None:
+        """Test that jq filter with jsonl outputs each result on its own line."""
+        ctx = MagicMock(spec=typer.Context)
+        ctx.obj = {}
+
+        with patch("mixpanel_data.cli.utils.console") as mock_console:
+            # Filter that produces multiple results
+            output_result(
+                ctx, [{"x": 1}, {"x": 2}, {"x": 3}], format="jsonl", jq_filter=".[].x"
+            )
+            # Each result should be printed separately (3 calls for 3 results)
+            assert mock_console.print.call_count == 3
+            # Each call should have a single JSON value (1, 2, 3)
+            calls = mock_console.print.call_args_list
+            assert calls[0][0][0] == "1"
+            assert calls[1][0][0] == "2"
+            assert calls[2][0][0] == "3"
+
 
 class TestApplyJqFilterRuntimeErrors:
     """Tests for _apply_jq_filter runtime error handling (User Story 4)."""
@@ -794,21 +826,21 @@ class TestApplyJqFilterRuntimeErrors:
 class TestApplyJqFilterEmptyResults:
     """Tests for _apply_jq_filter empty results handling (User Story 5)."""
 
-    def test_empty_results_return_empty_array(self) -> None:
-        """Test that no matches returns '[]' (T035)."""
+    def test_empty_results_return_empty_list(self) -> None:
+        """Test that no matches returns empty list (T035)."""
         json_str = '[{"x": 1}, {"x": 2}, {"x": 3}]'
         result = _apply_jq_filter(json_str, ".[] | select(.x > 100)")
-        assert result.strip() == "[]"
+        assert result == []
 
     def test_empty_results_does_not_raise(self) -> None:
         """Test that empty results do NOT raise exception (T036)."""
         json_str = "[]"
         # This should not raise - empty input with filter = empty output
         result = _apply_jq_filter(json_str, ".[]")
-        assert result.strip() == "[]"
+        assert result == []
 
     def test_select_no_matches_returns_empty(self) -> None:
-        """Test select with no matches returns empty array."""
+        """Test select with no matches returns empty list."""
         json_str = '[{"active": false}, {"active": false}]'
         result = _apply_jq_filter(json_str, ".[] | select(.active)")
-        assert result.strip() == "[]"
+        assert result == []

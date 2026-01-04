@@ -322,32 +322,39 @@ def get_config(ctx: typer.Context) -> ConfigManager:
     return config
 
 
-def _apply_jq_filter(json_str: str, filter_expr: str) -> str:
+def _apply_jq_filter(json_str: str, filter_expr: str) -> list[Any]:
     """Apply jq filter to JSON string.
 
     Compiles and applies a jq filter expression to the input JSON string,
-    returning the filtered result as a pretty-printed JSON string.
+    returning the filtered results as a list of Python objects. The caller
+    is responsible for formatting the output (JSON vs JSONL).
 
     Args:
         json_str: JSON string to filter.
         filter_expr: jq filter expression (e.g., ".name", ".[0]", "map(.x)").
 
     Returns:
-        Filtered JSON string (pretty-printed). Single results are returned
-        as-is; multiple results are wrapped in an array.
+        List of filtered results. May be empty, single-element, or multi-element.
+        Caller should format based on output format requirements.
 
     Raises:
-        typer.Exit: If filter syntax is invalid or runtime error occurs.
-            Uses ExitCode.INVALID_ARGS (3).
+        typer.Exit: If JSON parsing fails, filter syntax is invalid, or
+            runtime error occurs. Uses ExitCode.INVALID_ARGS (3).
 
     Example:
         >>> _apply_jq_filter('{"name": "test"}', '.name')
-        '"test"'
+        ['test']
         >>> _apply_jq_filter('[1, 2, 3]', 'map(. * 2)')
-        '[\\n  2,\\n  4,\\n  6\\n]'
+        [[2, 4, 6]]
     """
-    # Parse the input JSON
-    data = json.loads(json_str)
+    try:
+        # Parse the input JSON
+        data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        err_console.print(f"[red]Invalid JSON input:[/red] {e.msg}")
+        # Suppress chain: typer.Exit is a CLI exit signal, not a debugging exception.
+        # Users want clean error messages, not stack traces.
+        raise typer.Exit(ExitCode.INVALID_ARGS) from None
 
     try:
         # Compile and apply the jq filter
@@ -360,15 +367,11 @@ def _apply_jq_filter(json_str: str, filter_expr: str) -> str:
         if error_msg.startswith("jq: error: "):
             error_msg = error_msg[11:]
         err_console.print(f"[red]jq filter error:[/red] {error_msg}")
+        # Suppress chain: typer.Exit is a CLI exit signal, not a debugging exception.
+        # Users want clean error messages, not stack traces.
         raise typer.Exit(ExitCode.INVALID_ARGS) from None
 
-    # Format output based on result count
-    if len(results) == 0:
-        return "[]"
-    elif len(results) == 1:
-        return json.dumps(results[0], indent=2)
-    else:
-        return json.dumps(results, indent=2)
+    return results
 
 
 def present_result(
@@ -443,16 +446,31 @@ def output_result(
         raise typer.Exit(ExitCode.INVALID_ARGS)
 
     if fmt == "json":
-        output = format_json(data)
         if jq_filter:
-            output = _apply_jq_filter(output, jq_filter)
+            # Apply jq filter to JSON, then pretty-print result
+            json_str = format_json(data)
+            results = _apply_jq_filter(json_str, jq_filter)
+            # Format: single result as-is, multiple results as array
+            if len(results) == 0:
+                output = "[]"
+            elif len(results) == 1:
+                output = json.dumps(results[0], indent=2)
+            else:
+                output = json.dumps(results, indent=2)
+        else:
+            output = format_json(data)
         console.print(output, highlight=False)
     elif fmt == "jsonl":
-        # For jsonl with jq, convert to JSON array first, filter, then output
-        output = format_json(data) if jq_filter else format_jsonl(data)
         if jq_filter:
-            output = _apply_jq_filter(output, jq_filter)
-        console.print(output, highlight=False)
+            # Apply jq filter, then output each result as JSONL (one per line)
+            json_str = format_json(data)
+            results = _apply_jq_filter(json_str, jq_filter)
+            # Output each result element on its own line
+            for item in results:
+                console.print(json.dumps(item), highlight=False)
+        else:
+            output = format_jsonl(data)
+            console.print(output, highlight=False)
     elif fmt == "table":
         table = format_table(data, columns)
         console.print(table)

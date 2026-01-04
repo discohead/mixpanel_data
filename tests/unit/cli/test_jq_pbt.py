@@ -92,8 +92,9 @@ class TestIdentityFilterProperties:
         """
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, ".")
-        parsed = json.loads(result)
-        assert parsed == data
+        # Result is a list with single element for identity filter
+        assert len(result) == 1
+        assert result[0] == data
 
     @given(data=json_object_lists)
     @settings(max_examples=100)
@@ -110,8 +111,9 @@ class TestIdentityFilterProperties:
         """
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, ".")
-        parsed = json.loads(result)
-        assert parsed == data
+        # Result is a list with single element for identity filter
+        assert len(result) == 1
+        assert result[0] == data
 
     @given(data=json_values)
     @settings(max_examples=100)
@@ -126,8 +128,9 @@ class TestIdentityFilterProperties:
         """
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, ".")
-        parsed = json.loads(result)
-        assert parsed == data
+        # Result is a list with single element for identity filter
+        assert len(result) == 1
+        assert result[0] == data
 
 
 # =============================================================================
@@ -153,8 +156,9 @@ class TestLengthFilterProperties:
         """
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, "length")
-        length = int(result.strip())
-        assert length == len(data)
+        # Result is a list containing the length value
+        assert len(result) == 1
+        assert result[0] == len(data)
 
     @given(data=json_objects)
     @settings(max_examples=100)
@@ -169,8 +173,9 @@ class TestLengthFilterProperties:
         """
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, "length")
-        length = int(result.strip())
-        assert length == len(data)
+        # Result is a list containing the length value
+        assert len(result) == 1
+        assert result[0] == len(data)
 
     @given(text=st.text())
     @settings(max_examples=100)
@@ -184,8 +189,9 @@ class TestLengthFilterProperties:
         """
         json_str = json.dumps(text)
         result = _apply_jq_filter(json_str, "length")
-        length = int(result.strip())
-        assert length == len(text)
+        # Result is a list containing the length value
+        assert len(result) == 1
+        assert result[0] == len(text)
 
     @given(data=number_lists)
     @settings(max_examples=100)
@@ -199,8 +205,9 @@ class TestLengthFilterProperties:
         """
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, "length")
-        length = int(result.strip())
-        assert length >= 0
+        # Result is a list containing the length value
+        assert len(result) == 1
+        assert result[0] >= 0
 
 
 # =============================================================================
@@ -230,17 +237,8 @@ class TestSelectFilterProperties:
         json_str = json.dumps(data)
         filter_expr = f".[] | select(.value > {threshold})"
         result = _apply_jq_filter(json_str, filter_expr)
-        parsed = json.loads(result)
-
-        # Handle single result vs array
-        if isinstance(parsed, dict):
-            result_count = 1
-        elif isinstance(parsed, list):
-            result_count = len(parsed)
-        else:
-            result_count = 0
-
-        assert result_count <= len(data)
+        # Result is already a list of matching items
+        assert len(result) <= len(data)
 
     @given(data=items_with_values)
     @settings(max_examples=100)
@@ -261,23 +259,18 @@ class TestSelectFilterProperties:
         json_str = json.dumps(data)
         # Select everything (value > -infinity effectively)
         result = _apply_jq_filter(json_str, ".[] | select(.value != null)")
-        parsed = json.loads(result)
-
-        # Handle single result case
-        if isinstance(parsed, dict):
-            parsed = [parsed]
-
-        assert len(parsed) == len(data)
+        # Result is a list of matching items
+        assert len(result) == len(data)
 
     @given(data=items_with_values)
     @settings(max_examples=100)
     def test_select_with_always_false_returns_empty(
         self, data: list[dict[str, Any]]
     ) -> None:
-        """Select with impossible condition should return empty array.
+        """Select with impossible condition should return empty list.
 
         When the select condition matches nothing, the output should
-        be an empty array.
+        be an empty list.
 
         Args:
             data: A list of dicts with 'value' key.
@@ -285,9 +278,7 @@ class TestSelectFilterProperties:
         json_str = json.dumps(data)
         # Value is integer, so checking type == "string" is always false
         result = _apply_jq_filter(json_str, '.[] | select(.value | type == "string")')
-        parsed = json.loads(result)
-
-        assert parsed == []
+        assert result == []
 
     @given(data=items_with_values)
     @settings(max_examples=100)
@@ -304,14 +295,9 @@ class TestSelectFilterProperties:
         json_str = json.dumps(data)
         filter_expr = ".[] | select(.value > 0)"
         result = _apply_jq_filter(json_str, filter_expr)
-        parsed = json.loads(result)
-
-        # Handle single result case
-        if isinstance(parsed, dict):
-            parsed = [parsed]
-
+        # Result is a list of matching items
         # All returned items should have value > 0
-        for item in parsed:
+        for item in result:
             assert item["value"] > 0
 
 
@@ -339,9 +325,9 @@ class TestMapFilterProperties:
 
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, "map(. + 1)")
-        parsed = json.loads(result)
-
-        assert len(parsed) == len(data)
+        # map returns single array result wrapped in list
+        assert len(result) == 1
+        assert len(result[0]) == len(data)
 
     @given(
         data=st.lists(
@@ -357,9 +343,9 @@ class TestMapFilterProperties:
         """
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, "map(.)")
-        parsed = json.loads(result)
-
-        assert parsed == data
+        # map returns single array result wrapped in list
+        assert len(result) == 1
+        assert result[0] == data
 
 
 class TestKeysFilterProperties:
@@ -377,9 +363,9 @@ class TestKeysFilterProperties:
         """
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, "keys")
-        parsed = json.loads(result)
-
-        assert set(parsed) == set(data.keys())
+        # keys returns single array result wrapped in list
+        assert len(result) == 1
+        assert set(result[0]) == set(data.keys())
 
     @given(data=json_objects)
     @settings(max_examples=100)
@@ -395,8 +381,12 @@ class TestKeysFilterProperties:
         keys_result = _apply_jq_filter(json_str, "keys")
         length_result = _apply_jq_filter(json_str, "length")
 
-        keys = json.loads(keys_result)
-        length = int(length_result.strip())
+        # keys returns single array wrapped in list
+        assert len(keys_result) == 1
+        keys = keys_result[0]
+        # length returns single value wrapped in list
+        assert len(length_result) == 1
+        length = length_result[0]
 
         assert len(keys) == length
 
@@ -424,7 +414,9 @@ class TestSliceFilterProperties:
         """
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, f".[:{n}]")
-        parsed = json.loads(result)
+        # slice returns single array wrapped in list
+        assert len(result) == 1
+        parsed = result[0]
 
         expected_length = min(n, len(data))
         assert len(parsed) == expected_length
@@ -446,6 +438,6 @@ class TestSliceFilterProperties:
         n = len(data)
         json_str = json.dumps(data)
         result = _apply_jq_filter(json_str, f".[0:{n}]")
-        parsed = json.loads(result)
-
-        assert parsed == data
+        # slice returns single array wrapped in list
+        assert len(result) == 1
+        assert result[0] == data
