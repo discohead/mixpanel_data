@@ -127,6 +127,34 @@ class TestQuerySql:
         data = json.loads(result.stdout)
         assert data == {"value": 42}
 
+    def test_sql_scalar_plain_with_jq_errors(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test --scalar --format plain --jq errors instead of silently ignoring."""
+        mock_workspace.sql_scalar.return_value = 42
+
+        with patch(
+            "mixpanel_data.cli.commands.query.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "query",
+                    "sql",
+                    "SELECT COUNT(*) FROM events",
+                    "--scalar",
+                    "--format",
+                    "plain",
+                    "--jq",
+                    ".value",
+                ],
+            )
+
+        # Should error, not silently ignore the jq filter
+        assert result.exit_code == 3
+        assert "json" in result.output.lower()
+
 
 class TestQuerySegmentation:
     """Tests for mp query segmentation command."""

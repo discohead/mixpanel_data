@@ -108,6 +108,12 @@ def query_sql(
         result = workspace.sql_scalar(sql_query)
         # For scalar output, just print the raw value
         if format == "plain":
+            # Validate jq_filter - should error, not silently ignore
+            if jq_filter:
+                err_console.print(
+                    "[red]Error:[/red] --jq requires --format json or jsonl"
+                )
+                raise typer.Exit(ExitCode.INVALID_ARGS)
             print(result)
         else:
             output_result(ctx, {"value": result}, format=format, jq_filter=jq_filter)
