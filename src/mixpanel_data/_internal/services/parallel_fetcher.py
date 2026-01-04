@@ -284,7 +284,7 @@ class ParallelFetcherService:
 
                 try:
                     if not table_created and not append:
-                        self._storage.create_events_table(
+                        actual_rows = self._storage.create_events_table(
                             name=name,
                             data=iter(task.data),
                             metadata=task.metadata,
@@ -292,7 +292,7 @@ class ParallelFetcherService:
                         )
                         table_created = True
                     else:
-                        self._storage.append_events_table(
+                        actual_rows = self._storage.append_events_table(
                             name=name,
                             data=iter(task.data),
                             metadata=task.metadata,
@@ -300,8 +300,9 @@ class ParallelFetcherService:
                         )
 
                     # Write succeeded - now mark as successful
+                    # Use actual_rows (after deduplication) not task.rows (raw API count)
                     with results_lock:
-                        total_rows += task.rows
+                        total_rows += actual_rows
                         successful_batches += 1
 
                     if on_batch_complete:
@@ -310,7 +311,7 @@ class ParallelFetcherService:
                             to_date=task.chunk_to,
                             batch_index=task.batch_idx,
                             total_batches=total_batches,
-                            rows=task.rows,
+                            rows=actual_rows,
                             success=True,
                             error=None,
                         )
@@ -322,7 +323,7 @@ class ParallelFetcherService:
                         total_batches,
                         task.chunk_from,
                         task.chunk_to,
-                        task.rows,
+                        actual_rows,
                     )
 
                 except Exception as e:
