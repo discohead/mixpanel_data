@@ -167,6 +167,23 @@ for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
 
 All commands support `--format` (`json`, `jsonl`, `table`, `csv`, `plain`) and `--help`.
 
+### Filtering with --jq
+
+Commands that output JSON support `--jq` for client-side filtering:
+
+```bash
+# Get first 5 events
+mp inspect events --format json --jq '.[:5]'
+
+# Extract total from segmentation
+mp query segmentation --event Purchase --from 2025-01-01 --to 2025-01-31 \
+    --format json --jq '.total'
+
+# Filter SQL results
+mp query sql "SELECT * FROM events LIMIT 100" --format json \
+    --jq '.[] | select(.event_name == "Purchase")'
+```
+
 See [CLI Reference](https://jaredmcfarland.github.io/mixpanel_data/cli/) for complete documentation.
 
 ## DuckDB JSON Queries
@@ -204,7 +221,7 @@ Key design features:
 
 - **Discoverable schema**: `list_events()`, `list_properties()`, `list_funnels()`, `list_cohorts()`, `list_bookmarks()` reveal what's in your project before you query
 - **Consistent interfaces**: Same operations available as Python methods and CLI commands
-- **Structured output**: All CLI commands support `--format json` for machine-readable responses
+- **Structured output**: All CLI commands support `--format json` for machine-readable responses, plus `--jq` for inline filtering
 - **Local SQL iteration**: Fetch once, query repeatedly—no re-fetching needed
 - **Typed exceptions**: Error codes and context for programmatic handling
 

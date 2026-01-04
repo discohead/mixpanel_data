@@ -208,6 +208,7 @@ just test-pbt-dev
 - Python 3.11+ with full type hints (mypy --strict compliant)
 - Typer (CLI) + Rich (output formatting)
 - DuckDB (embedded analytical database)
+- jq (JSON filtering via `--jq` option for CLI commands)
 - httpx (HTTP client), Pydantic (validation)
 - Hypothesis (property-based testing), mutmut (mutation testing)
 - uv (package manager), just (command runner)
@@ -219,10 +220,3 @@ Design documents in `context/`:
 - [mixpanel_data-design.md](context/mixpanel_data-design.md) — Architecture and public API
 - [mp-cli-project-spec.md](context/mp-cli-project-spec.md) — CLI specification
 - [mixpanel-http-api-specification.md](context/mixpanel-http-api-specification.md) — Mixpanel API reference
-
-## Active Technologies
-- Python 3.11+ + jq>=1.9.0 (new), typer, rich, pydantic (016-jq-filter-support)
-- N/A (output filtering only) (016-jq-filter-support)
-
-## Recent Changes
-- 016-jq-filter-support: Added Python 3.11+ + jq>=1.9.0 (new), typer, rich, pydantic
