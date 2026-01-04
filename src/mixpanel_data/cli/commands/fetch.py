@@ -103,6 +103,15 @@ def fetch_events(
             min=1,
         ),
     ] = None,
+    chunk_days: Annotated[
+        int,
+        typer.Option(
+            "--chunk-days",
+            help="Days per chunk for parallel fetching (default: 7). Only applies with --parallel.",
+            min=1,
+            max=100,
+        ),
+    ] = 7,
     stdout: Annotated[
         bool,
         typer.Option("--stdout", help="Stream to stdout as JSONL instead of storing."),
@@ -137,6 +146,7 @@ def fetch_events(
     Use --replace to drop and recreate an existing table.
     Use --append to add data to an existing table.
     Use --parallel/-p for faster parallel fetching (recommended for large date ranges).
+    Use --chunk-days to configure days per chunk for parallel fetching (default: 7).
     Use --stdout to stream JSONL to stdout instead of storing locally.
     Use --raw with --stdout to output raw Mixpanel API format.
 
@@ -172,6 +182,7 @@ def fetch_events(
         mp fetch events --from 2025-01-01 --to 2025-01-31 --replace
         mp fetch events --from 2025-01-01 --to 2025-01-31 --append
         mp fetch events --from 2025-01-01 --to 2025-01-31 --parallel
+        mp fetch events --from 2025-01-01 --to 2025-01-31 --parallel --chunk-days 1
         mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout
         mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout --raw | jq '.event'
 
@@ -277,6 +288,7 @@ def fetch_events(
         parallel=parallel,
         max_workers=workers,
         on_batch_complete=on_batch_complete,
+        chunk_days=chunk_days,
     )
 
     output_result(ctx, result.to_dict(), format=format, jq_filter=jq_filter)

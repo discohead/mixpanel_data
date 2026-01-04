@@ -1354,3 +1354,88 @@ class TestFetchEventsParallel:
         assert isinstance(result, ParallelFetchResult)
         # Append should call append_events_table, not create
         mock_storage.append_events_table.assert_called()
+
+    def test_parallel_with_chunk_days(self) -> None:
+        """fetch_events with parallel=True respects chunk_days parameter."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+
+        mock_api_client.export_events.return_value = iter([])
+        mock_storage.create_events_table.return_value = 0
+        mock_storage.append_events_table.return_value = 0
+
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        # 21 days with 3-day chunks = 7 batches
+        result = fetcher.fetch_events(
+            name="events",
+            from_date="2024-01-01",
+            to_date="2024-01-21",
+            parallel=True,
+            chunk_days=3,
+        )
+
+        from mixpanel_data.types import ParallelFetchResult
+
+        assert isinstance(result, ParallelFetchResult)
+        # With 21 days and 3-day chunks, should have 7 batches
+        assert result.successful_batches == 7
+
+    def test_parallel_default_chunk_days(self) -> None:
+        """fetch_events with parallel=True uses default 7-day chunks."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+
+        mock_api_client.export_events.return_value = iter([])
+        mock_storage.create_events_table.return_value = 0
+        mock_storage.append_events_table.return_value = 0
+
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        # 21 days with default 7-day chunks = 3 batches
+        result = fetcher.fetch_events(
+            name="events",
+            from_date="2024-01-01",
+            to_date="2024-01-21",
+            parallel=True,
+        )
+
+        from mixpanel_data.types import ParallelFetchResult
+
+        assert isinstance(result, ParallelFetchResult)
+        # With 21 days and 7-day chunks (default), should have 3 batches
+        assert result.successful_batches == 3
+
+    def test_chunk_days_ignored_for_sequential_fetch(self) -> None:
+        """chunk_days parameter is ignored when parallel=False."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+
+        def mock_export() -> Iterator[dict[str, Any]]:
+            yield {
+                "event": "Event",
+                "properties": {
+                    "distinct_id": "user_1",
+                    "time": 1609459200,
+                    "$insert_id": "id-1",
+                },
+            }
+
+        mock_api_client.export_events.return_value = mock_export()
+        mock_storage.create_events_table.return_value = 1
+
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        # chunk_days should be ignored for sequential fetch
+        result = fetcher.fetch_events(
+            name="events",
+            from_date="2024-01-01",
+            to_date="2024-01-21",
+            parallel=False,
+            chunk_days=3,
+        )
+
+        # Should return FetchResult (sequential), not ParallelFetchResult
+        from mixpanel_data.types import FetchResult
+
+        assert isinstance(result, FetchResult)

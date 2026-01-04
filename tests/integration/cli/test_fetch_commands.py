@@ -1104,3 +1104,143 @@ class TestFetchEventsParallel:
         assert result.exit_code == 3
         # Error message is written to stderr via err_console
         assert "--limit is not supported with --parallel" in result.output
+
+    def test_chunk_days_passed_to_workspace(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that --chunk-days value is passed to workspace."""
+        from mixpanel_data.types import ParallelFetchResult
+
+        mock_workspace.fetch_events.return_value = ParallelFetchResult(
+            table="events",
+            total_rows=100,
+            successful_batches=7,
+            failed_batches=0,
+            failed_date_ranges=(),
+            duration_seconds=1.5,
+            fetched_at=MagicMock(),
+        )
+
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "fetch",
+                    "events",
+                    "--from",
+                    "2024-01-01",
+                    "--to",
+                    "2024-01-21",
+                    "--parallel",
+                    "--chunk-days",
+                    "3",
+                    "--format",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 0
+
+        # Verify chunk_days was passed to workspace
+        call_kwargs = mock_workspace.fetch_events.call_args.kwargs
+        assert call_kwargs.get("chunk_days") == 3
+
+    def test_chunk_days_default_is_7(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that --chunk-days defaults to 7 when not specified."""
+        from mixpanel_data.types import ParallelFetchResult
+
+        mock_workspace.fetch_events.return_value = ParallelFetchResult(
+            table="events",
+            total_rows=100,
+            successful_batches=3,
+            failed_batches=0,
+            failed_date_ranges=(),
+            duration_seconds=1.5,
+            fetched_at=MagicMock(),
+        )
+
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "fetch",
+                    "events",
+                    "--from",
+                    "2024-01-01",
+                    "--to",
+                    "2024-01-21",
+                    "--parallel",
+                    "--format",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 0
+
+        # Verify default chunk_days of 7 was passed
+        call_kwargs = mock_workspace.fetch_events.call_args.kwargs
+        assert call_kwargs.get("chunk_days") == 7
+
+    def test_chunk_days_minimum_validation(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that --chunk-days validates minimum value."""
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "fetch",
+                    "events",
+                    "--from",
+                    "2024-01-01",
+                    "--to",
+                    "2024-01-31",
+                    "--parallel",
+                    "--chunk-days",
+                    "0",
+                    "--format",
+                    "json",
+                ],
+            )
+
+        # Typer validates min=1, so this should fail
+        assert result.exit_code != 0
+
+    def test_chunk_days_maximum_validation(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that --chunk-days validates maximum value."""
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "fetch",
+                    "events",
+                    "--from",
+                    "2024-01-01",
+                    "--to",
+                    "2024-01-31",
+                    "--parallel",
+                    "--chunk-days",
+                    "101",
+                    "--format",
+                    "json",
+                ],
+            )
+
+        # Typer validates max=100, so this should fail
+        assert result.exit_code != 0

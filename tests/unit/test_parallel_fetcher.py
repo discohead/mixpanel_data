@@ -81,17 +81,6 @@ class TestParallelFetcherServiceConstruction:
 
         assert fetcher._default_max_workers == 10
 
-    def test_default_chunk_days(
-        self, mock_api_client: MagicMock, mock_storage: MagicMock
-    ) -> None:
-        """Default chunk_days is 7."""
-        fetcher = ParallelFetcherService(
-            api_client=mock_api_client,
-            storage=mock_storage,
-        )
-
-        assert fetcher._chunk_days == 7
-
 
 # =============================================================================
 # Parallel Fetch Tests
@@ -350,6 +339,123 @@ class TestParallelFetchEvents:
         # Verify where filter was passed
         call_args = mock_api_client.export_events.call_args
         assert call_args.kwargs["where"] == 'properties["country"] == "US"'
+
+
+# =============================================================================
+# Chunk Days Parameter Tests
+# =============================================================================
+
+
+class TestParallelFetchChunkDays:
+    """Tests for chunk_days parameter in fetch_events."""
+
+    def test_fetch_events_default_chunk_days(
+        self,
+        parallel_fetcher: ParallelFetcherService,
+        mock_api_client: MagicMock,
+        mock_storage: MagicMock,
+    ) -> None:
+        """Default chunk_days is 7 when not specified."""
+        mock_api_client.export_events.return_value = iter([])
+        mock_storage.create_events_table.return_value = 0
+        mock_storage.append_events_table.return_value = 0
+
+        # 21 days with default 7-day chunks = 3 batches
+        result = parallel_fetcher.fetch_events(
+            name="test_events",
+            from_date="2024-01-01",
+            to_date="2024-01-21",
+        )
+
+        # Should have 3 batches (7-day chunks over 21 days)
+        assert result.successful_batches == 3
+
+    def test_fetch_events_custom_chunk_days(
+        self,
+        parallel_fetcher: ParallelFetcherService,
+        mock_api_client: MagicMock,
+        mock_storage: MagicMock,
+    ) -> None:
+        """Custom chunk_days parameter controls chunking."""
+        mock_api_client.export_events.return_value = iter([])
+        mock_storage.create_events_table.return_value = 0
+        mock_storage.append_events_table.return_value = 0
+
+        # 21 days with 3-day chunks = 7 batches
+        result = parallel_fetcher.fetch_events(
+            name="test_events",
+            from_date="2024-01-01",
+            to_date="2024-01-21",
+            chunk_days=3,
+        )
+
+        # Should have 7 batches (3-day chunks over 21 days)
+        assert result.successful_batches == 7
+
+    def test_fetch_events_single_day_chunks(
+        self,
+        parallel_fetcher: ParallelFetcherService,
+        mock_api_client: MagicMock,
+        mock_storage: MagicMock,
+    ) -> None:
+        """chunk_days=1 creates one batch per day."""
+        mock_api_client.export_events.return_value = iter([])
+        mock_storage.create_events_table.return_value = 0
+        mock_storage.append_events_table.return_value = 0
+
+        # 5 days with 1-day chunks = 5 batches
+        result = parallel_fetcher.fetch_events(
+            name="test_events",
+            from_date="2024-01-01",
+            to_date="2024-01-05",
+            chunk_days=1,
+        )
+
+        # Should have 5 batches (1 per day)
+        assert result.successful_batches == 5
+
+    def test_fetch_events_large_chunk_days(
+        self,
+        parallel_fetcher: ParallelFetcherService,
+        mock_api_client: MagicMock,
+        mock_storage: MagicMock,
+    ) -> None:
+        """Large chunk_days creates fewer batches."""
+        mock_api_client.export_events.return_value = iter([])
+        mock_storage.create_events_table.return_value = 0
+        mock_storage.append_events_table.return_value = 0
+
+        # 30 days with 30-day chunks = 1 batch
+        result = parallel_fetcher.fetch_events(
+            name="test_events",
+            from_date="2024-01-01",
+            to_date="2024-01-30",
+            chunk_days=30,
+        )
+
+        # Should have 1 batch (entire range fits in one chunk)
+        assert result.successful_batches == 1
+
+    def test_fetch_events_chunk_days_100(
+        self,
+        parallel_fetcher: ParallelFetcherService,
+        mock_api_client: MagicMock,
+        mock_storage: MagicMock,
+    ) -> None:
+        """chunk_days=100 (maximum) works correctly."""
+        mock_api_client.export_events.return_value = iter([])
+        mock_storage.create_events_table.return_value = 0
+
+        # 50 days with 100-day chunks = 1 batch
+        result = parallel_fetcher.fetch_events(
+            name="test_events",
+            from_date="2024-01-01",
+            to_date="2024-02-19",  # 50 days
+            chunk_days=100,
+        )
+
+        # Should have 1 batch
+        assert result.successful_batches == 1
 
 
 # =============================================================================

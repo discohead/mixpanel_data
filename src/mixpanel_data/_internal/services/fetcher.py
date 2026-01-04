@@ -150,6 +150,7 @@ class FetcherService:
         parallel: bool = False,
         max_workers: int | None = None,
         on_batch_complete: Callable[[BatchProgress], None] | None = None,
+        chunk_days: int = 7,
     ) -> FetchResult | ParallelFetchResult:
         """Fetch events from Mixpanel and store in local database.
 
@@ -174,6 +175,8 @@ class FetcherService:
             on_batch_complete: Callback invoked when each batch completes
                 during parallel fetch. Receives BatchProgress with status.
                 Ignored when parallel=False.
+            chunk_days: Days per chunk for parallel date range splitting.
+                Default: 7. Ignored when parallel=False.
 
         Returns:
             FetchResult when parallel=False, ParallelFetchResult when parallel=True.
@@ -207,6 +210,7 @@ class FetcherService:
                 on_batch_complete=on_batch_complete,
                 append=append,
                 batch_size=batch_size,
+                chunk_days=chunk_days,
             )
 
         # Sequential fetch - validate date range (100-day limit)

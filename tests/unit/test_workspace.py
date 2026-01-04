@@ -2709,6 +2709,141 @@ class TestFetchEventsParallel:
         finally:
             ws.close()
 
+    def test_fetch_events_chunk_days_validates_minimum(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_events raises ValueError if chunk_days is not positive."""
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            with pytest.raises(ValueError, match="chunk_days must be positive"):
+                ws.fetch_events(
+                    "events",
+                    from_date="2024-01-01",
+                    to_date="2024-01-31",
+                    parallel=True,
+                    chunk_days=0,
+                )
+        finally:
+            ws.close()
+
+    def test_fetch_events_chunk_days_validates_maximum(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_events raises ValueError if chunk_days exceeds 100."""
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            with pytest.raises(ValueError, match="chunk_days must be at most 100"):
+                ws.fetch_events(
+                    "events",
+                    from_date="2024-01-01",
+                    to_date="2024-01-31",
+                    parallel=True,
+                    chunk_days=101,
+                )
+        finally:
+            ws.close()
+
+    def test_fetch_events_chunk_days_passes_to_fetcher(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_events passes chunk_days to fetcher service."""
+        from mixpanel_data.types import ParallelFetchResult
+
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            mock_fetcher = MagicMock()
+            mock_fetcher.fetch_events.return_value = ParallelFetchResult(
+                table="events",
+                total_rows=100,
+                successful_batches=7,
+                failed_batches=0,
+                failed_date_ranges=(),
+                duration_seconds=1.5,
+                fetched_at=MagicMock(),
+            )
+            ws._fetcher = mock_fetcher
+
+            ws.fetch_events(
+                "events",
+                from_date="2024-01-01",
+                to_date="2024-01-21",
+                parallel=True,
+                chunk_days=3,
+                progress=False,
+            )
+
+            # Verify chunk_days is passed to fetcher
+            call_kwargs = mock_fetcher.fetch_events.call_args.kwargs
+            assert call_kwargs.get("chunk_days") == 3
+        finally:
+            ws.close()
+
+    def test_fetch_events_chunk_days_default(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_events uses default chunk_days of 7."""
+        from mixpanel_data.types import ParallelFetchResult
+
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            mock_fetcher = MagicMock()
+            mock_fetcher.fetch_events.return_value = ParallelFetchResult(
+                table="events",
+                total_rows=100,
+                successful_batches=3,
+                failed_batches=0,
+                failed_date_ranges=(),
+                duration_seconds=1.5,
+                fetched_at=MagicMock(),
+            )
+            ws._fetcher = mock_fetcher
+
+            ws.fetch_events(
+                "events",
+                from_date="2024-01-01",
+                to_date="2024-01-21",
+                parallel=True,
+                progress=False,
+            )
+
+            # Verify default chunk_days of 7 is passed
+            call_kwargs = mock_fetcher.fetch_events.call_args.kwargs
+            assert call_kwargs.get("chunk_days") == 7
+        finally:
+            ws.close()
+
     def test_fetch_events_return_type_annotation(
         self,
         mock_config_manager: MagicMock,

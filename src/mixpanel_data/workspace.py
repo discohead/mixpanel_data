@@ -838,6 +838,7 @@ class Workspace:
         parallel: bool = False,
         max_workers: int | None = None,
         on_batch_complete: Callable[[BatchProgress], None] | None = None,
+        chunk_days: int = 7,
     ) -> FetchResult | ParallelFetchResult:
         """Fetch events from Mixpanel and store in local database.
 
@@ -868,6 +869,10 @@ class Workspace:
             on_batch_complete: Callback invoked when each batch completes
                 during parallel fetch. Receives BatchProgress with status.
                 Useful for custom progress reporting. Ignored when parallel=False.
+            chunk_days: Days per chunk for parallel date range splitting.
+                Default: 7. Valid range: 1-100. Smaller values create more
+                parallel batches but may increase API overhead.
+                Ignored when parallel=False.
 
         Returns:
             FetchResult when parallel=False, ParallelFetchResult when parallel=True.
@@ -881,6 +886,7 @@ class Workspace:
             ValueError: If batch_size is outside valid range (100-100000).
             ValueError: If limit is outside valid range (1-100000).
             ValueError: If max_workers is not positive.
+            ValueError: If chunk_days is not in range 1-100.
 
         Example:
             ```python
@@ -920,6 +926,12 @@ class Workspace:
         if max_workers is not None and max_workers <= 0:
             raise ValueError("max_workers must be positive")
 
+        # Validate chunk_days for parallel mode
+        if chunk_days <= 0:
+            raise ValueError("chunk_days must be positive")
+        if chunk_days > 100:
+            raise ValueError("chunk_days must be at most 100")
+
         # Create progress callback if requested (only for interactive terminals)
         progress_callback = None
         pbar = None
@@ -957,6 +969,7 @@ class Workspace:
                 parallel=parallel,
                 max_workers=max_workers,
                 on_batch_complete=on_batch_complete,
+                chunk_days=chunk_days,
             )
         finally:
             if pbar is not None:

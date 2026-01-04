@@ -11,6 +11,7 @@ import queue
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +32,29 @@ _logger = logging.getLogger(__name__)
 
 # Sentinel value to signal writer thread to stop
 _STOP_SENTINEL = object()
+
+
+@dataclass
+class _WriteTask:
+    """Task item for the writer queue.
+
+    Encapsulates all data needed to write a batch and track its result.
+
+    Attributes:
+        data: Transformed event records to write.
+        metadata: Table metadata for the batch.
+        batch_idx: Index of this batch (0-based).
+        chunk_from: Start date of the chunk (YYYY-MM-DD).
+        chunk_to: End date of the chunk (YYYY-MM-DD).
+        rows: Number of rows in this batch.
+    """
+
+    data: list[dict[str, Any]]
+    metadata: TableMetadata
+    batch_idx: int
+    chunk_from: str
+    chunk_to: str
+    rows: int
 
 
 class ParallelFetcherService:
@@ -73,7 +97,6 @@ class ParallelFetcherService:
         self._api_client = api_client
         self._storage = storage
         self._default_max_workers = 10
-        self._chunk_days = 7
 
     def fetch_events(
         self,
@@ -87,6 +110,7 @@ class ParallelFetcherService:
         on_batch_complete: Callable[[BatchProgress], None] | None = None,
         append: bool = False,
         batch_size: int = 1000,
+        chunk_days: int = 7,
     ) -> ParallelFetchResult:
         """Fetch events in parallel and store in local database.
 
@@ -103,6 +127,7 @@ class ParallelFetcherService:
             on_batch_complete: Callback invoked when each batch completes.
             append: If True, append to existing table. If False (default), create new.
             batch_size: Number of rows per INSERT/COMMIT cycle.
+            chunk_days: Days per chunk for date range splitting. Defaults to 7.
 
         Returns:
             ParallelFetchResult with aggregated statistics and any failures.
@@ -115,7 +140,7 @@ class ParallelFetcherService:
         workers = max_workers or self._default_max_workers
 
         # Split date range into chunks
-        chunks = split_date_range(from_date, to_date, chunk_days=self._chunk_days)
+        chunks = split_date_range(from_date, to_date, chunk_days=chunk_days)
         total_batches = len(chunks)
 
         _logger.info(
@@ -126,10 +151,7 @@ class ParallelFetcherService:
         rate_limiter = RateLimiter(max_concurrent=workers)
 
         # Queue for serializing writes to DuckDB (bounded to provide backpressure)
-        # Queue items: (data, metadata, batch_idx, chunk_from, chunk_to, rows)
-        write_queue: queue.Queue[
-            tuple[list[dict[str, Any]], TableMetadata, int, str, str, int] | object
-        ] = queue.Queue(maxsize=workers * 2)
+        write_queue: queue.Queue[_WriteTask | object] = queue.Queue(maxsize=workers * 2)
 
         # Results tracking
         results_lock = threading.Lock()
@@ -178,7 +200,14 @@ class ParallelFetcherService:
                     # Queue for writing - include all info needed for tracking
                     # Success/failure will be determined by writer_thread after write
                     write_queue.put(
-                        (transformed, metadata, batch_idx, chunk_from, chunk_to, rows)
+                        _WriteTask(
+                            data=transformed,
+                            metadata=metadata,
+                            batch_idx=batch_idx,
+                            chunk_from=chunk_from,
+                            chunk_to=chunk_to,
+                            rows=rows,
+                        )
                     )
 
                     _logger.debug(
@@ -231,24 +260,20 @@ class ParallelFetcherService:
                 if item is _STOP_SENTINEL:
                     break
 
-                # Unpack queue item with all tracking info
-                # tuple: (data, metadata, batch_idx, chunk_from, chunk_to, rows)
-                data: list[dict[str, Any]] = item[0]  # type: ignore[index]
-                metadata: TableMetadata = item[1]  # type: ignore[index]
-                batch_idx: int = item[2]  # type: ignore[index]
-                chunk_from: str = item[3]  # type: ignore[index]
-                chunk_to: str = item[4]  # type: ignore[index]
-                rows: int = item[5]  # type: ignore[index]
+                # Type narrow to _WriteTask (sentinel already handled above)
+                task = item if isinstance(item, _WriteTask) else None
+                if task is None:
+                    continue
 
-                if not data:
+                if not task.data:
                     # Empty batch - still count as successful (no data to write)
                     with results_lock:
                         successful_batches += 1
                     if on_batch_complete:
                         progress = BatchProgress(
-                            from_date=chunk_from,
-                            to_date=chunk_to,
-                            batch_index=batch_idx,
+                            from_date=task.chunk_from,
+                            to_date=task.chunk_to,
+                            batch_index=task.batch_idx,
                             total_batches=total_batches,
                             rows=0,
                             success=True,
@@ -261,31 +286,31 @@ class ParallelFetcherService:
                     if not table_created and not append:
                         self._storage.create_events_table(
                             name=name,
-                            data=iter(data),
-                            metadata=metadata,
+                            data=iter(task.data),
+                            metadata=task.metadata,
                             batch_size=batch_size,
                         )
                         table_created = True
                     else:
                         self._storage.append_events_table(
                             name=name,
-                            data=iter(data),
-                            metadata=metadata,
+                            data=iter(task.data),
+                            metadata=task.metadata,
                             batch_size=batch_size,
                         )
 
                     # Write succeeded - now mark as successful
                     with results_lock:
-                        total_rows += rows
+                        total_rows += task.rows
                         successful_batches += 1
 
                     if on_batch_complete:
                         progress = BatchProgress(
-                            from_date=chunk_from,
-                            to_date=chunk_to,
-                            batch_index=batch_idx,
+                            from_date=task.chunk_from,
+                            to_date=task.chunk_to,
+                            batch_index=task.batch_idx,
                             total_batches=total_batches,
-                            rows=rows,
+                            rows=task.rows,
                             success=True,
                             error=None,
                         )
@@ -293,33 +318,33 @@ class ParallelFetcherService:
 
                     _logger.debug(
                         "Batch %d/%d written: %s to %s, %d rows",
-                        batch_idx + 1,
+                        task.batch_idx + 1,
                         total_batches,
-                        chunk_from,
-                        chunk_to,
-                        rows,
+                        task.chunk_from,
+                        task.chunk_to,
+                        task.rows,
                     )
 
                 except Exception as e:
                     # Write failed - track as failure
                     _logger.error(
                         "Batch %d/%d write failed: %s to %s, error: %s",
-                        batch_idx + 1,
+                        task.batch_idx + 1,
                         total_batches,
-                        chunk_from,
-                        chunk_to,
+                        task.chunk_from,
+                        task.chunk_to,
                         str(e),
                     )
 
                     with results_lock:
                         failed_batches += 1
-                        failed_date_ranges.append((chunk_from, chunk_to))
+                        failed_date_ranges.append((task.chunk_from, task.chunk_to))
 
                     if on_batch_complete:
                         progress = BatchProgress(
-                            from_date=chunk_from,
-                            to_date=chunk_to,
-                            batch_index=batch_idx,
+                            from_date=task.chunk_from,
+                            to_date=task.chunk_to,
+                            batch_index=task.batch_idx,
                             total_batches=total_batches,
                             rows=0,
                             success=False,
