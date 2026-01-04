@@ -92,19 +92,12 @@ def inspect_events(
         mp inspect events --format table
         mp inspect events --format json --jq '.[0:3]'
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get first 5 events
-        mp inspect events --jq '.[0:5]'
-
-        # Count total events
-        mp inspect events --jq 'length'
-
-        # Find events containing "Purchase"
-        mp inspect events --jq '[.[] | select(contains("Purchase"))]'
-
-        # Sort alphabetically
-        mp inspect events --jq 'sort'
+        --jq '.[0:5]'                                 # Get first 5 events
+        --jq 'length'                                 # Count total events
+        --jq '[.[] | select(contains("Purchase"))]'  # Find events containing "Purchase"
+        --jq 'sort'                                   # Sort alphabetically
     """
     workspace = get_workspace(ctx, read_only=True)
     with status_spinner(ctx, "Fetching events..."):
@@ -137,19 +130,12 @@ def inspect_properties(
         mp inspect properties -e "Sign Up"
         mp inspect properties -e "Purchase" --format table
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get first 10 properties
-        mp inspect properties -e Purchase --jq '.[0:10]'
-
-        # Find user-defined properties (no $ prefix)
-        mp inspect properties -e Purchase --jq '[.[] | select(startswith("$") | not)]'
-
-        # Find Mixpanel system properties ($ prefix)
-        mp inspect properties -e Purchase --jq '[.[] | select(startswith("$"))]'
-
-        # Count properties
-        mp inspect properties -e Purchase --jq 'length'
+        --jq '.[0:10]'                                    # Get first 10 properties
+        --jq '[.[] | select(startswith("$") | not)]'     # User-defined properties (no $ prefix)
+        --jq '[.[] | select(startswith("$"))]'           # Mixpanel system properties ($ prefix)
+        --jq 'length'                                     # Count properties
     """
     workspace = get_workspace(ctx, read_only=True)
     with status_spinner(ctx, "Fetching properties..."):
@@ -191,19 +177,12 @@ def inspect_values(
         mp inspect values -p country -e "Sign Up" --limit 20
         mp inspect values -p browser --format table
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get first 5 values
-        mp inspect values -p country --jq '.[0:5]'
-
-        # Count unique values
-        mp inspect values -p country --jq 'length'
-
-        # Filter values matching pattern
-        mp inspect values -p country --jq '[.[] | select(test("^U"))]'
-
-        # Sort values
-        mp inspect values -p browser --jq 'sort'
+        --jq '.[0:5]'                          # Get first 5 values
+        --jq 'length'                          # Count unique values
+        --jq '[.[] | select(test("^U"))]'      # Filter values matching pattern
+        --jq 'sort'                            # Sort values alphabetically
     """
     workspace = get_workspace(ctx, read_only=True)
     with status_spinner(ctx, "Fetching values..."):
@@ -240,19 +219,12 @@ def inspect_funnels(
         mp inspect funnels
         mp inspect funnels --format table
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get all funnel IDs
-        mp inspect funnels --jq '[.[].funnel_id]'
-
-        # Find funnel by name pattern
-        mp inspect funnels --jq '.[] | select(.name | test("Purchase"; "i"))'
-
-        # Get funnel names only
-        mp inspect funnels --jq '[.[].name]'
-
-        # Count funnels
-        mp inspect funnels --jq 'length'
+        --jq '[.[].funnel_id]'                               # Get all funnel IDs
+        --jq '.[] | select(.name | test("Purchase"; "i"))'   # Find funnel by name pattern
+        --jq '[.[].name]'                                    # Get funnel names only
+        --jq 'length'                                        # Count funnels
     """
     workspace = get_workspace(ctx, read_only=True)
     with status_spinner(ctx, "Fetching funnels..."):
@@ -288,19 +260,12 @@ def inspect_cohorts(
         mp inspect cohorts
         mp inspect cohorts --format table
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get cohorts with more than 1000 users
-        mp inspect cohorts --jq '[.[] | select(.count > 1000)]'
-
-        # Get cohort names only
-        mp inspect cohorts --jq '[.[].name]'
-
-        # Sort by user count descending
-        mp inspect cohorts --jq 'sort_by(.count) | reverse'
-
-        # Find cohort by name
-        mp inspect cohorts --jq '.[] | select(.name == "Power Users")'
+        --jq '[.[] | select(.count > 1000)]'           # Cohorts with more than 1000 users
+        --jq '[.[].name]'                              # Get cohort names only
+        --jq 'sort_by(.count) | reverse'               # Sort by user count descending
+        --jq '.[] | select(.name == "Power Users")'    # Find cohort by name
     """
     workspace = get_workspace(ctx, read_only=True)
     with status_spinner(ctx, "Fetching cohorts..."):
@@ -357,19 +322,12 @@ def inspect_top_events(
         mp inspect top-events --limit 20 --format table
         mp inspect top-events --type unique
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get events with positive growth
-        mp inspect top-events --jq '[.[] | select(.percent_change > 0)]'
-
-        # Get just event names
-        mp inspect top-events --jq '[.[].event]'
-
-        # Find events with count over 10000
-        mp inspect top-events --jq '[.[] | select(.count > 10000)]'
-
-        # Get event with highest growth
-        mp inspect top-events --jq 'max_by(.percent_change)'
+        --jq '[.[] | select(.percent_change > 0)]'    # Events with positive growth
+        --jq '[.[].event]'                            # Get just event names
+        --jq '[.[] | select(.count > 10000)]'         # Events with count over 10000
+        --jq 'max_by(.percent_change)'                # Event with highest growth
     """
     validated_type = validate_count_type(type_)
     workspace = get_workspace(ctx, read_only=True)
@@ -426,19 +384,12 @@ def inspect_bookmarks(
         mp inspect bookmarks --type insights
         mp inspect bookmarks --type funnels --format table
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get bookmarks by type
-        mp inspect bookmarks --jq '[.[] | select(.type == "insights")]'
-
-        # Get bookmark IDs only
-        mp inspect bookmarks --jq '[.[].id]'
-
-        # Sort by modified date (newest first)
-        mp inspect bookmarks --jq 'sort_by(.modified) | reverse'
-
-        # Find bookmark by name
-        mp inspect bookmarks --jq '.[] | select(.name | test("KPI"; "i"))'
+        --jq '[.[] | select(.type == "insights")]'    # Get bookmarks by type
+        --jq '[.[].id]'                               # Get bookmark IDs only
+        --jq 'sort_by(.modified) | reverse'           # Sort by modified date (newest first)
+        --jq '.[] | select(.name | test("KPI"; "i"))' # Find bookmark by name
     """
     workspace = get_workspace(ctx, read_only=True)
 
@@ -491,19 +442,12 @@ def inspect_info(
         mp inspect info
         mp inspect info --format json
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get database path
-        mp inspect info --jq '.path'
-
-        # Get project ID
-        mp inspect info --jq '.project_id'
-
-        # Get list of tables
-        mp inspect info --jq '.tables'
-
-        # Get database size in MB
-        mp inspect info --jq '.size_mb'
+        --jq '.path'         # Get database path
+        --jq '.project_id'   # Get project ID
+        --jq '.tables'       # Get list of tables
+        --jq '.size_mb'      # Get database size in MB
     """
     workspace = get_workspace(ctx, read_only=True)
     info = workspace.info()
@@ -535,19 +479,12 @@ def inspect_tables(
         mp inspect tables
         mp inspect tables --format table
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get table names only
-        mp inspect tables --jq '[.[].name]'
-
-        # Get tables with more than 100k rows
-        mp inspect tables --jq '[.[] | select(.row_count > 100000)]'
-
-        # Get only event tables
-        mp inspect tables --jq '[.[] | select(.type == "events")]'
-
-        # Get total row count across all tables
-        mp inspect tables --jq '[.[].row_count] | add'
+        --jq '[.[].name]'                               # Get table names only
+        --jq '[.[] | select(.row_count > 100000)]'      # Tables with more than 100k rows
+        --jq '[.[] | select(.type == "events")]'        # Get only event tables
+        --jq '[.[].row_count] | add'                    # Total row count across all tables
     """
     workspace = get_workspace(ctx, read_only=True)
     tables = workspace.tables()
@@ -608,19 +545,12 @@ def inspect_schema(
         mp inspect schema -t events
         mp inspect schema -t events --format table
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get column names only
-        mp inspect schema -t events --jq '.columns | [.[].name]'
-
-        # Get nullable columns
-        mp inspect schema -t events --jq '.columns | [.[] | select(.nullable)]'
-
-        # Get column types
-        mp inspect schema -t events --jq '.columns | [.[] | {name, type}]'
-
-        # Count columns
-        mp inspect schema -t events --jq '.columns | length'
+        --jq '.columns | [.[].name]'                   # Get column names only
+        --jq '.columns | [.[] | select(.nullable)]'   # Get nullable columns
+        --jq '.columns | [.[] | {name, type}]'        # Get column types
+        --jq '.columns | length'                       # Count columns
     """
     # Note: _sample is reserved for future implementation
     workspace = get_workspace(ctx, read_only=True)
@@ -670,10 +600,9 @@ def inspect_drop(
         mp inspect drop -t old_events
         mp inspect drop -t events --force
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get dropped table name
-        mp inspect drop -t old_events --force --jq '.dropped'
+        --jq '.dropped'    # Get dropped table name
     """
     if not force:
         confirm = typer.confirm(f"Drop table '{table}'?")
@@ -722,13 +651,10 @@ def inspect_drop_all(
         mp inspect drop-all --type events --force
         mp inspect drop-all -t profiles --force
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get count of dropped tables
-        mp inspect drop-all --force --jq '.dropped_count'
-
-        # Check if any tables were dropped
-        mp inspect drop-all --force --jq '.dropped_count > 0'
+        --jq '.dropped_count'        # Get count of dropped tables
+        --jq '.dropped_count > 0'    # Check if any tables were dropped
     """
     # Validate type if provided
     type_filter = validate_table_type(type_) if type_ is not None else None
@@ -789,19 +715,12 @@ def inspect_lexicon_schemas(
         mp inspect lexicon-schemas --type event
         mp inspect lexicon-schemas --type profile --format table
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get only event schemas
-        mp inspect lexicon-schemas --jq '[.[] | select(.entity_type == "event")]'
-
-        # Get schema names
-        mp inspect lexicon-schemas --jq '[.[].name]'
-
-        # Find schemas with many properties
-        mp inspect lexicon-schemas --jq '[.[] | select(.property_count > 10)]'
-
-        # Search by description
-        mp inspect lexicon-schemas --jq '[.[] | select(.description | test("purchase"; "i"))]'
+        --jq '[.[] | select(.entity_type == "event")]'             # Get only event schemas
+        --jq '[.[].name]'                                          # Get schema names
+        --jq '[.[] | select(.property_count > 10)]'                # Schemas with many properties
+        --jq '[.[] | select(.description | test("purchase"; "i"))]' # Search by description
     """
     validated_type = validate_entity_type(type_) if type_ is not None else None
     workspace = get_workspace(ctx, read_only=True)
@@ -869,19 +788,12 @@ def inspect_lexicon_schema(
         mp inspect lexicon-schema -t event -n "Sign Up"
         mp inspect lexicon-schema -t profile -n "Plan Type" --format json
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get property names only
-        mp inspect lexicon-schema -t event -n Purchase --jq '.schema_json.properties | keys'
-
-        # Get property types
-        mp inspect lexicon-schema -t event -n Purchase --jq '.schema_json.properties | to_entries | [.[] | {name: .key, type: .value.type}]'
-
-        # Get description
-        mp inspect lexicon-schema -t event -n Purchase --jq '.schema_json.description'
-
-        # Check if schema is hidden
-        mp inspect lexicon-schema -t event -n Purchase --jq '.schema_json.metadata.hidden'
+        --jq '.schema_json.properties | keys'                                                     # Get property names only
+        --jq '.schema_json.properties | to_entries | [.[] | {name: .key, type: .value.type}]'    # Get property types
+        --jq '.schema_json.description'                                                           # Get description
+        --jq '.schema_json.metadata.hidden'                                                       # Check if schema is hidden
     """
     validated_type = validate_entity_type(type_)
     workspace = get_workspace(ctx, read_only=True)
@@ -932,19 +844,12 @@ def inspect_sample(
         mp inspect sample -t events
         mp inspect sample -t events -n 5 --format json
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get event names from sample
-        mp inspect sample -t events --jq '[.[].event_name]'
-
-        # Get unique distinct_ids
-        mp inspect sample -t events --jq '[.[].distinct_id] | unique'
-
-        # Extract specific property from all rows
-        mp inspect sample -t events --jq '[.[].properties.country]'
-
-        # Filter sample by event type
-        mp inspect sample -t events --jq '[.[] | select(.event_name == "Purchase")]'
+        --jq '[.[].event_name]'                                    # Get event names from sample
+        --jq '[.[].distinct_id] | unique'                          # Get unique distinct_ids
+        --jq '[.[].properties.country]'                            # Extract specific property
+        --jq '[.[] | select(.event_name == "Purchase")]'           # Filter sample by event type
     """
     workspace = get_workspace(ctx, read_only=True)
     df = workspace.sample(table, n=rows)
@@ -997,19 +902,12 @@ def inspect_summarize(
         mp inspect summarize -t events
         mp inspect summarize -t events --format json
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get column names
-        mp inspect summarize -t events --jq '.columns | [.[].column_name]'
-
-        # Find columns with nulls
-        mp inspect summarize -t events --jq '.columns | [.[] | select(.null_percentage > 0)]'
-
-        # Get row count
-        mp inspect summarize -t events --jq '.row_count'
-
-        # Get high-cardinality columns
-        mp inspect summarize -t events --jq '.columns | [.[] | select(.approx_unique > 1000)]'
+        --jq '.columns | [.[].column_name]'                         # Get column names
+        --jq '.columns | [.[] | select(.null_percentage > 0)]'     # Find columns with nulls
+        --jq '.row_count'                                           # Get row count
+        --jq '.columns | [.[] | select(.approx_unique > 1000)]'    # High-cardinality columns
     """
     workspace = get_workspace(ctx, read_only=True)
     result = workspace.summarize(table)
@@ -1064,19 +962,12 @@ def inspect_breakdown(
         mp inspect breakdown -t events
         mp inspect breakdown -t events --format json
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get event names sorted by count
-        mp inspect breakdown -t events --jq '.events | sort_by(.count) | reverse | [.[].event_name]'
-
-        # Get events with more than 10% of total
-        mp inspect breakdown -t events --jq '.events | [.[] | select(.pct_of_total > 10)]'
-
-        # Get total event count
-        mp inspect breakdown -t events --jq '.total_events'
-
-        # Get event with most unique users
-        mp inspect breakdown -t events --jq '.events | max_by(.unique_users)'
+        --jq '.events | sort_by(.count) | reverse | [.[].event_name]'    # Event names sorted by count
+        --jq '.events | [.[] | select(.pct_of_total > 10)]'              # Events with more than 10%
+        --jq '.total_events'                                              # Get total event count
+        --jq '.events | max_by(.unique_users)'                            # Event with most unique users
     """
     workspace = get_workspace(ctx, read_only=True)
     result = workspace.event_breakdown(table)
@@ -1113,19 +1004,12 @@ def inspect_keys(
         mp inspect keys -t events -e "Purchase"
         mp inspect keys -t events --format table
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get first 10 keys
-        mp inspect keys -t events --jq '.[0:10]'
-
-        # Count total property keys
-        mp inspect keys -t events --jq 'length'
-
-        # Find keys containing "utm"
-        mp inspect keys -t events --jq '[.[] | select(contains("utm"))]'
-
-        # Sort keys alphabetically
-        mp inspect keys -t events --jq 'sort'
+        --jq '.[0:10]'                            # Get first 10 keys
+        --jq 'length'                             # Count total property keys
+        --jq '[.[] | select(contains("utm"))]'    # Find keys containing "utm"
+        --jq 'sort'                               # Sort keys alphabetically
     """
     workspace = get_workspace(ctx, read_only=True)
     keys = workspace.property_keys(table, event=event)
@@ -1181,19 +1065,12 @@ def inspect_column(
         mp inspect column -t events -c "properties->>'$.country'"
         mp inspect column -t events -c distinct_id --top 20
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get top values only
-        mp inspect column -t events -c event_name --jq '.top_values'
-
-        # Get null percentage
-        mp inspect column -t events -c event_name --jq '.null_pct'
-
-        # Get unique count
-        mp inspect column -t events -c event_name --jq '.unique_count'
-
-        # Get top value names only
-        mp inspect column -t events -c event_name --jq '.top_values | [.[0]]'
+        --jq '.top_values'               # Get top values only
+        --jq '.null_pct'                 # Get null percentage
+        --jq '.unique_count'             # Get unique count
+        --jq '.top_values | map(.[0])'   # Get top value names only
     """
     workspace = get_workspace(ctx, read_only=True)
     result = workspace.column_stats(table, column, top_n=top)
@@ -1258,19 +1135,12 @@ def inspect_distribution(
         mp inspect distribution -e Purchase -p country --from 2024-01-01 --to 2024-01-31
         mp inspect distribution -e Signup -p referrer --from 2024-01-01 --to 2024-01-31 --limit 10
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get values only
-        mp inspect distribution -e Purchase -p country --from 2024-01-01 --to 2024-01-31 --jq '.values | [.[].value]'
-
-        # Get values with more than 10%
-        mp inspect distribution -e Purchase -p country --from 2024-01-01 --to 2024-01-31 --jq '.values | [.[] | select(.percentage > 10)]'
-
-        # Get total count
-        mp inspect distribution -e Purchase -p country --from 2024-01-01 --to 2024-01-31 --jq '.total_count'
-
-        # Get top value
-        mp inspect distribution -e Purchase -p country --from 2024-01-01 --to 2024-01-31 --jq '.values[0]'
+        --jq '.values | [.[].value]'                          # Get values only
+        --jq '.values | [.[] | select(.percentage > 10)]'     # Values with more than 10%
+        --jq '.total_count'                                   # Get total count
+        --jq '.values[0]'                                     # Get top value
     """
     workspace = get_workspace(ctx, read_only=True)
     with status_spinner(ctx, "Analyzing property distribution..."):
@@ -1339,19 +1209,12 @@ def inspect_numeric(
         mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31
         mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31 --percentiles 10,50,90
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get average value
-        mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31 --jq '.avg'
-
-        # Get median (50th percentile)
-        mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31 --jq '.percentiles["50"]'
-
-        # Get min and max
-        mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31 --jq '{min, max}'
-
-        # Get all percentiles
-        mp inspect numeric -e Purchase -p amount --from 2024-01-01 --to 2024-01-31 --jq '.percentiles'
+        --jq '.avg'               # Get average value
+        --jq '.percentiles["50"]' # Get median (50th percentile)
+        --jq '{min, max}'         # Get min and max
+        --jq '.percentiles'       # Get all percentiles
     """
     # Parse percentiles if provided
     percentile_list: list[int] | None = None
@@ -1415,19 +1278,12 @@ def inspect_daily(
         mp inspect daily --from 2024-01-01 --to 2024-01-07
         mp inspect daily --from 2024-01-01 --to 2024-01-07 -e Purchase,Signup
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get total count for a specific event
-        mp inspect daily --from 2024-01-01 --to 2024-01-07 --jq '.counts | [.[] | select(.event == "Purchase")] | map(.count) | add'
-
-        # Get counts for a specific date
-        mp inspect daily --from 2024-01-01 --to 2024-01-07 --jq '.counts | [.[] | select(.date == "2024-01-01")]'
-
-        # Get all dates
-        mp inspect daily --from 2024-01-01 --to 2024-01-07 --jq '.counts | [.[].date] | unique'
-
-        # Get daily totals (sum across all events)
-        mp inspect daily --from 2024-01-01 --to 2024-01-07 --jq '.counts | group_by(.date) | [.[] | {date: .[0].date, total: map(.count) | add}]'
+        --jq '.counts | [.[] | select(.event == "Purchase")] | map(.count) | add'              # Total for one event
+        --jq '.counts | [.[] | select(.date == "2024-01-01")]'                                 # Counts for specific date
+        --jq '.counts | [.[].date] | unique'                                                   # Get all dates
+        --jq '.counts | group_by(.date) | [.[] | {date: .[0].date, total: map(.count) | add}]' # Daily totals
     """
     # Parse events if provided
     event_list: list[str] | None = None
@@ -1497,19 +1353,12 @@ def inspect_engagement(
         mp inspect engagement --from 2024-01-01 --to 2024-01-31 -e Purchase
         mp inspect engagement --from 2024-01-01 --to 2024-01-31 --buckets 1,5,10,50,100
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get total users
-        mp inspect engagement --from 2024-01-01 --to 2024-01-31 --jq '.total_users'
-
-        # Get power users (high engagement buckets)
-        mp inspect engagement --from 2024-01-01 --to 2024-01-31 --jq '.buckets | [.[] | select(.bucket_min >= 10)]'
-
-        # Get percentage of single-event users
-        mp inspect engagement --from 2024-01-01 --to 2024-01-31 --jq '.buckets | .[] | select(.bucket_min == 1) | .percentage'
-
-        # Get bucket labels only
-        mp inspect engagement --from 2024-01-01 --to 2024-01-31 --jq '.buckets | [.[].bucket_label]'
+        --jq '.total_users'                                               # Get total users
+        --jq '.buckets | [.[] | select(.bucket_min >= 10)]'               # Power users (high engagement)
+        --jq '.buckets | .[] | select(.bucket_min == 1) | .percentage'    # Single-event user percentage
+        --jq '.buckets | [.[].bucket_label]'                              # Get bucket labels only
     """
     # Parse events if provided
     event_list: list[str] | None = None
@@ -1580,19 +1429,12 @@ def inspect_coverage(
 
         mp inspect coverage -e Purchase -p coupon_code,referrer --from 2024-01-01 --to 2024-01-31
 
-    jq Examples:
+    **jq Examples:**
 
-        # Get properties with low coverage
-        mp inspect coverage -e Purchase -p amount,coupon_code,referrer --from 2024-01-01 --to 2024-01-31 --jq '.coverage | [.[] | select(.coverage_percentage < 50)]'
-
-        # Get fully covered properties
-        mp inspect coverage -e Purchase -p amount,coupon_code,referrer --from 2024-01-01 --to 2024-01-31 --jq '.coverage | [.[] | select(.coverage_percentage == 100)]'
-
-        # Get property names only
-        mp inspect coverage -e Purchase -p amount,coupon_code,referrer --from 2024-01-01 --to 2024-01-31 --jq '.coverage | [.[].property]'
-
-        # Sort by coverage percentage
-        mp inspect coverage -e Purchase -p amount,coupon_code,referrer --from 2024-01-01 --to 2024-01-31 --jq '.coverage | sort_by(.coverage_percentage)'
+        --jq '.coverage | [.[] | select(.coverage_percentage < 50)]'     # Properties with low coverage
+        --jq '.coverage | [.[] | select(.coverage_percentage == 100)]'   # Fully covered properties
+        --jq '.coverage | [.[].property]'                                # Get property names only
+        --jq '.coverage | sort_by(.coverage_percentage)'                 # Sort by coverage percentage
     """
     # Parse properties
     property_list = [p.strip() for p in properties.split(",")]
