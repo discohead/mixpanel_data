@@ -1075,3 +1075,32 @@ class TestFetchEventsParallel:
             )
 
         assert result.exit_code != 0
+
+    def test_limit_with_parallel_rejected(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that --limit is rejected when combined with --parallel."""
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "fetch",
+                    "events",
+                    "--from",
+                    "2024-01-01",
+                    "--to",
+                    "2024-01-31",
+                    "--parallel",
+                    "--limit",
+                    "100",
+                    "--format",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 3
+        # Error message is written to stderr via err_console
+        assert "--limit is not supported with --parallel" in result.output

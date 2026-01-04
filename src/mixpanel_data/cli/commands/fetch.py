@@ -202,6 +202,14 @@ def fetch_events(
         err_console.print("[red]Error:[/red] --raw requires --stdout")
         raise typer.Exit(3)
 
+    # Validate --limit not with --parallel (limit not supported in parallel mode)
+    if limit and parallel:
+        err_console.print(
+            "[red]Error:[/red] --limit is not supported with --parallel. "
+            "Use one or the other."
+        )
+        raise typer.Exit(3)
+
     # Parse events filter
     events_list = [e.strip() for e in events.split(",")] if events else None
 
