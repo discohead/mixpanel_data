@@ -12,10 +12,10 @@ Feature 017 implemented parallel event fetching to achieve up to 10x speedup for
 |-----------|---------|----------|
 | `ParallelFetcherService` | Orchestrates parallel API fetches with single-writer DuckDB | `_internal/services/parallel_fetcher.py` |
 | `RateLimiter` | Semaphore-based concurrency control | `_internal/rate_limiter.py` |
-| `split_date_range()` | Chunks date ranges into 7-day segments | `_internal/date_utils.py` |
+| `split_date_range()` | Chunks date ranges into configurable segments | `_internal/date_utils.py` |
 | `BatchProgress` | Progress callback data structure | `types.py` |
 | `ParallelFetchResult` | Aggregated result with failure tracking | `types.py` |
-| CLI flags | `--parallel/-p`, `--workers` | `cli/commands/fetch.py` |
+| CLI flags | `--parallel/-p`, `--workers`, `--chunk-days` | `cli/commands/fetch.py` |
 
 ### Architecture Pattern: Producer-Consumer
 
@@ -51,14 +51,18 @@ This pattern was chosen because:
 
 ### Events: Date-Based Chunking ✅ (Implemented)
 
-Events have natural date boundaries:
+Events have natural date boundaries with **configurable chunk size** (1-100 days):
 ```python
-# Events are partitioned by date range
+# Events are partitioned by date range (default: 7 days, configurable via --chunk-days)
 chunks = split_date_range("2024-01-01", "2024-03-31", chunk_days=7)
 # Returns: [("2024-01-01", "2024-01-07"), ("2024-01-08", "2024-01-14"), ...]
+
+# For high-volume data, smaller chunks may improve parallelism:
+chunks = split_date_range("2024-01-01", "2024-03-31", chunk_days=1)
+# Returns: [("2024-01-01", "2024-01-01"), ("2024-01-02", "2024-01-02"), ...]
 ```
 
-Each chunk is an independent API call with distinct date parameters.
+Each chunk is an independent API call with distinct date parameters. The `--chunk-days` CLI option (default: 7, valid: 1-100) allows tuning based on data volume.
 
 ### Profiles: Page-Index Parallelism ✅ (RECOMMENDED APPROACH)
 
@@ -198,8 +202,9 @@ def fetch_profiles_parallel(
 | `BatchProgress` | Fields are generic (batch_index, rows, success, error) |
 | `ParallelFetchResult` | Structure works for any parallel operation |
 | Producer-consumer pattern | DuckDB constraint applies equally |
-| CLI integration pattern | `--parallel`, `--workers` flags |
+| CLI integration pattern | `--parallel`, `--workers`, `--chunk-days` flags |
 | Error handling approach | Continue on failure, track failed ranges |
+| Parameter threading pattern | Layer-by-layer with defaults for backward compatibility |
 
 ### Must Adapt or Replace
 
@@ -293,6 +298,33 @@ except Exception as e:
         on_batch_complete(BatchProgress(..., success=False, error=str(e)))
 ```
 
+### 6. Parameter Threading Through Layers (TDD Pattern)
+
+**Problem**: Adding `--chunk-days` required threading through 4 layers
+
+**Solution**: TDD with clear layer-by-layer test coverage
+
+```
+CLI (--chunk-days N)
+    → Workspace.fetch_events(chunk_days=N)
+        → FetcherService.fetch_events(chunk_days=N)
+            → ParallelFetcherService.fetch_events(chunk_days=N)
+                → split_date_range(chunk_days=N)
+```
+
+**TDD Approach**:
+1. Write unit tests for each layer FIRST (bottom-up)
+2. Implement each layer to make tests pass
+3. Validate with integration tests at CLI level
+
+**Key Pattern**: Default values at each layer maintain backward compatibility:
+```python
+# Each layer has default chunk_days=7
+def fetch_events(self, ..., chunk_days: int = 7) -> ...:
+```
+
+This ensures existing code without `chunk_days` continues to work unchanged.
+
 ---
 
 ## Recommended Task Structure for Profile Parallelization
@@ -339,23 +371,31 @@ Based on this implementation, here's a suggested task breakdown:
 
 | Category | Tests Added | Coverage |
 |----------|-------------|----------|
-| Unit tests (parallel_fetcher) | 25 | 97% |
+| Unit tests (parallel_fetcher) | 30 | 97% |
+| Unit tests (fetcher_service) | 4 | 95% |
+| Unit tests (workspace) | 4 | 94% |
 | Integration tests (parallel_fetcher) | 8 | 100% |
-| CLI tests (fetch commands) | 15 | 88% |
+| CLI tests (fetch commands) | 19 | 90% |
 | Property-based tests | 4 | N/A |
-| **Overall new code** | **52** | **93.61%** |
+| **Overall new code** | **69** | **93.61%** |
+
+*Note: Tests include chunk_days parameter coverage across all layers (TDD implementation).*
 
 ---
 
 ## Performance Benchmarks
 
-| Scenario | Sequential | Parallel (10 workers) | Speedup |
-|----------|------------|----------------------|---------|
+| Scenario | Sequential | Parallel (10 workers, 7-day chunks) | Speedup |
+|----------|------------|-------------------------------------|---------|
 | 7 days | ~5s | ~5s | 1x (no benefit) |
 | 30 days | ~20s | ~5s | 4x |
 | 90 days | ~60s | ~8s | 7.5x |
 
-**Key Insight**: Parallelism only helps for date ranges > chunk_days (7 days).
+**Key Insights**:
+- Parallelism only helps for date ranges > chunk_days
+- Default chunk_days=7 is optimal for most use cases
+- For very high-volume data, smaller chunks (e.g., `--chunk-days 1`) may improve throughput
+- For sparse data, larger chunks (e.g., `--chunk-days 30`) reduce API overhead
 
 ---
 
@@ -365,24 +405,26 @@ Based on this implementation, here's a suggested task breakdown:
 src/mixpanel_data/
 ├── __init__.py                    # Export new types
 ├── types.py                       # BatchProgress, ParallelFetchResult
-├── workspace.py                   # parallel, max_workers, on_batch_complete params
+├── workspace.py                   # parallel, max_workers, on_batch_complete, chunk_days params
 ├── _internal/
 │   ├── date_utils.py              # split_date_range (events only)
 │   ├── rate_limiter.py            # RateLimiter (reusable)
 │   └── services/
-│       ├── fetcher.py             # Delegation to parallel fetcher
-│       └── parallel_fetcher.py    # Core parallel implementation
+│       ├── fetcher.py             # Delegation to parallel fetcher, chunk_days forwarding
+│       └── parallel_fetcher.py    # Core parallel implementation, chunk_days param
 └── cli/commands/
-    └── fetch.py                   # --parallel, --workers, progress callback
+    └── fetch.py                   # --parallel, --workers, --chunk-days, progress callback
 
 tests/
 ├── unit/
-│   ├── test_parallel_fetcher.py   # 25 tests
+│   ├── test_parallel_fetcher.py   # 30 tests (includes chunk_days tests)
+│   ├── test_fetcher_service.py    # +4 chunk_days tests
+│   ├── test_workspace.py          # +4 chunk_days validation tests
 │   ├── test_rate_limiter.py       # 8 tests
 │   └── test_date_utils.py         # 12 tests
 └── integration/
     ├── test_parallel_fetcher.py   # 8 tests
-    └── cli/test_fetch_commands.py # 15 new tests
+    └── cli/test_fetch_commands.py # 19 tests (includes chunk_days CLI tests)
 ```
 
 ---
