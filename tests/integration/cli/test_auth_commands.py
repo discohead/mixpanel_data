@@ -80,6 +80,21 @@ class TestAuthShow:
         data = json.loads(result.stdout)
         assert data["name"] == "production"
 
+    def test_show_account_no_default(self, cli_runner: CliRunner) -> None:
+        """Test error when no default account is configured."""
+        mock_config = MagicMock()
+        # Return accounts but none is default
+        mock_config.list_accounts.return_value = []
+
+        with patch(
+            "mixpanel_data.cli.commands.auth.get_config",
+            return_value=mock_config,
+        ):
+            result = cli_runner.invoke(app, ["auth", "show"])
+
+        assert result.exit_code == 1
+        assert "No default account" in result.stderr
+
 
 class TestAuthAdd:
     """Tests for mp auth add command."""
@@ -217,6 +232,101 @@ class TestAuthAdd:
             "requires piped input" in result.stderr or "stdin" in result.stderr.lower()
         )
 
+    def test_add_account_missing_project(
+        self,
+        cli_runner: CliRunner,
+        mock_config_manager: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test error when --project is missing."""
+        monkeypatch.setenv("MP_SECRET", "test_secret")
+
+        with patch(
+            "mixpanel_data.cli.commands.auth.get_config",
+            return_value=mock_config_manager,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "auth",
+                    "add",
+                    "test_account",
+                    "--username",
+                    "test@example.com",
+                    # No --project
+                ],
+            )
+
+        assert result.exit_code == 3
+        assert "--project is required" in result.stderr
+
+    def test_add_account_invalid_region(
+        self,
+        cli_runner: CliRunner,
+        mock_config_manager: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test error when region is invalid."""
+        monkeypatch.setenv("MP_SECRET", "test_secret")
+
+        with patch(
+            "mixpanel_data.cli.commands.auth.get_config",
+            return_value=mock_config_manager,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "auth",
+                    "add",
+                    "test_account",
+                    "--username",
+                    "test@example.com",
+                    "--project",
+                    "12345",
+                    "--region",
+                    "invalid",
+                ],
+            )
+
+        assert result.exit_code == 3
+        assert "Invalid region" in result.stderr
+        assert "invalid" in result.stderr
+
+    def test_add_account_with_default_flag(
+        self,
+        cli_runner: CliRunner,
+        mock_config_manager: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test adding account with --default flag."""
+        monkeypatch.setenv("MP_SECRET", "test_secret")
+
+        with patch(
+            "mixpanel_data.cli.commands.auth.get_config",
+            return_value=mock_config_manager,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "auth",
+                    "add",
+                    "test_account",
+                    "--username",
+                    "test@example.com",
+                    "--project",
+                    "12345",
+                    "--region",
+                    "us",
+                    "--default",
+                ],
+            )
+
+        assert result.exit_code == 0
+        mock_config_manager.add_account.assert_called_once()
+        mock_config_manager.set_default.assert_called_once_with("test_account")
+        data = json.loads(result.stdout)
+        assert data["is_default"] is True
+
 
 class TestAuthRemove:
     """Tests for mp auth remove command."""
@@ -233,6 +343,24 @@ class TestAuthRemove:
 
         assert result.exit_code == 0
         mock_config_manager.remove_account.assert_called_once_with("production")
+
+    def test_remove_account_confirmation_decline(
+        self, cli_runner: CliRunner, mock_config_manager: MagicMock
+    ) -> None:
+        """Test that declining confirmation cancels removal."""
+        with patch(
+            "mixpanel_data.cli.commands.auth.get_config",
+            return_value=mock_config_manager,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["auth", "remove", "production"],
+                input="n\n",  # Decline confirmation
+            )
+
+        assert result.exit_code == 2  # Cancelled
+        assert "Cancelled" in result.stderr or "cancelled" in result.stderr.lower()
+        mock_config_manager.remove_account.assert_not_called()
 
 
 class TestAuthSwitch:

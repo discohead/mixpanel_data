@@ -123,9 +123,18 @@ def fetch_events(
     Use --stdout to stream JSONL to stdout instead of storing locally.
     Use --raw with --stdout to output raw Mixpanel API format.
 
-    Output shows table name, row count, duration, and date range.
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "table": "events",
+          "rows": 15234,
+          "type": "events",
+          "duration_seconds": 12.5,
+          "date_range": ["2025-01-01", "2025-01-31"],
+          "fetched_at": "2025-01-15T10:30:00Z"
+        }
+
+    **Examples:**
 
         mp fetch events --from 2025-01-01 --to 2025-01-31
         mp fetch events signups --from 2025-01-01 --to 2025-01-31 --events "Sign Up"
@@ -135,6 +144,12 @@ def fetch_events(
         mp fetch events --from 2025-01-01 --to 2025-01-31 --append
         mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout
         mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout --raw | jq '.event'
+
+    **jq Examples:**
+
+        --jq '.rows'                         # Number of events fetched
+        --jq '.duration_seconds | round'     # Fetch duration in seconds
+        --jq '.date_range'                   # Date range fetched
     """
     # Validate required options
     if not from_date:
@@ -279,9 +294,18 @@ def fetch_profiles(
     Use --stdout to stream JSONL to stdout instead of storing locally.
     Use --raw with --stdout to output raw Mixpanel API format.
 
-    Output shows table name, row count, and fetch duration.
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "table": "profiles",
+          "rows": 5000,
+          "type": "profiles",
+          "duration_seconds": 8.2,
+          "date_range": null,
+          "fetched_at": "2025-01-15T10:30:00Z"
+        }
+
+    **Examples:**
 
         mp fetch profiles
         mp fetch profiles users --replace
@@ -291,6 +315,12 @@ def fetch_profiles(
         mp fetch profiles --output-properties '$email,$name,plan'
         mp fetch profiles --stdout
         mp fetch profiles --stdout --raw
+
+    **jq Examples:**
+
+        --jq '.rows'                         # Number of profiles fetched
+        --jq '.table'                        # Table name created
+        --jq '.duration_seconds | round'     # Fetch duration in seconds
     """
     # Validate mutually exclusive options
     if replace and append:

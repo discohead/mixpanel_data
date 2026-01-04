@@ -79,15 +79,32 @@ def query_sql(
     Query can be provided as an argument or read from a file with --file.
     Use --scalar when your query returns a single value (e.g., COUNT(*)).
 
-    Results are returned as a list of row objects by default. With --scalar,
-    returns a single value wrapped in {"value": result} for JSON output,
-    or just the raw value for plain output.
+    **Output Structure (JSON):**
 
-    Examples:
+    Default (row results):
+
+        [
+          {"event": "Sign Up", "count": 1500},
+          {"event": "Login", "count": 3200},
+          {"event": "Purchase", "count": 450}
+        ]
+
+    With --scalar:
+
+        {"value": 15234}
+
+    **Examples:**
 
         mp query sql "SELECT COUNT(*) FROM events" --scalar
         mp query sql "SELECT event, COUNT(*) FROM events GROUP BY 1" --format table
         mp query sql --file analysis.sql --format csv
+
+    **jq Examples:**
+
+        --jq '.[0]'                      # First row
+        --jq '.[] | .event'              # All event names
+        --jq 'map(select(.count > 100))' # Filter rows
+        --jq '.value'                    # Scalar result value
     """
     # Get query from argument or file
     if query is None and file is None:
@@ -167,14 +184,32 @@ def query_segmentation(
     The --on parameter accepts bare property names (e.g., 'country') or full
     filter expressions (e.g., 'properties["country"] == "US"').
 
-    Output includes event name, date range, total count, time unit, and
-    a series dict mapping dates to counts (or segments to date/count dicts).
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "event": "Sign Up",
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-07",
+          "unit": "day",
+          "segment_property": "country",
+          "total": 1850,
+          "series": {
+            "US": {"2025-01-01": 150, "2025-01-02": 175, ...},
+            "UK": {"2025-01-01": 75, "2025-01-02": 80, ...}
+          }
+        }
+
+    **Examples:**
 
         mp query segmentation -e "Sign Up" --from 2025-01-01 --to 2025-01-31
         mp query segmentation -e "Purchase" --from 2025-01-01 --to 2025-01-31 --on country
         mp query segmentation -e "Login" --from 2025-01-01 --to 2025-01-07 --unit week
+
+    **jq Examples:**
+
+        --jq '.total'                    # Total event count
+        --jq '.series | keys'            # List segment names
+        --jq '.series["US"] | add'       # Sum counts for one segment
     """
     validated_unit = validate_time_unit(unit)
     workspace = get_workspace(ctx, read_only=True)
@@ -224,14 +259,34 @@ def query_funnel(
     Analyzes conversion through a saved funnel's steps. The funnel_id can be
     found in the Mixpanel UI URL when viewing the funnel, or via 'mp inspect funnels'.
 
-    Output includes funnel_id, date range, and steps array with each step's
-    event name, count, and conversion_rate (percentage who completed this step).
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "funnel_id": 12345,
+          "funnel_name": "Onboarding Funnel",
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-31",
+          "conversion_rate": 0.23,
+          "steps": [
+            {"event": "Sign Up", "count": 10000, "conversion_rate": 1.0},
+            {"event": "Verify Email", "count": 7500, "conversion_rate": 0.75},
+            {"event": "Complete Profile", "count": 4200, "conversion_rate": 0.56},
+            {"event": "First Purchase", "count": 2300, "conversion_rate": 0.55}
+          ]
+        }
+
+    **Examples:**
 
         mp query funnel 12345 --from 2025-01-01 --to 2025-01-31
         mp query funnel 12345 --from 2025-01-01 --to 2025-01-31 --unit week
         mp query funnel 12345 --from 2025-01-01 --to 2025-01-31 --on country
+
+    **jq Examples:**
+
+        --jq '.conversion_rate'              # Overall conversion rate
+        --jq '.steps | length'               # Number of funnel steps
+        --jq '.steps[-1].count'              # Users completing the funnel
+        --jq '.steps[] | {event, rate: .conversion_rate}'
     """
     workspace = get_workspace(ctx, read_only=True)
 
@@ -302,14 +357,32 @@ def query_retention(
     the retention window (e.g., --unit day --interval 1 --intervals 7
     tracks daily retention for 7 days).
 
-    Output includes cohorts array with each cohort's date, user count,
-    and retention percentages for each interval.
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "born_event": "Sign Up",
+          "return_event": "Login",
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-31",
+          "unit": "day",
+          "cohorts": [
+            {"date": "2025-01-01", "size": 500, "retention": [1.0, 0.65, 0.45, 0.38]},
+            {"date": "2025-01-02", "size": 480, "retention": [1.0, 0.62, 0.41, 0.35]},
+            {"date": "2025-01-03", "size": 520, "retention": [1.0, 0.68, 0.48, 0.40]}
+          ]
+        }
+
+    **Examples:**
 
         mp query retention --born "Sign Up" --return "Login" --from 2025-01-01 --to 2025-01-31
         mp query retention --born "Sign Up" --return "Purchase" --from 2025-01-01 --to 2025-01-31 --unit week
         mp query retention --born "Sign Up" --return "Login" --from 2025-01-01 --to 2025-01-31 --intervals 7
+
+    **jq Examples:**
+
+        --jq '.cohorts | length'                   # Number of cohorts
+        --jq '.cohorts[0].retention'               # First cohort retention curve
+        --jq '.cohorts[] | {date, size, day7: .retention[7]}'
     """
     validated_unit = validate_time_unit(unit)
     workspace = get_workspace(ctx, read_only=True)
@@ -358,11 +431,39 @@ def query_jql(
     Script can be provided as a file argument or inline with --script.
     Parameters can be passed with --param key=value (repeatable).
 
-    Examples:
+    **Output Structure (JSON):**
+
+    The output structure depends on your JQL script. Common patterns:
+
+    groupBy result:
+
+        {
+          "raw": [
+            {"key": ["Login"], "value": 5234},
+            {"key": ["Sign Up"], "value": 1892}
+          ],
+          "row_count": 2
+        }
+
+    Aggregation result:
+
+        {
+          "raw": [{"count": 15234, "unique_users": 3421}],
+          "row_count": 1
+        }
+
+    **Examples:**
 
         mp query jql analysis.js
         mp query jql --script "function main() { return Events({...}).groupBy(['event'], mixpanel.reducer.count()) }"
         mp query jql analysis.js --param start_date=2025-01-01 --param event_name=Login
+
+    **jq Examples:**
+
+        --jq '.raw'                          # Get raw result array
+        --jq '.raw[0]'                       # First result row
+        --jq '.raw[] | {event: .key[0], count: .value}'
+        --jq '.row_count'                    # Number of result rows
     """
     # Get script from file or inline
     if file is not None:
@@ -435,14 +536,33 @@ def query_event_counts(
     - unique: Unique users who triggered the event
     - average: Average events per user
 
-    Output includes events list, date range, and series dict mapping
-    each event name to its date/count series.
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "events": ["Sign Up", "Login", "Purchase"],
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-07",
+          "unit": "day",
+          "type": "general",
+          "series": {
+            "Sign Up": {"2025-01-01": 150, "2025-01-02": 175, ...},
+            "Login": {"2025-01-01": 520, "2025-01-02": 610, ...},
+            "Purchase": {"2025-01-01": 45, "2025-01-02": 52, ...}
+          }
+        }
+
+    **Examples:**
 
         mp query event-counts --events "Sign Up,Login,Purchase" --from 2025-01-01 --to 2025-01-31
         mp query event-counts --events "Sign Up,Purchase" --from 2025-01-01 --to 2025-01-31 --type unique
         mp query event-counts --events "Login" --from 2025-01-01 --to 2025-01-31 --unit week
+
+    **jq Examples:**
+
+        --jq '.series | keys'                # List event names
+        --jq '.series["Login"] | add'        # Sum counts for one event
+        --jq '.series["Login"]["2025-01-01"]'  # Count for specific date
+        --jq '[.series | to_entries[] | {event: .key, total: (.value | add)}]'
     """
     validated_type = validate_count_type(type_)
     validated_unit = validate_time_unit(unit)
@@ -512,14 +632,34 @@ def query_property_counts(
     The --limit option controls how many property values to return
     (default 10, ordered by count descending).
 
-    Output includes event, property name, date range, and series dict
-    mapping each property value to its date/count series.
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "event": "Purchase",
+          "property_name": "country",
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-07",
+          "unit": "day",
+          "type": "general",
+          "series": {
+            "US": {"2025-01-01": 150, "2025-01-02": 175, ...},
+            "UK": {"2025-01-01": 75, "2025-01-02": 80, ...},
+            "DE": {"2025-01-01": 45, "2025-01-02": 52, ...}
+          }
+        }
+
+    **Examples:**
 
         mp query property-counts -e "Purchase" -p country --from 2025-01-01 --to 2025-01-31
         mp query property-counts -e "Sign Up" -p "utm_source" --from 2025-01-01 --to 2025-01-31 --limit 20
         mp query property-counts -e "Login" -p browser --from 2025-01-01 --to 2025-01-31 --type unique
+
+    **jq Examples:**
+
+        --jq '.series | keys'                # List property values
+        --jq '.series["US"] | add'           # Sum counts for one value
+        --jq '.series | to_entries | sort_by(.value | add) | reverse'
+        --jq '[.series | to_entries[] | {value: .key, total: (.value | add)}]'
     """
     validated_type = validate_count_type(type_)
     validated_unit = validate_time_unit(unit)
@@ -566,14 +706,39 @@ def query_activity_feed(
     Optionally filter by date range with --from and --to. Without date
     filters, returns recent activity (API default).
 
-    Output includes distinct_ids queried, optional date range, and events
-    array with each event's name, timestamp, and properties.
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "distinct_ids": ["user123", "user456"],
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-31",
+          "event_count": 47,
+          "events": [
+            {
+              "event": "Login",
+              "time": "2025-01-15T10:30:00+00:00",
+              "properties": {"$browser": "Chrome", "$city": "San Francisco", ...}
+            },
+            {
+              "event": "Purchase",
+              "time": "2025-01-15T11:45:00+00:00",
+              "properties": {"product_id": "SKU123", "amount": 99.99, ...}
+            }
+          ]
+        }
+
+    **Examples:**
 
         mp query activity-feed --users "user123"
         mp query activity-feed --users "user123,user456" --from 2025-01-01 --to 2025-01-31
         mp query activity-feed --users "user123" --format table
+
+    **jq Examples:**
+
+        --jq '.event_count'                  # Total number of events
+        --jq '.events | length'              # Same as above
+        --jq '.events[].event'               # List all event names
+        --jq '.events | group_by(.event) | map({event: .[0].event, count: length})'
     """
     # Parse users
     user_list = [u.strip() for u in users.split(",")]
@@ -608,13 +773,38 @@ def query_saved_report(
     after /insights/, /retention/, or /funnels/).
 
     The report type is automatically detected from the response headers.
-    Output includes bookmark_id, computed_at timestamp, date_range, headers
-    (column names), series data, and report_type.
 
-    Examples:
+    **Output Structure (JSON):**
+
+    Insights report:
+
+        {
+          "bookmark_id": 12345,
+          "computed_at": "2025-01-15T10:30:00Z",
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-31",
+          "headers": ["$event"],
+          "series": {
+            "Sign Up": {"2025-01-01": 150, "2025-01-02": 175, ...},
+            "Login": {"2025-01-01": 520, "2025-01-02": 610, ...}
+          },
+          "report_type": "insights"
+        }
+
+    Funnel/Retention reports have different series structures based on
+    the saved report configuration.
+
+    **Examples:**
 
         mp query saved-report 12345
         mp query saved-report 12345 --format table
+
+    **jq Examples:**
+
+        --jq '.report_type'                  # Report type (insights/retention/funnel)
+        --jq '.series | keys'                # List series names
+        --jq '.headers'                      # Report column headers
+        --jq '.series | to_entries | map({name: .key, total: (.value | add)})'
     """
     workspace = get_workspace(ctx, read_only=True)
 
@@ -644,10 +834,35 @@ def query_flows(
     Flows reports show user paths through a sequence of events with
     step-by-step conversion rates and path breakdowns.
 
-    Examples:
+    **Output Structure (JSON):**
+
+        {
+          "bookmark_id": 12345,
+          "computed_at": "2025-01-15T10:30:00Z",
+          "steps": [
+            {"step": 1, "event": "Sign Up", "count": 10000},
+            {"step": 2, "event": "Verify Email", "count": 7500},
+            {"step": 3, "event": "Complete Profile", "count": 4200}
+          ],
+          "breakdowns": [
+            {"path": ["Sign Up", "Verify Email", "Complete Profile"], "count": 3800},
+            {"path": ["Sign Up", "Verify Email", "Drop Off"], "count": 3300}
+          ],
+          "overall_conversion_rate": 0.42,
+          "metadata": {...}
+        }
+
+    **Examples:**
 
         mp query flows 12345
         mp query flows 12345 --format table
+
+    **jq Examples:**
+
+        --jq '.overall_conversion_rate'      # End-to-end conversion rate
+        --jq '.steps | length'               # Number of flow steps
+        --jq '.steps[] | {event, count}'     # Event and count per step
+        --jq '.breakdowns | sort_by(.count) | reverse | .[0]'
     """
     workspace = get_workspace(ctx, read_only=True)
 
@@ -697,14 +912,35 @@ def query_frequency(
     For example, with --addiction-unit hour, the data shows how many users
     performed the event 1 time, 2 times, 3 times, etc. per hour.
 
-    Output includes date range, units, and data dict mapping dates to
-    arrays of user counts (index 0 = users who did it once, 1 = twice, etc.).
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "event": "Login",
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-07",
+          "unit": "day",
+          "addiction_unit": "hour",
+          "data": {
+            "2025-01-01": [500, 250, 125, 60, 30, 15],
+            "2025-01-02": [520, 260, 130, 65, 32, 16],
+            ...
+          }
+        }
+
+    Each array shows user counts by frequency (index 0 = 1x, index 1 = 2x, etc.).
+
+    **Examples:**
 
         mp query frequency --from 2025-01-01 --to 2025-01-31
         mp query frequency -e "Login" --from 2025-01-01 --to 2025-01-31
         mp query frequency -e "Login" --from 2025-01-01 --to 2025-01-31 --addiction-unit day
+
+    **jq Examples:**
+
+        --jq '.data | keys'                  # List all dates
+        --jq '.data["2025-01-01"][0]'        # Users who did it once on Jan 1
+        --jq '.data["2025-01-01"] | add'     # Total active users on Jan 1
+        --jq '.data | to_entries | map({date: .key, power_users: .value[4:] | add})'
     """
     validated_unit = validate_time_unit(unit)
     validated_addiction_unit = validate_hour_day_unit(
@@ -777,13 +1013,33 @@ def query_segmentation_numeric(
     - unique: Unique users who triggered the event
     - average: Average events per user
 
-    Output includes event, property, date range, buckets info, and values
-    dict mapping bucket labels to their date/count series.
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "event": "Purchase",
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-07",
+          "property_expr": "amount",
+          "unit": "day",
+          "series": {
+            "0-50": {"2025-01-01": 120, "2025-01-02": 135, ...},
+            "50-100": {"2025-01-01": 85, "2025-01-02": 92, ...},
+            "100-500": {"2025-01-01": 45, "2025-01-02": 52, ...},
+            "500+": {"2025-01-01": 12, "2025-01-02": 15, ...}
+          }
+        }
+
+    **Examples:**
 
         mp query segmentation-numeric -e "Purchase" --on amount --from 2025-01-01 --to 2025-01-31
         mp query segmentation-numeric -e "Purchase" --on amount --from 2025-01-01 --to 2025-01-31 --type unique
+
+    **jq Examples:**
+
+        --jq '.series | keys'                # List bucket ranges
+        --jq '.series["100-500"] | add'      # Sum counts for a bucket
+        --jq '[.series | to_entries[] | {bucket: .key, total: (.value | add)}]'
+        --jq '.series | to_entries | sort_by(.value | add) | reverse'
     """
     validated_type = validate_count_type(type_)
     validated_unit = validate_hour_day_unit(unit)
@@ -846,13 +1102,33 @@ def query_segmentation_sum(
     For example, --event Purchase --on revenue calculates total revenue
     per time period.
 
-    Output includes event, property, date range, and results dict mapping
-    dates to the sum of property values for that period.
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "event": "Purchase",
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-07",
+          "property_expr": "revenue",
+          "unit": "day",
+          "results": {
+            "2025-01-01": 15234.50,
+            "2025-01-02": 18456.75,
+            "2025-01-03": 12890.25,
+            ...
+          }
+        }
+
+    **Examples:**
 
         mp query segmentation-sum -e "Purchase" --on revenue --from 2025-01-01 --to 2025-01-31
         mp query segmentation-sum -e "Purchase" --on quantity --from 2025-01-01 --to 2025-01-31 --unit hour
+
+    **jq Examples:**
+
+        --jq '.results | add'                # Total sum across all dates
+        --jq '.results | to_entries | max_by(.value)'  # Highest day
+        --jq '.results | to_entries | min_by(.value)'  # Lowest day
+        --jq '[.results | to_entries[] | {date: .key, revenue: .value}]'
     """
     validated_unit = validate_hour_day_unit(unit)
     workspace = get_workspace(ctx, read_only=True)
@@ -913,13 +1189,33 @@ def query_segmentation_average(
     For example, --event Purchase --on order_value calculates average order
     value per time period.
 
-    Output includes event, property, date range, and results dict mapping
-    dates to the average property value for that period.
+    **Output Structure (JSON):**
 
-    Examples:
+        {
+          "event": "Purchase",
+          "from_date": "2025-01-01",
+          "to_date": "2025-01-07",
+          "property_expr": "order_value",
+          "unit": "day",
+          "results": {
+            "2025-01-01": 85.50,
+            "2025-01-02": 92.75,
+            "2025-01-03": 78.25,
+            ...
+          }
+        }
+
+    **Examples:**
 
         mp query segmentation-average -e "Purchase" --on order_value --from 2025-01-01 --to 2025-01-31
         mp query segmentation-average -e "Session" --on duration --from 2025-01-01 --to 2025-01-31 --unit hour
+
+    **jq Examples:**
+
+        --jq '.results | add / length'       # Overall average
+        --jq '.results | to_entries | max_by(.value)'  # Highest day
+        --jq '.results | to_entries | min_by(.value)'  # Lowest day
+        --jq '[.results | to_entries[] | {date: .key, avg: .value}]'
     """
     validated_unit = validate_hour_day_unit(unit)
     workspace = get_workspace(ctx, read_only=True)

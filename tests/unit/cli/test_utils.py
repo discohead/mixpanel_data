@@ -23,7 +23,9 @@ from mixpanel_data.exceptions import (
     AuthenticationError,
     ConfigError,
     DatabaseLockedError,
+    DatabaseNotFoundError,
     DateRangeTooLargeError,
+    EventNotFoundError,
     JQLSyntaxError,
     MixpanelDataError,
     QueryError,
@@ -351,6 +353,90 @@ class TestHandleErrors:
         assert "Invalid event name" in captured.err
         # Should show request params
         assert "NonExistent" in captured.err
+
+    def test_rate_limit_error_with_retry_after(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test RateLimitError displays retry_after and endpoint context."""
+
+        @handle_errors
+        def rate_limited() -> None:
+            raise RateLimitError(
+                "Rate limit exceeded",
+                retry_after=60,
+                request_url="https://api.mixpanel.com/query/segmentation?project_id=123",
+            )
+
+        with pytest.raises(click.exceptions.Exit):
+            rate_limited()
+
+        captured = capsys.readouterr()
+        # Should show retry_after
+        assert "60" in captured.err
+        assert "seconds" in captured.err
+        # Should show endpoint
+        assert "segmentation" in captured.err
+
+    def test_query_error_with_403_hint(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test QueryError with 403 status code shows permission hint."""
+
+        @handle_errors
+        def permission_denied() -> None:
+            raise QueryError(
+                "Forbidden",
+                status_code=403,
+                response_body={"error": "Permission denied"},
+            )
+
+        with pytest.raises(click.exceptions.Exit):
+            permission_denied()
+
+        captured = capsys.readouterr()
+        # Should show the permission hint
+        assert "permission" in captured.err.lower()
+        assert "403" in captured.err or "Forbidden" in captured.err
+
+    def test_database_not_found_error(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Test DatabaseNotFoundError displays helpful message."""
+
+        @handle_errors
+        def db_not_found() -> None:
+            raise DatabaseNotFoundError(db_path="/home/user/.mp/mixpanel.db")
+
+        with pytest.raises(click.exceptions.Exit) as exc:
+            db_not_found()
+
+        assert exc.value.exit_code == ExitCode.NOT_FOUND
+        captured = capsys.readouterr()
+        # Should show the db path
+        assert "mixpanel.db" in captured.err
+        # Should suggest fetching data
+        assert "mp fetch" in captured.err
+
+    def test_event_not_found_error_with_suggestions(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test EventNotFoundError displays similar event suggestions."""
+
+        @handle_errors
+        def event_not_found() -> None:
+            raise EventNotFoundError(
+                event_name="Signup",
+                similar_events=["Sign Up", "SignUp Complete", "signup_clicked"],
+            )
+
+        with pytest.raises(click.exceptions.Exit) as exc:
+            event_not_found()
+
+        assert exc.value.exit_code == ExitCode.NOT_FOUND
+        captured = capsys.readouterr()
+        # Should show the event name
+        assert "Signup" in captured.err
+        # Should show suggestions
+        assert "Did you mean" in captured.err
+        assert "Sign Up" in captured.err
 
 
 class TestGetWorkspace:
