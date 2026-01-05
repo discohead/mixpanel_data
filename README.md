@@ -29,12 +29,12 @@ mp --version
 
 ## Quick Start
 
-### 1. Configure Credentials
+### 1. Configure Service Account Credentials
 
 ```bash
 # Interactive prompt (secure, recommended)
 mp auth add production --username sa_xxx --project 12345 --region us
-# You'll be prompted for the secret with hidden input
+# You'll be prompted for the service account secret with hidden input
 
 mp auth test  # Verify connection
 ```
