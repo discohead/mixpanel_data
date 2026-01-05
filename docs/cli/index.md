@@ -90,8 +90,8 @@ Fetch data from Mixpanel into local storage, or stream directly to stdout.
 | `--output-properties` | `-o` | Comma-separated properties to include |
 | `--where` | `-w` | Mixpanel filter expression |
 | `--behaviors` | | Behavioral filter as JSON array (requires --where, mutually exclusive with --cohort) |
-| `--distinct-id` | | Fetch a specific user by distinct_id |
-| `--distinct-ids` | | Fetch specific users (repeatable flag) |
+| `--distinct-id` | | Fetch a specific user by distinct_id (mutually exclusive with --distinct-ids) |
+| `--distinct-ids` | | Fetch specific users (repeatable flag, mutually exclusive with --distinct-id) |
 | `--group-id` | `-g` | Fetch group profiles instead of user profiles |
 | `--as-of-timestamp` | | Query profile state at a specific Unix timestamp |
 | `--include-all-users` | | Include all users and mark cohort membership (requires --cohort) |
@@ -384,6 +384,9 @@ mp fetch profiles --stdout \
 
 # Fetch a specific user profile
 mp fetch profiles --stdout --distinct-id user_123
+
+# Fetch multiple specific user profiles
+mp fetch profiles --stdout --distinct-ids user_123 --distinct-ids user_456
 
 # Fetch group profiles (e.g., companies)
 mp fetch profiles --stdout --group-id companies
