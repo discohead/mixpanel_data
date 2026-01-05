@@ -57,6 +57,7 @@ Fetch data from Mixpanel into local storage, or stream directly to stdout.
 | `--replace` | Drop and recreate existing table |
 | `--append` | Add data to existing table (duplicates skipped) |
 | `--batch-size` | Rows per commit (100-100000, default: 1000) |
+| `--no-progress` | Hide progress bar |
 
 **Streaming Options:**
 
@@ -71,15 +72,29 @@ Fetch data from Mixpanel into local storage, or stream directly to stdout.
 |--------|-------|-------------|
 | `--events` | `-e` | Comma-separated event names to filter |
 | `--where` | `-w` | Mixpanel filter expression |
-| `--limit` | `-l` | Maximum events to return (max 100000) |
+| `--limit` | `-l` | Maximum events to return (max 100000, not compatible with --parallel) |
+
+**Parallel Fetch Options (fetch events only):**
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--parallel` | `-p` | Fetch in parallel using multiple threads (faster for large date ranges) |
+| `--workers` | | Number of parallel workers (default: 10, only with --parallel) |
+| `--chunk-days` | | Days per chunk for parallel fetching (default: 7, only with --parallel) |
 
 **Profile Filter Options (fetch profiles only):**
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--cohort` | `-c` | Filter by cohort ID |
+| `--cohort` | `-c` | Filter by cohort ID (mutually exclusive with --behaviors) |
 | `--output-properties` | `-o` | Comma-separated properties to include |
 | `--where` | `-w` | Mixpanel filter expression |
+| `--behaviors` | | Behavioral filter as JSON array (requires --where, mutually exclusive with --cohort) |
+| `--distinct-id` | | Fetch a specific user by distinct_id (mutually exclusive with --distinct-ids) |
+| `--distinct-ids` | | Fetch specific users (repeatable flag, mutually exclusive with --distinct-id) |
+| `--group-id` | `-g` | Fetch group profiles instead of user profiles |
+| `--as-of-timestamp` | | Query profile state at a specific Unix timestamp |
+| `--include-all-users` | | Include all users and mark cohort membership (requires --cohort) |
 
 ### query — Query Operations
 
@@ -118,6 +133,8 @@ Explore schema and local database.
 | `mp inspect cohorts` | List saved cohorts |
 | `mp inspect bookmarks` | List saved reports (bookmarks) |
 | `mp inspect top-events` | List today's top events |
+| `mp inspect lexicon-schemas` | List Lexicon schemas from data dictionary |
+| `mp inspect lexicon-schema` | Get a single Lexicon schema |
 | `mp inspect info` | Show workspace info |
 | `mp inspect tables` | List local tables |
 | `mp inspect schema` | Show table schema |
@@ -317,6 +334,12 @@ mp fetch events events --from 2025-02-15 --to 2025-02-28 --append
 
 # Replace with fresh data
 mp fetch events events --from 2025-01-01 --to 2025-02-28 --replace
+
+# Parallel fetch for large date ranges (up to 10x faster)
+mp fetch events events --from 2025-01-01 --to 2025-12-31 --parallel
+
+# Parallel fetch with custom settings
+mp fetch events events --from 2025-01-01 --to 2025-12-31 --parallel --workers 20 --chunk-days 3
 ```
 
 ### Piping and Scripting
@@ -353,6 +376,20 @@ mp fetch profiles --stdout --cohort 12345
 
 # Stream specific profile properties only
 mp fetch profiles --stdout --output-properties '$email,$name,plan'
+
+# Stream profiles with behavioral filter (users who purchased in last 30 days)
+mp fetch profiles --stdout \
+    --behaviors '[{"window":"30d","name":"buyers","event_selectors":[{"event":"Purchase"}]}]' \
+    --where '(behaviors["buyers"] > 0)'
+
+# Fetch a specific user profile
+mp fetch profiles --stdout --distinct-id user_123
+
+# Fetch multiple specific user profiles
+mp fetch profiles --stdout --distinct-ids user_123 --distinct-ids user_456
+
+# Fetch group profiles (e.g., companies)
+mp fetch profiles --stdout --group-id companies
 
 # Pipe to jq for filtering
 mp fetch events --from 2025-01-01 --to 2025-01-31 --stdout \
