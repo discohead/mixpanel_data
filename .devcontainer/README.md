@@ -11,7 +11,7 @@ The devcontainer uses Docker volumes for configuration directories to ensure it 
 - **GCloud credentials** (`~/.config/gcloud`): Automatically synced from host if it exists
 - **Mixpanel config** (`~/.mp`): Stored in volume (create with `mp auth add` if needed)
 
-When you rebuild the container, your existing GitHub and GCloud authentication from the host will be automatically available inside the container. No manual steps required!
+When you start or rebuild the container, your existing GitHub and GCloud authentication from the host will be automatically available inside the container. No manual steps required!
 
 ### Manual Authentication (if needed)
 If credentials aren't found on your host, you can authenticate inside the container:

@@ -73,5 +73,5 @@
   },
   "initializeCommand": ["/bin/bash", ".devcontainer/init-host.sh"],
   "postCreateCommand": ".devcontainer/post-create.sh",
-  "postStartCommand": ".devcontainer/post-start.sh && uv sync --all-extras"
+  "postStartCommand": ".devcontainer/post-start.sh; uv sync --all-extras"
 }
