@@ -398,6 +398,173 @@ Filters can be combined for precise data selection:
         --where 'properties["country"] == "US"'
     ```
 
+### Fetching Specific Users by ID
+
+Fetch one or more specific users by their distinct ID:
+
+=== "Python"
+
+    ```python
+    # Single user
+    result = ws.fetch_profiles(
+        name="single_user",
+        distinct_id="user_123"
+    )
+
+    # Multiple specific users
+    result = ws.fetch_profiles(
+        name="specific_users",
+        distinct_ids=["user_1", "user_2", "user_3"]
+    )
+    ```
+
+=== "CLI"
+
+    ```bash
+    # Single user
+    mp fetch profiles single_user --distinct-id user_123
+
+    # Multiple specific users
+    mp fetch profiles specific_users \
+        --distinct-ids user_1 --distinct-ids user_2 --distinct-ids user_3
+    ```
+
+!!! note "Mutually Exclusive"
+    `distinct_id` and `distinct_ids` cannot be used together. Choose one approach based on your needs.
+
+### Fetching Group Profiles
+
+Fetch group profiles (companies, accounts, etc.) instead of user profiles:
+
+=== "Python"
+
+    ```python
+    result = ws.fetch_profiles(
+        name="companies",
+        group_id="companies"  # The group type defined in your Mixpanel project
+    )
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp fetch profiles companies --group-id companies
+    ```
+
+### Behavioral Filtering
+
+Filter profiles by event behavior—users who performed specific actions. Behaviors use a named pattern that you reference in a `where` clause:
+
+=== "Python"
+
+    ```python
+    # Users who purchased in the last 30 days
+    result = ws.fetch_profiles(
+        name="recent_purchasers",
+        behaviors=[{
+            "window": "30d",
+            "name": "made_purchase",
+            "event_selectors": [{"event": "Purchase"}]
+        }],
+        where='(behaviors["made_purchase"] > 0)'
+    )
+
+    # Users with multiple behavior criteria
+    result = ws.fetch_profiles(
+        name="engaged_users",
+        behaviors=[
+            {
+                "window": "30d",
+                "name": "purchased",
+                "event_selectors": [{"event": "Purchase"}]
+            },
+            {
+                "window": "7d",
+                "name": "active",
+                "event_selectors": [{"event": "Page View"}]
+            }
+        ],
+        where='(behaviors["purchased"] > 0) and (behaviors["active"] >= 5)'
+    )
+    ```
+
+=== "CLI"
+
+    ```bash
+    # Users who purchased in the last 30 days
+    mp fetch profiles recent_purchasers \
+        --behaviors '[{"window":"30d","name":"made_purchase","event_selectors":[{"event":"Purchase"}]}]' \
+        --where '(behaviors["made_purchase"] > 0)'
+
+    # Users with multiple behavior criteria
+    mp fetch profiles engaged_users \
+        --behaviors '[{"window":"30d","name":"purchased","event_selectors":[{"event":"Purchase"}]},{"window":"7d","name":"active","event_selectors":[{"event":"Page View"}]}]' \
+        --where '(behaviors["purchased"] > 0) and (behaviors["active"] >= 5)'
+    ```
+
+!!! info "Behavior Format"
+    Each behavior requires:
+
+    - `window`: Time window (e.g., "30d", "7d", "90d")
+    - `name`: Identifier to reference in `where` clause
+    - `event_selectors`: Array of event filters with `{"event": "Event Name"}`
+
+    The `where` clause filters using `behaviors["name"]` to check counts.
+
+!!! warning "Mutually Exclusive"
+    `behaviors` and `cohort_id` cannot be used together. Use one or the other for filtering.
+
+### Historical Profile State
+
+Query profile properties as they existed at a specific point in time:
+
+=== "Python"
+
+    ```python
+    import time
+
+    # Get profiles as of January 1, 2024
+    timestamp = 1704067200  # Unix timestamp
+
+    result = ws.fetch_profiles(
+        name="historical_profiles",
+        as_of_timestamp=timestamp
+    )
+    ```
+
+=== "CLI"
+
+    ```bash
+    # Get profiles as of January 1, 2024 (Unix timestamp)
+    mp fetch profiles historical_profiles --as-of-timestamp 1704067200
+    ```
+
+### Cohort Membership Analysis
+
+Include all users and mark whether they're in a cohort:
+
+=== "Python"
+
+    ```python
+    result = ws.fetch_profiles(
+        name="cohort_analysis",
+        cohort_id="power_users",
+        include_all_users=True  # Include non-members too
+    )
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp fetch profiles cohort_analysis \
+        --cohort power_users --include-all-users
+    ```
+
+This is useful for comparing users inside and outside a cohort. The response includes a membership indicator for each profile.
+
+!!! note "Requires Cohort"
+    `include_all_users` requires `cohort_id`. It has no effect without specifying a cohort.
+
 ## Table Naming
 
 Tables are stored with the name you provide:

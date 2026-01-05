@@ -159,14 +159,31 @@ def fetch_profiles(
     self,
     name: str = "profiles",
     where: str | None = None,           # Profile property filter
-    cohort_id: int | None = None,       # Filter to cohort members
+    cohort_id: str | None = None,       # Filter to cohort members
     output_properties: list[str] | None = None,  # Specific properties
     progress: bool = True,
     append: bool = False,
     batch_size: int = 1000,
+    distinct_id: str | None = None,     # Single user ID to fetch
+    distinct_ids: list[str] | None = None,  # Multiple user IDs
+    group_id: str | None = None,        # Group type for group profiles
+    behaviors: list[dict] | None = None,  # Behavioral filters (see format below)
+    as_of_timestamp: int | None = None,   # Historical state Unix timestamp
+    include_all_users: bool = False,      # Include all users with cohort marking
 ) -> FetchResult
 ```
 Fetch user profiles from Engage API into local table.
+
+**Behaviors Format:**
+```python
+behaviors=[{"window": "30d", "name": "buyers", "event_selectors": [{"event": "Purchase"}]}],
+where='(behaviors["buyers"] > 0)'  # Reference behavior by name
+```
+
+**Parameter Constraints:**
+- `distinct_id` and `distinct_ids` are mutually exclusive
+- `behaviors` and `cohort_id` are mutually exclusive
+- `include_all_users` requires `cohort_id`
 
 ## Streaming Methods
 
@@ -188,11 +205,23 @@ Stream events without local storage. Memory-efficient for large datasets.
 def stream_profiles(
     self,
     where: str | None = None,
-    cohort_id: int | None = None,
+    cohort_id: str | None = None,
     output_properties: list[str] | None = None,
+    raw: bool = False,
+    distinct_id: str | None = None,     # Single user ID to fetch
+    distinct_ids: list[str] | None = None,  # Multiple user IDs
+    group_id: str | None = None,        # Group type for group profiles
+    behaviors: list[dict] | None = None,  # Behavioral filters
+    as_of_timestamp: int | None = None,   # Historical state Unix timestamp
+    include_all_users: bool = False,      # Include all users with cohort marking
 ) -> Iterator[dict]
 ```
 Stream profiles without local storage.
+
+**Parameter Constraints:**
+- `distinct_id` and `distinct_ids` are mutually exclusive
+- `behaviors` and `cohort_id` are mutually exclusive
+- `include_all_users` requires `cohort_id`
 
 ## Local Query Methods
 

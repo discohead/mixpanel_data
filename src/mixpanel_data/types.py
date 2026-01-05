@@ -1680,6 +1680,12 @@ class TableMetadata:
     filter_output_properties: list[str] | None = None
     """Property names to include in output (if applicable)."""
 
+    filter_group_id: str | None = None
+    """Group ID for group profile queries (if applicable)."""
+
+    filter_behaviors: str | None = None
+    """Serialized behaviors filter for behavioral profile queries (if applicable)."""
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize for JSON output."""
         return {
@@ -1691,6 +1697,8 @@ class TableMetadata:
             "filter_where": self.filter_where,
             "filter_cohort_id": self.filter_cohort_id,
             "filter_output_properties": self.filter_output_properties,
+            "filter_group_id": self.filter_group_id,
+            "filter_behaviors": self.filter_behaviors,
         }
 
 

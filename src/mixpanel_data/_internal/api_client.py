@@ -759,6 +759,12 @@ class MixpanelAPIClient:
         cohort_id: str | None = None,
         output_properties: list[str] | None = None,
         on_batch: Callable[[int], None] | None = None,
+        distinct_id: str | None = None,
+        distinct_ids: list[str] | None = None,
+        group_id: str | None = None,
+        behaviors: list[dict[str, Any]] | None = None,
+        as_of_timestamp: int | None = None,
+        include_all_users: bool = False,
     ) -> Iterator[dict[str, Any]]:
         """Stream profiles from the Engage API.
 
@@ -773,15 +779,74 @@ class MixpanelAPIClient:
                 the response. If None, all properties are returned.
             on_batch: Optional callback invoked with cumulative count after
                 each page is processed.
+            distinct_id: Optional single user ID to fetch. Mutually exclusive
+                with distinct_ids.
+            distinct_ids: Optional list of user IDs to fetch. Mutually exclusive
+                with distinct_id. Duplicates are automatically removed.
+            group_id: Optional group type identifier (e.g., "companies") to fetch
+                group profiles instead of user profiles.
+            behaviors: Optional list of behavioral filters. Each dict should have
+                'window' (e.g., "30d"), 'name' (identifier), and 'event_selectors'
+                (list of {"event": "Name"}). Use with `where` parameter to filter,
+                e.g., where='(behaviors["name"] > 0)'. Mutually exclusive with
+                cohort_id.
+            as_of_timestamp: Optional Unix timestamp to query profile state at
+                a specific point in time. Must be in the past.
+            include_all_users: If True, include all users and mark cohort membership.
+                Only valid when cohort_id is provided.
 
         Yields:
             Profile dictionaries with '$distinct_id' and '$properties' keys.
 
         Raises:
+            ValueError: If mutually exclusive parameters are provided together,
+                or if include_all_users is used without cohort_id.
             AuthenticationError: Invalid credentials.
             RateLimitError: Rate limit exceeded after max retries.
             ServerError: Server-side errors (5xx).
         """
+        # Validate mutually exclusive parameters
+        if distinct_id is not None and distinct_ids is not None:
+            raise ValueError(
+                "distinct_id and distinct_ids are mutually exclusive. "
+                "Provide only one to fetch specific profiles."
+            )
+
+        if behaviors is not None and cohort_id is not None:
+            raise ValueError(
+                "behaviors and cohort_id are mutually exclusive. "
+                "Use behaviors for behavioral filtering or cohort_id for cohort membership."
+            )
+
+        if include_all_users and cohort_id is None:
+            raise ValueError(
+                "include_all_users requires cohort_id. "
+                "This parameter is only valid for cohort membership queries."
+            )
+
+        # Validate behaviors type
+        if behaviors is not None and not isinstance(behaviors, list):
+            raise ValueError(
+                "behaviors must be a list of behavioral filter dictionaries."
+            )
+
+        # Validate as_of_timestamp is not in the future
+        if as_of_timestamp is not None:
+            current_time = int(time.time())
+            if as_of_timestamp > current_time:
+                raise ValueError(
+                    "as_of_timestamp cannot be in the future. "
+                    "Provide a Unix timestamp in the past to query historical profile state."
+                )
+
+        # Handle empty distinct_ids list - return early without API call
+        if distinct_ids is not None and len(distinct_ids) == 0:
+            return
+
+        # Deduplicate distinct_ids if provided
+        if distinct_ids is not None:
+            distinct_ids = list(dict.fromkeys(distinct_ids))  # Preserves order
+
         url = self._build_url("engage", "")
 
         session_id: str | None = None
@@ -798,9 +863,23 @@ class MixpanelAPIClient:
             if where:
                 params["where"] = where
             if cohort_id:
-                params["filter_by_cohort"] = cohort_id
+                params["filter_by_cohort"] = json.dumps({"id": cohort_id})
             if output_properties:
                 params["output_properties"] = json.dumps(output_properties)
+            if distinct_id:
+                params["distinct_id"] = distinct_id
+            if distinct_ids:
+                params["distinct_ids"] = json.dumps(distinct_ids)
+            if group_id:
+                params["data_group_id"] = group_id
+            if behaviors:
+                params["behaviors"] = json.dumps(behaviors)
+            if as_of_timestamp is not None:
+                params["as_of_timestamp"] = as_of_timestamp
+            # Only send include_all_users when cohort_id is set (it's meaningless otherwise)
+            # Must send explicitly because API defaults to True
+            if cohort_id:
+                params["include_all_users"] = include_all_users
 
             response = self._request("POST", url, data=params)
 

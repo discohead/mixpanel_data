@@ -764,7 +764,8 @@ class TestProfileExport:
         with create_mock_client(test_credentials, handler) as client:
             list(client.export_profiles(cohort_id="12345"))
 
-        assert captured_body.get("filter_by_cohort") == "12345"
+        # filter_by_cohort requires JSON object format {"id": cohort_id}
+        assert captured_body.get("filter_by_cohort") == '{"id": "12345"}'
 
     def test_output_properties_filter(self, test_credentials: Credentials) -> None:
         """Should include output_properties as JSON array string."""
@@ -804,7 +805,8 @@ class TestProfileExport:
                 )
             )
 
-        assert captured_body.get("filter_by_cohort") == "cohort_abc"
+        # filter_by_cohort requires JSON object format {"id": cohort_id}
+        assert captured_body.get("filter_by_cohort") == '{"id": "cohort_abc"}'
         assert json.loads(captured_body.get("output_properties", "[]")) == ["$email"]
 
     def test_no_cohort_id_when_none(self, test_credentials: Credentials) -> None:
@@ -1700,3 +1702,471 @@ class TestAPIClientProperties:
         client = MixpanelAPIClient(india_credentials)
         assert client.region == "in"
         client.close()
+
+
+# =============================================================================
+# Engage API Parameter Validation Tests (018-engage-api-params)
+# =============================================================================
+
+
+class TestEngageParameterValidation:
+    """Test parameter validation for Engage API export_profiles method.
+
+    These tests verify that mutually exclusive parameters and
+    parameter dependencies are correctly validated.
+    """
+
+    def test_distinct_id_distinct_ids_mutually_exclusive(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should raise ValueError when both distinct_id and distinct_ids provided.
+
+        T003: These parameters are mutually exclusive - providing both should
+        fail fast with a clear error message.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"results": []})
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(ValueError) as exc_info,
+        ):
+            list(
+                client.export_profiles(
+                    distinct_id="user_123",
+                    distinct_ids=["user_456", "user_789"],
+                )
+            )
+
+        assert "distinct_id" in str(exc_info.value).lower()
+        assert "mutually exclusive" in str(exc_info.value).lower()
+
+    def test_behaviors_cohort_id_mutually_exclusive(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should raise ValueError when both behaviors and cohort_id provided.
+
+        T004: These parameters are mutually exclusive - providing both should
+        fail fast with a clear error message.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"results": []})
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(ValueError) as exc_info,
+        ):
+            list(
+                client.export_profiles(
+                    behaviors=[{"event": "Purchase", "within": 30}],
+                    cohort_id="cohort_123",
+                )
+            )
+
+        assert "behaviors" in str(exc_info.value).lower()
+        assert "cohort" in str(exc_info.value).lower()
+
+    def test_include_all_users_requires_cohort_id(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should raise ValueError when include_all_users without cohort_id.
+
+        T005: include_all_users only makes sense in the context of a cohort query.
+        Using it without cohort_id should fail fast.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"results": []})
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(ValueError) as exc_info,
+        ):
+            list(client.export_profiles(include_all_users=True))
+
+        assert "include_all_users" in str(exc_info.value).lower()
+        assert "cohort" in str(exc_info.value).lower()
+
+
+class TestEngageParameterEdgeCases:
+    """Test edge cases for Engage API parameters.
+
+    These tests verify behavior for unusual but valid inputs.
+    """
+
+    def test_empty_distinct_ids_list_returns_empty(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should return empty results for empty distinct_ids list.
+
+        T005a: An empty list is a valid but degenerate case that should
+        return no results without making an API call.
+        """
+        call_count = 0
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(200, json={"results": []})
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = list(client.export_profiles(distinct_ids=[]))
+
+        # Should return empty without making API call
+        assert result == []
+        assert call_count == 0
+
+    def test_distinct_ids_deduplicates_input(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should deduplicate distinct_ids before sending to API.
+
+        T005b: Duplicate IDs in the list should be deduplicated to avoid
+        redundant API work.
+        """
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(200, json={"results": [], "session_id": None})
+
+        with create_mock_client(test_credentials, handler) as client:
+            list(
+                client.export_profiles(
+                    distinct_ids=["user_1", "user_2", "user_1", "user_3", "user_2"]
+                )
+            )
+
+        # Should have sent deduplicated list (order may vary)
+        sent_ids = json.loads(captured_body.get("distinct_ids", "[]"))
+        assert len(sent_ids) == 3
+        assert set(sent_ids) == {"user_1", "user_2", "user_3"}
+
+    def test_invalid_behaviors_expression_raises_error(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should raise ValueError for invalid behaviors structure.
+
+        T005c: Behaviors must be a list of dicts with required fields.
+        Invalid structure should fail fast with validation error.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"results": []})
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(ValueError) as exc_info,
+        ):
+            # Invalid: behaviors should be list of dicts, not a string
+            list(client.export_profiles(behaviors="Purchase"))  # type: ignore[arg-type]
+
+        assert "behaviors" in str(exc_info.value).lower()
+
+    def test_as_of_timestamp_in_future_raises_error(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should raise ValueError for as_of_timestamp in the future.
+
+        T005d: as_of_timestamp must be in the past to query historical state.
+        Future timestamps are invalid and should fail fast.
+        """
+        import time
+
+        future_timestamp = int(time.time()) + 86400  # Tomorrow
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"results": []})
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(ValueError) as exc_info,
+        ):
+            list(client.export_profiles(as_of_timestamp=future_timestamp))
+
+        assert "as_of_timestamp" in str(exc_info.value).lower()
+        assert "future" in str(exc_info.value).lower()
+
+
+class TestEngageDistinctIdParameter:
+    """Test distinct_id parameter for export_profiles.
+
+    User Story 1: Fetch specific profiles by ID.
+    """
+
+    def test_export_profiles_with_distinct_id(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should include distinct_id in request body.
+
+        T006: When distinct_id is provided, it should be passed to the API
+        to fetch a specific user's profile.
+        """
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "results": [{"$distinct_id": "user_123", "$properties": {}}],
+                    "session_id": None,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            profiles = list(client.export_profiles(distinct_id="user_123"))
+
+        assert captured_body.get("distinct_id") == "user_123"
+        assert len(profiles) == 1
+
+    def test_export_profiles_with_distinct_ids(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should include distinct_ids as JSON array in request body.
+
+        T007: When distinct_ids is provided, it should be serialized as
+        a JSON array and passed to the API.
+        """
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {"$distinct_id": "user_1", "$properties": {}},
+                        {"$distinct_id": "user_2", "$properties": {}},
+                    ],
+                    "session_id": None,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            profiles = list(client.export_profiles(distinct_ids=["user_1", "user_2"]))
+
+        # distinct_ids should be serialized as JSON array string
+        sent_ids = json.loads(captured_body.get("distinct_ids", "[]"))
+        assert set(sent_ids) == {"user_1", "user_2"}
+        assert len(profiles) == 2
+
+    def test_distinct_ids_json_serialization(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should properly JSON-serialize distinct_ids.
+
+        T008: distinct_ids must be serialized as a JSON array string,
+        not just passed as a Python list.
+        """
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(200, json={"results": [], "session_id": None})
+
+        with create_mock_client(test_credentials, handler) as client:
+            list(client.export_profiles(distinct_ids=["id_with_special!@#", "normal"]))
+
+        # Verify JSON serialization format
+        raw_value = captured_body.get("distinct_ids")
+        assert raw_value is not None
+        parsed = json.loads(raw_value)
+        assert isinstance(parsed, list)
+        assert "id_with_special!@#" in parsed
+
+
+class TestEngageGroupIdParameter:
+    """Test group_id (data_group_id) parameter for export_profiles.
+
+    User Story 2: Query group profiles.
+    """
+
+    def test_export_profiles_with_group_id(self, test_credentials: Credentials) -> None:
+        """Should include data_group_id in request body when group_id provided.
+
+        T027: When group_id is provided, it should be passed as 'data_group_id'
+        to the API to fetch group profiles instead of user profiles.
+        """
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "results": [{"$distinct_id": "company_123", "$properties": {}}],
+                    "session_id": None,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            profiles = list(client.export_profiles(group_id="companies"))
+
+        assert captured_body.get("data_group_id") == "companies"
+        assert len(profiles) == 1
+
+
+class TestEngageBehaviorsParameter:
+    """Test behaviors and as_of_timestamp parameters for export_profiles.
+
+    User Story 3: Behavioral profile filtering.
+    """
+
+    def test_export_profiles_with_behaviors(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should include behaviors in request body.
+
+        T039: When behaviors is provided, it should be serialized as JSON
+        and passed to the API for behavioral filtering.
+        """
+        captured_body: dict[str, Any] = {}
+        behaviors: list[dict[str, Any]] = [
+            {"event": "Purchase", "within": 30},
+            {"event": "Page View", "count": {"gte": 5}},
+        ]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(200, json={"results": [], "session_id": None})
+
+        with create_mock_client(test_credentials, handler) as client:
+            list(client.export_profiles(behaviors=behaviors))
+
+        # behaviors should be serialized as JSON string
+        raw_behaviors = captured_body.get("behaviors")
+        assert raw_behaviors is not None
+        parsed = json.loads(raw_behaviors)
+        assert len(parsed) == 2
+        assert parsed[0]["event"] == "Purchase"
+
+    def test_export_profiles_with_as_of_timestamp(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should include as_of_timestamp in request body.
+
+        T047: When as_of_timestamp is provided, it should be passed to the
+        API to query profile state at that point in time.
+        """
+        captured_body: dict[str, Any] = {}
+        timestamp = 1704067200  # 2024-01-01 00:00:00 UTC
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(200, json={"results": [], "session_id": None})
+
+        with create_mock_client(test_credentials, handler) as client:
+            list(client.export_profiles(as_of_timestamp=timestamp))
+
+        assert captured_body.get("as_of_timestamp") == timestamp
+
+
+class TestEngageIncludeAllUsersParameter:
+    """Test include_all_users parameter for export_profiles.
+
+    User Story 4: Cohort membership analysis.
+    """
+
+    def test_export_profiles_include_all_users_with_cohort(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should include include_all_users when used with cohort_id.
+
+        T059: When include_all_users is True and cohort_id is provided,
+        both should be passed to the API.
+        """
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(200, json={"results": [], "session_id": None})
+
+        with create_mock_client(test_credentials, handler) as client:
+            list(
+                client.export_profiles(
+                    cohort_id="cohort_123",
+                    include_all_users=True,
+                )
+            )
+
+        # filter_by_cohort requires JSON object format {"id": cohort_id}
+        assert captured_body.get("filter_by_cohort") == '{"id": "cohort_123"}'
+        assert captured_body.get("include_all_users") is True
+
+    def test_export_profiles_include_all_users_false_sent_with_cohort(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should explicitly send include_all_users=False with cohort_id.
+
+        T060: When include_all_users is False and cohort_id is provided,
+        the parameter must be sent explicitly because the API defaults to True.
+        Without sending False, users cannot exclude non-members from cohort queries.
+
+        Regression test for bug where include_all_users=False was not sent,
+        causing the API to default to True and return all users.
+        """
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(200, json={"results": [], "session_id": None})
+
+        with create_mock_client(test_credentials, handler) as client:
+            list(
+                client.export_profiles(
+                    cohort_id="cohort_123",
+                    include_all_users=False,
+                )
+            )
+
+        # filter_by_cohort requires JSON object format {"id": cohort_id}
+        assert captured_body.get("filter_by_cohort") == '{"id": "cohort_123"}'
+        assert captured_body.get("include_all_users") is False
+
+    def test_export_profiles_include_all_users_not_sent_without_cohort(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should not send include_all_users when no cohort_id is provided.
+
+        T061: The include_all_users parameter is only meaningful in the context
+        of a cohort query. Without cohort_id, it should not be included in the
+        request body regardless of its value.
+        """
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(200, json={"results": [], "session_id": None})
+
+        with create_mock_client(test_credentials, handler) as client:
+            # Note: This would normally raise ValueError due to validation,
+            # but we're testing the raw API behavior here. The validation
+            # is tested separately in TestEngageParameterValidation.
+            # For this test, we just verify the parameter isn't sent
+            # when fetching without cohort.
+            list(client.export_profiles())
+
+        assert "include_all_users" not in captured_body

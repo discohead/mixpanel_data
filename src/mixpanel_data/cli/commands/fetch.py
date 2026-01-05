@@ -351,6 +351,56 @@ def fetch_profiles(
             max=100000,
         ),
     ] = 1000,
+    distinct_id: Annotated[
+        str | None,
+        typer.Option(
+            "--distinct-id",
+            help="Fetch a specific user by distinct_id. Mutually exclusive with --distinct-ids.",
+        ),
+    ] = None,
+    distinct_ids: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--distinct-ids",
+            help="Fetch specific users by distinct_id (can be repeated). Mutually exclusive with --distinct-id.",
+        ),
+    ] = None,
+    group_id: Annotated[
+        str | None,
+        typer.Option(
+            "--group-id",
+            "-g",
+            help="Fetch group profiles (e.g., 'companies') instead of user profiles.",
+        ),
+    ] = None,
+    behaviors: Annotated[
+        str | None,
+        typer.Option(
+            "--behaviors",
+            help=(
+                "Behavioral filter as JSON array. Each behavior needs: "
+                '"window" (e.g., "30d"), "name" (identifier), and "event_selectors" '
+                '(array with {"event":"Name"}). Use with --where to filter by behavior count, '
+                "e.g., --where '(behaviors[\"name\"] > 0)'. "
+                'Example: \'[{"window":"30d","name":"buyers","event_selectors":[{"event":"Purchase"}]}]\'. '
+                "Mutually exclusive with --cohort."
+            ),
+        ),
+    ] = None,
+    as_of_timestamp: Annotated[
+        int | None,
+        typer.Option(
+            "--as-of-timestamp",
+            help="Query profile state at a specific Unix timestamp (must be in the past).",
+        ),
+    ] = None,
+    include_all_users: Annotated[
+        bool,
+        typer.Option(
+            "--include-all-users",
+            help="Include all users and mark cohort membership. Requires --cohort.",
+        ),
+    ] = False,
     format: FormatOption = "json",
     jq_filter: JqOption = None,
 ) -> None:
@@ -365,6 +415,12 @@ def fetch_profiles(
     Use --where for Mixpanel expression filters on profile properties.
     Use --cohort to filter by cohort ID membership.
     Use --output-properties to select specific properties (reduces bandwidth).
+    Use --distinct-id to fetch a single user's profile.
+    Use --distinct-ids to fetch multiple specific users (repeatable flag).
+    Use --group-id to fetch group profiles (e.g., companies) instead of users.
+    Use --behaviors with --where to filter by user behavior (see --behaviors help for format).
+    Use --as-of-timestamp to query historical profile state.
+    Use --include-all-users with --cohort to include non-members with membership flag.
     Use --replace to drop and recreate an existing table.
     Use --append to add data to an existing table.
     Use --stdout to stream JSONL to stdout instead of storing locally.
@@ -389,6 +445,12 @@ def fetch_profiles(
         mp fetch profiles --where 'properties["plan"]=="premium"'
         mp fetch profiles --cohort 12345
         mp fetch profiles --output-properties '$email,$name,plan'
+        mp fetch profiles --distinct-id user_123
+        mp fetch profiles --distinct-ids user_1 --distinct-ids user_2
+        mp fetch profiles --group-id companies
+        mp fetch profiles --behaviors '[{"window":"30d","name":"buyers","event_selectors":[{"event":"Purchase"}]}]' --where '(behaviors["buyers"] > 0)'
+        mp fetch profiles --as-of-timestamp 1704067200
+        mp fetch profiles --cohort 12345 --include-all-users
         mp fetch profiles --stdout
         mp fetch profiles --stdout --raw
 
@@ -410,10 +472,75 @@ def fetch_profiles(
         err_console.print("[red]Error:[/red] --raw requires --stdout")
         raise typer.Exit(3)
 
+    # Validate --distinct-id and --distinct-ids are mutually exclusive
+    if distinct_id is not None and distinct_ids is not None:
+        err_console.print(
+            "[red]Error:[/red] --distinct-id and --distinct-ids are mutually exclusive"
+        )
+        raise typer.Exit(3)
+
+    # Validate --behaviors and --cohort are mutually exclusive
+    if behaviors is not None and cohort is not None:
+        err_console.print(
+            "[red]Error:[/red] --behaviors and --cohort are mutually exclusive"
+        )
+        raise typer.Exit(3)
+
+    # Validate --include-all-users requires --cohort
+    if include_all_users and cohort is None:
+        err_console.print("[red]Error:[/red] --include-all-users requires --cohort")
+        raise typer.Exit(3)
+
+    # Validate --behaviors requires --where to reference the behavior
+    if behaviors is not None and where is None:
+        err_console.print(
+            "[red]Error:[/red] --behaviors requires --where to reference the behavior, "
+            "e.g., --where '(behaviors[\"name\"] > 0)'"
+        )
+        raise typer.Exit(3)
+
     # Parse output_properties filter
     props_list = (
         [p.strip() for p in output_properties.split(",")] if output_properties else None
     )
+
+    # Parse and validate behaviors JSON
+    behaviors_list: list[dict[str, Any]] | None = None
+    if behaviors is not None:
+        try:
+            behaviors_list = json.loads(behaviors)
+            if not isinstance(behaviors_list, list):
+                err_console.print("[red]Error:[/red] --behaviors must be a JSON array")
+                raise typer.Exit(3)
+
+            # Validate each behavior has required fields
+            required_fields = {"window", "name", "event_selectors"}
+            for i, behavior in enumerate(behaviors_list):
+                if not isinstance(behavior, dict):
+                    err_console.print(
+                        f"[red]Error:[/red] Behavior at index {i} must be an object"
+                    )
+                    raise typer.Exit(3)
+
+                missing = required_fields - set(behavior.keys())
+                if missing:
+                    err_console.print(
+                        f"[red]Error:[/red] Behavior at index {i} missing required fields: {missing}. "
+                        f'Each behavior needs: window (e.g., "30d"), name (identifier), '
+                        f'and event_selectors (e.g., [{{"event": "Purchase"}}])'
+                    )
+                    raise typer.Exit(3)
+
+                # Validate event_selectors is a list
+                if not isinstance(behavior.get("event_selectors"), list):
+                    err_console.print(
+                        f"[red]Error:[/red] Behavior at index {i}: event_selectors must be an array"
+                    )
+                    raise typer.Exit(3)
+
+        except json.JSONDecodeError as e:
+            err_console.print(f"[red]Error:[/red] Invalid JSON for --behaviors: {e}")
+            raise typer.Exit(3) from e
 
     workspace = get_workspace(ctx)
 
@@ -427,6 +554,12 @@ def fetch_profiles(
             cohort_id=cohort,
             output_properties=props_list,
             raw=raw,
+            distinct_id=distinct_id,
+            distinct_ids=distinct_ids,
+            group_id=group_id,
+            behaviors=behaviors_list,
+            as_of_timestamp=as_of_timestamp,
+            include_all_users=include_all_users,
         ):
             print(json.dumps(profile, default=_json_serializer), file=sys.stdout)
             count += 1
@@ -458,6 +591,12 @@ def fetch_profiles(
         progress=show_progress,
         append=append,
         batch_size=batch_size,
+        distinct_id=distinct_id,
+        distinct_ids=distinct_ids,
+        group_id=group_id,
+        behaviors=behaviors_list,
+        as_of_timestamp=as_of_timestamp,
+        include_all_users=include_all_users,
     )
 
     output_result(ctx, result.to_dict(), format=format, jq_filter=jq_filter)

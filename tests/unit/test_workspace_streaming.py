@@ -417,6 +417,12 @@ class TestStreamProfiles:
                 where=None,
                 cohort_id=None,
                 output_properties=None,
+                distinct_id=None,
+                distinct_ids=None,
+                group_id=None,
+                behaviors=None,
+                as_of_timestamp=None,
+                include_all_users=False,
             )
         finally:
             ws.close()
@@ -443,6 +449,12 @@ class TestStreamProfiles:
                 where=where_clause,
                 cohort_id=None,
                 output_properties=None,
+                distinct_id=None,
+                distinct_ids=None,
+                group_id=None,
+                behaviors=None,
+                as_of_timestamp=None,
+                include_all_users=False,
             )
         finally:
             ws.close()
@@ -467,6 +479,12 @@ class TestStreamProfiles:
                 where=None,
                 cohort_id="cohort_12345",
                 output_properties=None,
+                distinct_id=None,
+                distinct_ids=None,
+                group_id=None,
+                behaviors=None,
+                as_of_timestamp=None,
+                include_all_users=False,
             )
         finally:
             ws.close()
@@ -493,6 +511,12 @@ class TestStreamProfiles:
                 where=None,
                 cohort_id=None,
                 output_properties=["$email", "$name", "plan"],
+                distinct_id=None,
+                distinct_ids=None,
+                group_id=None,
+                behaviors=None,
+                as_of_timestamp=None,
+                include_all_users=False,
             )
         finally:
             ws.close()
@@ -520,6 +544,12 @@ class TestStreamProfiles:
                 where=where_clause,
                 cohort_id="cohort_abc",
                 output_properties=["$email"],
+                distinct_id=None,
+                distinct_ids=None,
+                group_id=None,
+                behaviors=None,
+                as_of_timestamp=None,
+                include_all_users=False,
             )
         finally:
             ws.close()

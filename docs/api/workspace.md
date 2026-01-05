@@ -57,6 +57,44 @@ This is useful for:
 
 Duplicate events (by `insert_id`) and profiles (by `distinct_id`) are automatically skipped via `INSERT OR IGNORE`.
 
+### Advanced Profile Fetching
+
+The `fetch_profiles()` and `stream_profiles()` methods support advanced filtering options:
+
+```python
+# Fetch specific users by ID
+ws.fetch_profiles(name="vip_users", distinct_ids=["user_1", "user_2", "user_3"])
+
+# Fetch group profiles (e.g., companies)
+ws.fetch_profiles(name="companies", group_id="companies")
+
+# Fetch users based on behavior
+ws.fetch_profiles(
+    name="purchasers",
+    behaviors=[{"window": "30d", "name": "buyers", "event_selectors": [{"event": "Purchase"}]}],
+    where='(behaviors["buyers"] > 0)'
+)
+
+# Query historical profile state
+ws.fetch_profiles(
+    name="profiles_last_week",
+    as_of_timestamp=int(time.time()) - 604800  # 7 days ago
+)
+
+# Get all users with cohort membership marked
+ws.fetch_profiles(
+    name="cohort_analysis",
+    cohort_id="12345",
+    include_all_users=True
+)
+```
+
+**Parameter constraints:**
+
+- `distinct_id` and `distinct_ids` are mutually exclusive
+- `behaviors` and `cohort_id` are mutually exclusive
+- `include_all_users` requires `cohort_id` to be set
+
 ## Class Reference
 
 ::: mixpanel_data.Workspace

@@ -256,6 +256,33 @@ The Workspace class provides three main capability areas:
 4. **Local SQL**: `sql()`, `sql_scalar()`, `sql_rows()` - Query DuckDB with SQL
 5. **Introspection**: `info()`, `tables()`, `sample()`, `summarize()` - Inspect local data
 
+### Advanced Profile Fetching
+
+`fetch_profiles()` and `stream_profiles()` support advanced filtering:
+
+```python
+# Fetch specific users by ID
+ws.fetch_profiles("vips", distinct_ids=["user_1", "user_2"])
+
+# Fetch group profiles (companies, accounts, etc.)
+ws.fetch_profiles("companies", group_id="companies")
+
+# Fetch users by behavior (e.g., purchased in last 30 days)
+ws.fetch_profiles(
+    "purchasers",
+    behaviors=[{"window": "30d", "name": "buyers", "event_selectors": [{"event": "Purchase"}]}],
+    where='(behaviors["buyers"] > 0)'
+)
+
+# Query historical profile state
+ws.fetch_profiles("historical", as_of_timestamp=1704067200)
+
+# Cohort membership analysis (include non-members with flag)
+ws.fetch_profiles("cohort_analysis", cohort_id="12345", include_all_users=True)
+```
+
+**Parameter constraints**: `distinct_id`/`distinct_ids` mutually exclusive; `behaviors`/`cohort_id` mutually exclusive; `include_all_users` requires `cohort_id`.
+
 For complete method signatures and parameters, see [references/library-api.md](references/library-api.md).
 
 ## Common Errors

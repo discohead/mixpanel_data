@@ -1244,3 +1244,278 @@ class TestFetchEventsParallel:
 
         # Typer validates max=100, so this should fail
         assert result.exit_code != 0
+
+
+# =============================================================================
+# Behaviors Parameter Validation Tests
+# =============================================================================
+
+
+class TestFetchProfilesBehaviorsValidation:
+    """Tests for --behaviors option validation in fetch profiles command."""
+
+    def test_behaviors_requires_where(self, cli_runner: CliRunner) -> None:
+        """Test that --behaviors without --where returns error."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "profiles",
+                "--behaviors",
+                '[{"window":"30d","name":"buyers","event_selectors":[{"event":"Purchase"}]}]',
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 3
+        assert "--behaviors requires --where" in result.output
+
+    def test_behaviors_missing_window_field(self, cli_runner: CliRunner) -> None:
+        """Test that behavior missing 'window' field returns error."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "profiles",
+                "--behaviors",
+                '[{"name":"buyers","event_selectors":[{"event":"Purchase"}]}]',
+                "--where",
+                '(behaviors["buyers"] > 0)',
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 3
+        assert "missing required fields" in result.output
+        assert "window" in result.output
+
+    def test_behaviors_missing_name_field(self, cli_runner: CliRunner) -> None:
+        """Test that behavior missing 'name' field returns error."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "profiles",
+                "--behaviors",
+                '[{"window":"30d","event_selectors":[{"event":"Purchase"}]}]',
+                "--where",
+                '(behaviors["buyers"] > 0)',
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 3
+        assert "missing required fields" in result.output
+        assert "name" in result.output
+
+    def test_behaviors_missing_event_selectors_field(
+        self, cli_runner: CliRunner
+    ) -> None:
+        """Test that behavior missing 'event_selectors' field returns error."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "profiles",
+                "--behaviors",
+                '[{"window":"30d","name":"buyers"}]',
+                "--where",
+                '(behaviors["buyers"] > 0)',
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 3
+        assert "missing required fields" in result.output
+        assert "event_selectors" in result.output
+
+    def test_behaviors_event_selectors_not_array(self, cli_runner: CliRunner) -> None:
+        """Test that event_selectors not being an array returns error."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "profiles",
+                "--behaviors",
+                '[{"window":"30d","name":"buyers","event_selectors":"not_an_array"}]',
+                "--where",
+                '(behaviors["buyers"] > 0)',
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 3
+        assert "event_selectors must be an array" in result.output
+
+    def test_behaviors_not_json_array(self, cli_runner: CliRunner) -> None:
+        """Test that --behaviors not being a JSON array returns error."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "profiles",
+                "--behaviors",
+                '{"window":"30d","name":"buyers","event_selectors":[{"event":"Purchase"}]}',
+                "--where",
+                '(behaviors["buyers"] > 0)',
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 3
+        assert "--behaviors must be a JSON array" in result.output
+
+    def test_behaviors_invalid_json(self, cli_runner: CliRunner) -> None:
+        """Test that invalid JSON for --behaviors returns error."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "profiles",
+                "--behaviors",
+                "not valid json",
+                "--where",
+                '(behaviors["buyers"] > 0)',
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 3
+        assert "Invalid JSON for --behaviors" in result.output
+
+    def test_behaviors_behavior_not_object(self, cli_runner: CliRunner) -> None:
+        """Test that behavior item not being an object returns error."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "profiles",
+                "--behaviors",
+                '["not an object"]',
+                "--where",
+                '(behaviors["buyers"] > 0)',
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 3
+        assert "must be an object" in result.output
+
+    def test_behaviors_valid_format_passed_to_workspace(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that valid behaviors format is passed to workspace."""
+        mock_workspace.fetch_profiles.return_value = FetchResult(
+            table="profiles",
+            rows=100,
+            type="profiles",
+            date_range=None,
+            duration_seconds=0.5,
+            fetched_at=datetime.now(),
+        )
+
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "fetch",
+                    "profiles",
+                    "--behaviors",
+                    '[{"window":"30d","name":"buyers","event_selectors":[{"event":"Purchase"}]}]',
+                    "--where",
+                    '(behaviors["buyers"] > 0)',
+                    "--format",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 0
+        call_kwargs = mock_workspace.fetch_profiles.call_args.kwargs
+        assert call_kwargs["behaviors"] == [
+            {
+                "window": "30d",
+                "name": "buyers",
+                "event_selectors": [{"event": "Purchase"}],
+            }
+        ]
+        assert call_kwargs["where"] == '(behaviors["buyers"] > 0)'
+
+    def test_behaviors_multiple_behaviors_valid(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that multiple behaviors are validated and passed correctly."""
+        mock_workspace.fetch_profiles.return_value = FetchResult(
+            table="profiles",
+            rows=50,
+            type="profiles",
+            date_range=None,
+            duration_seconds=0.3,
+            fetched_at=datetime.now(),
+        )
+
+        behaviors_json = (
+            '[{"window":"30d","name":"signed_up","event_selectors":[{"event":"Signup"}]},'
+            '{"window":"30d","name":"purchased","event_selectors":[{"event":"Purchase"}]}]'
+        )
+
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "fetch",
+                    "profiles",
+                    "--behaviors",
+                    behaviors_json,
+                    "--where",
+                    '(behaviors["signed_up"] > 0) and (behaviors["purchased"] == 0)',
+                    "--format",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 0
+        call_kwargs = mock_workspace.fetch_profiles.call_args.kwargs
+        assert len(call_kwargs["behaviors"]) == 2
+        assert call_kwargs["behaviors"][0]["name"] == "signed_up"
+        assert call_kwargs["behaviors"][1]["name"] == "purchased"
+
+    def test_behaviors_second_behavior_invalid(self, cli_runner: CliRunner) -> None:
+        """Test that validation fails on second behavior if it's invalid."""
+        # First behavior is valid, second is missing 'name'
+        behaviors_json = (
+            '[{"window":"30d","name":"buyers","event_selectors":[{"event":"Purchase"}]},'
+            '{"window":"7d","event_selectors":[{"event":"Signup"}]}]'
+        )
+
+        result = cli_runner.invoke(
+            app,
+            [
+                "fetch",
+                "profiles",
+                "--behaviors",
+                behaviors_json,
+                "--where",
+                '(behaviors["buyers"] > 0)',
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 3
+        assert "index 1" in result.output
+        assert "missing required fields" in result.output
+        assert "name" in result.output

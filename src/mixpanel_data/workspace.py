@@ -987,6 +987,12 @@ class Workspace:
         progress: bool = True,
         append: bool = False,
         batch_size: int = 1000,
+        distinct_id: str | None = None,
+        distinct_ids: list[str] | None = None,
+        group_id: str | None = None,
+        behaviors: list[dict[str, Any]] | None = None,
+        as_of_timestamp: int | None = None,
+        include_all_users: bool = False,
     ) -> FetchResult:
         """Fetch user profiles from Mixpanel and store in local database.
 
@@ -1008,6 +1014,21 @@ class Workspace:
                 memory/IO tradeoff: smaller values use less memory but more
                 disk IO; larger values use more memory but less IO.
                 Default: 1000. Valid range: 100-100000.
+            distinct_id: Optional single user ID to fetch. Mutually exclusive
+                with distinct_ids.
+            distinct_ids: Optional list of user IDs to fetch. Mutually exclusive
+                with distinct_id. Duplicates are automatically removed.
+            group_id: Optional group type identifier (e.g., "companies") to fetch
+                group profiles instead of user profiles.
+            behaviors: Optional list of behavioral filters. Each dict should have
+                'window' (e.g., "30d"), 'name' (identifier), and 'event_selectors'
+                (list of {"event": "Name"}). Use with `where` parameter to filter,
+                e.g., where='(behaviors["name"] > 0)'. Mutually exclusive with
+                cohort_id.
+            as_of_timestamp: Optional Unix timestamp to query profile state at
+                a specific point in time. Must be in the past.
+            include_all_users: If True, include all users and mark cohort membership.
+                Only valid when cohort_id is provided.
 
         Returns:
             FetchResult with table name, row count, duration.
@@ -1016,7 +1037,8 @@ class Workspace:
             TableExistsError: If table exists and append=False.
             TableNotFoundError: If table doesn't exist and append=True.
             ConfigError: If API credentials not available.
-            ValueError: If batch_size is outside valid range (100-100000).
+            ValueError: If batch_size is outside valid range (100-100000) or
+                mutually exclusive parameters are provided.
         """
         # Validate batch_size
         _validate_batch_size(batch_size)
@@ -1053,6 +1075,12 @@ class Workspace:
                 progress_callback=progress_callback,
                 append=append,
                 batch_size=batch_size,
+                distinct_id=distinct_id,
+                distinct_ids=distinct_ids,
+                group_id=group_id,
+                behaviors=behaviors,
+                as_of_timestamp=as_of_timestamp,
+                include_all_users=include_all_users,
             )
         finally:
             if pbar is not None:
@@ -1140,6 +1168,12 @@ class Workspace:
         cohort_id: str | None = None,
         output_properties: list[str] | None = None,
         raw: bool = False,
+        distinct_id: str | None = None,
+        distinct_ids: list[str] | None = None,
+        group_id: str | None = None,
+        behaviors: list[dict[str, Any]] | None = None,
+        as_of_timestamp: int | None = None,
+        include_all_users: bool = False,
     ) -> Iterator[dict[str, Any]]:
         """Stream user profiles directly from Mixpanel API without storing.
 
@@ -1154,6 +1188,21 @@ class Workspace:
                 the response. If None, all properties are returned.
             raw: If True, return profiles in raw Mixpanel API format.
                  If False (default), return normalized format.
+            distinct_id: Optional single user ID to fetch. Mutually exclusive
+                with distinct_ids.
+            distinct_ids: Optional list of user IDs to fetch. Mutually exclusive
+                with distinct_id. Duplicates are automatically removed.
+            group_id: Optional group type identifier (e.g., "companies") to fetch
+                group profiles instead of user profiles.
+            behaviors: Optional list of behavioral filters. Each dict should have
+                'window' (e.g., "30d"), 'name' (identifier), and 'event_selectors'
+                (list of {"event": "Name"}). Use with `where` parameter to filter,
+                e.g., where='(behaviors["name"] > 0)'. Mutually exclusive with
+                cohort_id.
+            as_of_timestamp: Optional Unix timestamp to query profile state at
+                a specific point in time. Must be in the past.
+            include_all_users: If True, include all users and mark cohort membership.
+                Only valid when cohort_id is provided.
 
         Yields:
             dict[str, Any]: Profile dictionaries in normalized or raw format.
@@ -1162,6 +1211,7 @@ class Workspace:
             ConfigError: If API credentials are not available.
             AuthenticationError: If credentials are invalid.
             RateLimitError: If rate limit exceeded after max retries.
+            ValueError: If mutually exclusive parameters are provided.
 
         Example:
             ```python
@@ -1187,12 +1237,32 @@ class Workspace:
             ):
                 send_email(profile)
             ```
+
+            Fetch specific users by ID:
+
+            ```python
+            for profile in ws.stream_profiles(distinct_ids=["user_1", "user_2"]):
+                print(profile)
+            ```
+
+            Fetch group profiles:
+
+            ```python
+            for company in ws.stream_profiles(group_id="companies"):
+                print(company)
+            ```
         """
         api_client = self._require_api_client()
         profile_iterator = api_client.export_profiles(
             where=where,
             cohort_id=cohort_id,
             output_properties=output_properties,
+            distinct_id=distinct_id,
+            distinct_ids=distinct_ids,
+            group_id=group_id,
+            behaviors=behaviors,
+            as_of_timestamp=as_of_timestamp,
+            include_all_users=include_all_users,
         )
 
         if raw:

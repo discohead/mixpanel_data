@@ -244,6 +244,8 @@ Design documents in `context/`:
 ## Active Technologies
 - Python 3.11+ + concurrent.futures (stdlib), threading (stdlib), queue (stdlib) - no new external dependencies (017-parallel-export)
 - DuckDB (single-writer constraint requires queue-based serialization) (017-parallel-export)
+- Python 3.11+ + Typer (CLI), Rich (output), httpx (HTTP), Pydantic v2 (validation) (018-engage-api-params)
+- DuckDB (local storage for fetched profiles) (018-engage-api-params)
 
 ## Recent Changes
 - 017-parallel-export: Added Python 3.11+ + concurrent.futures (stdlib), threading (stdlib), queue (stdlib) - no new external dependencies

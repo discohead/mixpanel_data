@@ -145,6 +145,9 @@ Fetch user profiles from Engage API.
 ```bash
 mp fetch profiles
 mp fetch profiles myprofiles --cohort 12345
+mp fetch profiles --distinct-id user_123
+mp fetch profiles --group-id companies
+mp fetch profiles --behaviors '[{"window":"30d","name":"purchasers","event_selectors":[{"event":"Purchase"}]}]' --where '(behaviors["purchasers"] > 0)'
 ```
 
 | Option | Description |
@@ -152,12 +155,23 @@ mp fetch profiles myprofiles --cohort 12345
 | `--where` | Filter expression (see syntax above) |
 | `--cohort` | Cohort ID to filter |
 | `--output-properties` | Comma-separated properties to include |
+| `--distinct-id` | Fetch a single user by distinct_id |
+| `--distinct-ids` | Fetch specific users (repeatable flag) |
+| `--group-id` | Fetch group profiles (e.g., 'companies') instead of users |
+| `--behaviors` | Behavioral filter JSON (requires `--where` to reference) |
+| `--as-of-timestamp` | Query profile state at Unix timestamp |
+| `--include-all-users` | Include all users with cohort membership flag (requires --cohort) |
 | `--replace` | Replace existing table |
 | `--append` | Append to existing table |
 | `--stdout` | Stream JSONL to stdout |
 | `--raw` | Output raw API format |
 | `--batch-size` | Rows per commit |
 | `--no-progress` | Disable progress bar |
+
+**Parameter Constraints:**
+- `--distinct-id` and `--distinct-ids` are mutually exclusive
+- `--behaviors` and `--cohort` are mutually exclusive
+- `--include-all-users` requires `--cohort`
 
 ## Query Commands (mp query)
 

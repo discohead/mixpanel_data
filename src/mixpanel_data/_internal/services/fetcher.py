@@ -6,6 +6,7 @@ handling data transformation and progress reporting.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
@@ -288,6 +289,12 @@ class FetcherService:
         progress_callback: Callable[[int], None] | None = None,
         append: bool = False,
         batch_size: int = 1000,
+        distinct_id: str | None = None,
+        distinct_ids: list[str] | None = None,
+        group_id: str | None = None,
+        behaviors: list[dict[str, Any]] | None = None,
+        as_of_timestamp: int | None = None,
+        include_all_users: bool = False,
     ) -> FetchResult:
         """Fetch user profiles from Mixpanel and store in local database.
 
@@ -304,6 +311,21 @@ class FetcherService:
                 memory/IO tradeoff: smaller values use less memory but more
                 disk IO; larger values use more memory but less IO.
                 Default: 1000.
+            distinct_id: Optional single user ID to fetch. Mutually exclusive
+                with distinct_ids.
+            distinct_ids: Optional list of user IDs to fetch. Mutually exclusive
+                with distinct_id. Duplicates are automatically removed.
+            group_id: Optional group type identifier (e.g., "companies") to fetch
+                group profiles instead of user profiles.
+            behaviors: Optional list of behavioral filters. Each dict should have
+                'window' (e.g., "30d"), 'name' (identifier), and 'event_selectors'
+                (list of {"event": "Name"}). Use with `where` parameter to filter,
+                e.g., where='(behaviors["name"] > 0)'. Mutually exclusive with
+                cohort_id.
+            as_of_timestamp: Optional Unix timestamp to query profile state at
+                a specific point in time. Must be in the past.
+            include_all_users: If True, include all users and mark cohort membership.
+                Only valid when cohort_id is provided.
 
         Returns:
             FetchResult with table name, row count, duration, and metadata.
@@ -314,7 +336,7 @@ class FetcherService:
             TableNotFoundError: If table doesn't exist and append=True.
             AuthenticationError: If API credentials are invalid.
             RateLimitError: If Mixpanel rate limit is exceeded.
-            ValueError: If table name is invalid.
+            ValueError: If table name is invalid or parameters are mutually exclusive.
         """
         start_time = datetime.now(UTC)
 
@@ -329,12 +351,21 @@ class FetcherService:
             cohort_id=cohort_id,
             output_properties=output_properties,
             on_batch=on_api_batch,
+            distinct_id=distinct_id,
+            distinct_ids=distinct_ids,
+            group_id=group_id,
+            behaviors=behaviors,
+            as_of_timestamp=as_of_timestamp,
+            include_all_users=include_all_users,
         )
 
         # Transform profiles as they stream through
         def transform_iterator() -> Iterator[dict[str, Any]]:
             for profile in profiles_iter:
                 yield _transform_profile(profile)
+
+        # Serialize behaviors for metadata storage
+        filter_behaviors = json.dumps(behaviors) if behaviors else None
 
         # Construct metadata
         fetched_at = datetime.now(UTC)
@@ -347,6 +378,8 @@ class FetcherService:
             filter_where=where,
             filter_cohort_id=cohort_id,
             filter_output_properties=output_properties,
+            filter_group_id=group_id,
+            filter_behaviors=filter_behaviors,
         )
 
         # Store in database (handles TableExistsError/TableNotFoundError, transactions)
