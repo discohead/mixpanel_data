@@ -147,11 +147,14 @@ mp fetch profiles
 mp fetch profiles myprofiles --cohort 12345
 mp fetch profiles --distinct-id user_123
 mp fetch profiles --group-id companies
+mp fetch profiles --parallel  # Parallel fetch for large datasets
 mp fetch profiles --behaviors '[{"window":"30d","name":"purchasers","event_selectors":[{"event":"Purchase"}]}]' --where '(behaviors["purchasers"] > 0)'
 ```
 
 | Option | Description |
 |--------|-------------|
+| `--parallel, -p` | Parallel fetching with multiple threads (up to 5x faster) |
+| `--workers` | Number of parallel workers (default: 5, max: 5, only with --parallel) |
 | `--where` | Filter expression (see syntax above) |
 | `--cohort` | Cohort ID to filter |
 | `--output-properties` | Comma-separated properties to include |
@@ -167,6 +170,8 @@ mp fetch profiles --behaviors '[{"window":"30d","name":"purchasers","event_selec
 | `--raw` | Output raw API format |
 | `--batch-size` | Rows per commit |
 | `--no-progress` | Disable progress bar |
+
+**Note**: For large profile datasets, use `--parallel` for significantly faster exports (up to 5x speedup).
 
 **Parameter Constraints:**
 - `--distinct-id` and `--distinct-ids` are mutually exclusive

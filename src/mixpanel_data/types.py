@@ -16,6 +16,7 @@ without recomputation.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -3065,6 +3066,247 @@ class ParallelFetchResult:
             "successful_batches": self.successful_batches,
             "failed_batches": self.failed_batches,
             "failed_date_ranges": [list(dr) for dr in self.failed_date_ranges],
+            "duration_seconds": self.duration_seconds,
+            "fetched_at": self.fetched_at.isoformat(),
+            "has_failures": self.has_failures,
+        }
+
+
+# =============================================================================
+# Parallel Profile Fetch Types (Phase 019)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ProfilePageResult:
+    """Result from fetching a single page of profiles.
+
+    Contains the profiles from one page of the Engage API along with
+    pagination metadata for fetching subsequent pages.
+
+    Attributes:
+        profiles: List of profile dictionaries from this page.
+        session_id: Session ID for fetching next page, None if no more pages.
+        page: Zero-based page index that was fetched.
+        has_more: True if there are more pages to fetch.
+        total: Total number of profiles matching the query across all pages.
+        page_size: Number of profiles per page (typically 1000).
+
+    Example:
+        ```python
+        # Fetch first page to get pagination metadata
+        result = api_client.export_profiles_page(page=0)
+        all_profiles = list(result.profiles)
+
+        # Pre-compute total pages for parallel fetching
+        total_pages = result.num_pages
+        print(f"Fetching {total_pages} pages ({result.total} profiles)")
+
+        # Continue fetching if more pages
+        while result.has_more:
+            result = api_client.export_profiles_page(
+                page=result.page + 1,
+                session_id=result.session_id,
+            )
+            all_profiles.extend(result.profiles)
+        ```
+    """
+
+    profiles: list[dict[str, Any]]
+    """List of profile dictionaries from this page."""
+
+    session_id: str | None
+    """Session ID for fetching next page, None if no more pages."""
+
+    page: int
+    """Zero-based page index that was fetched."""
+
+    has_more: bool
+    """True if there are more pages to fetch."""
+
+    total: int
+    """Total number of profiles matching the query across all pages."""
+
+    page_size: int
+    """Number of profiles per page (typically 1000)."""
+
+    @property
+    def num_pages(self) -> int:
+        """Calculate total number of pages needed.
+
+        Uses ceiling division to ensure partial pages are counted.
+
+        Returns:
+            Total pages needed to fetch all profiles.
+            Returns 0 if total is 0 (empty result set).
+
+        Example:
+            ```python
+            result = api_client.export_profiles_page(page=0)
+            # If total=5432 and page_size=1000, num_pages=6
+            for page_idx in range(1, result.num_pages):
+                # Fetch remaining pages...
+            ```
+        """
+        if self.total == 0:
+            return 0
+        return math.ceil(self.total / self.page_size)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all page result fields including pagination metadata.
+        """
+        return {
+            "profiles": self.profiles,
+            "session_id": self.session_id,
+            "page": self.page,
+            "has_more": self.has_more,
+            "profile_count": len(self.profiles),
+            "total": self.total,
+            "page_size": self.page_size,
+            "num_pages": self.num_pages,
+        }
+
+
+@dataclass(frozen=True)
+class ProfileProgress:
+    """Progress update for a parallel profile fetch page.
+
+    Sent to the on_page_complete callback when a page finishes
+    (successfully or with error). Used for progress visibility during
+    parallel profile fetching operations.
+
+    Attributes:
+        page_index: Zero-based index of this page.
+        total_pages: Total pages if known, None if not yet determined.
+        rows: Number of rows fetched in this page (0 if failed).
+        success: Whether this page completed successfully.
+        error: Error message if failed, None if successful.
+        cumulative_rows: Total rows fetched so far across all pages.
+
+    Example:
+        ```python
+        def on_page(progress: ProfileProgress) -> None:
+            status = "✓" if progress.success else "✗"
+            pct = f"{progress.page_index + 1}/{progress.total_pages}" if progress.total_pages else f"{progress.page_index + 1}/?"
+            print(f"[{status}] Page {pct}: {progress.cumulative_rows} total rows")
+
+        result = ws.fetch_profiles(
+            name="users",
+            parallel=True,
+            on_page_complete=on_page,
+        )
+        ```
+    """
+
+    page_index: int
+    """Zero-based index of this page."""
+
+    total_pages: int | None
+    """Total pages if known, None if not yet determined."""
+
+    rows: int
+    """Number of rows fetched in this page (0 if failed)."""
+
+    success: bool
+    """Whether this page completed successfully."""
+
+    error: str | None
+    """Error message if failed, None if successful."""
+
+    cumulative_rows: int
+    """Total rows fetched so far across all pages."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all profile progress fields.
+        """
+        return {
+            "page_index": self.page_index,
+            "total_pages": self.total_pages,
+            "rows": self.rows,
+            "success": self.success,
+            "error": self.error,
+            "cumulative_rows": self.cumulative_rows,
+        }
+
+
+@dataclass(frozen=True)
+class ParallelProfileResult:
+    """Result of a parallel profile fetch operation.
+
+    Aggregates results from all pages, providing summary statistics
+    and information about any failures for retry.
+
+    Attributes:
+        table: Name of the created/appended table.
+        total_rows: Total number of rows fetched across all pages.
+        successful_pages: Number of pages that completed successfully.
+        failed_pages: Number of pages that failed.
+        failed_page_indices: Page indices of failed pages for retry.
+        duration_seconds: Total time taken for the parallel fetch.
+        fetched_at: Timestamp when fetch completed.
+
+    Example:
+        ```python
+        result = ws.fetch_profiles(
+            name="users",
+            parallel=True,
+        )
+
+        if result.has_failures:
+            print(f"Warning: {result.failed_pages} pages failed")
+            for idx in result.failed_page_indices:
+                print(f"  Page {idx}")
+        ```
+    """
+
+    table: str
+    """Name of the created/appended table."""
+
+    total_rows: int
+    """Total number of rows fetched across all pages."""
+
+    successful_pages: int
+    """Number of pages that completed successfully."""
+
+    failed_pages: int
+    """Number of pages that failed."""
+
+    failed_page_indices: tuple[int, ...]
+    """Page indices of failed pages for retry."""
+
+    duration_seconds: float
+    """Total time taken for the parallel fetch."""
+
+    fetched_at: datetime
+    """Timestamp when fetch completed."""
+
+    @property
+    def has_failures(self) -> bool:
+        """Check if any pages failed.
+
+        Returns:
+            True if at least one page failed, False otherwise.
+        """
+        return self.failed_pages > 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all result fields including has_failures.
+        """
+        return {
+            "table": self.table,
+            "total_rows": self.total_rows,
+            "successful_pages": self.successful_pages,
+            "failed_pages": self.failed_pages,
+            "failed_page_indices": list(self.failed_page_indices),
             "duration_seconds": self.duration_seconds,
             "fetched_at": self.fetched_at.isoformat(),
             "has_failures": self.has_failures,

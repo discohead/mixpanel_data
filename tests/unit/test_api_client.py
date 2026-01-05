@@ -2170,3 +2170,376 @@ class TestEngageIncludeAllUsersParameter:
             list(client.export_profiles())
 
         assert "include_all_users" not in captured_body
+
+
+# =============================================================================
+# Parallel Profile Fetch (Phase 019) - export_profiles_page
+# =============================================================================
+
+
+class TestExportProfilesPage:
+    """Tests for export_profiles_page API method."""
+
+    def test_first_page_without_session_id(self, test_credentials: Credentials) -> None:
+        """Should fetch first page without session_id."""
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_body
+            if request.content:
+                captured_body = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {"$distinct_id": "user1", "$properties": {"name": "Alice"}},
+                        {"$distinct_id": "user2", "$properties": {"name": "Bob"}},
+                    ],
+                    "session_id": "session_abc",
+                    "total": 5000,
+                    "page_size": 1000,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=0)
+
+        assert captured_body.get("page") == 0
+        assert "session_id" not in captured_body
+        assert len(result.profiles) == 2
+        assert result.session_id == "session_abc"
+        assert result.page == 0
+        assert result.has_more is True
+
+    def test_subsequent_page_with_session_id(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should fetch subsequent page with session_id."""
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_body
+            if request.content:
+                captured_body = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "results": [{"$distinct_id": "user3"}],
+                    "session_id": "session_abc",
+                    "total": 5000,
+                    "page_size": 1000,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=1, session_id="session_abc")
+
+        assert captured_body.get("page") == 1
+        assert captured_body.get("session_id") == "session_abc"
+        assert len(result.profiles) == 1
+        assert result.page == 1
+
+    def test_last_page_no_more_results(self, test_credentials: Credentials) -> None:
+        """Should detect last page when no session_id is returned."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [],
+                    "session_id": None,
+                    "total": 5000,
+                    "page_size": 1000,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=5, session_id="session_abc")
+
+        assert result.profiles == []
+        assert result.session_id is None
+        assert result.has_more is False
+
+    def test_with_filter_parameters(self, test_credentials: Credentials) -> None:
+        """Should pass filter parameters to the API."""
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_body
+            if request.content:
+                captured_body = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={"results": [], "session_id": None, "total": 0, "page_size": 1000},
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.export_profiles_page(
+                page=0,
+                where='properties["plan"] == "premium"',
+                output_properties=["$name", "$email"],
+            )
+
+        assert captured_body.get("where") == 'properties["plan"] == "premium"'
+        assert captured_body.get("output_properties") == '["$name", "$email"]'
+
+    def test_with_cohort_id(self, test_credentials: Credentials) -> None:
+        """Should pass cohort_id filter to the API."""
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_body
+            if request.content:
+                captured_body = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={"results": [], "session_id": None, "total": 0, "page_size": 1000},
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.export_profiles_page(
+                page=0,
+                cohort_id="cohort_123",
+            )
+
+        assert captured_body.get("filter_by_cohort") == '{"id": "cohort_123"}'
+
+    def test_with_behaviors(self, test_credentials: Credentials) -> None:
+        """Should pass behaviors filter to the API."""
+        captured_body: dict[str, Any] = {}
+        behaviors = [
+            {
+                "window": "30d",
+                "name": "purchased",
+                "event_selectors": [{"event": "Purchase"}],
+            }
+        ]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_body
+            if request.content:
+                captured_body = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={"results": [], "session_id": None, "total": 0, "page_size": 1000},
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.export_profiles_page(
+                page=0,
+                behaviors=behaviors,
+            )
+
+        assert "behaviors" in captured_body
+
+    def test_result_type(self, test_credentials: Credentials) -> None:
+        """Should return ProfilePageResult type."""
+        from mixpanel_data.types import ProfilePageResult
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [{"$distinct_id": "user1"}],
+                    "session_id": "session_abc",
+                    "total": 1000,
+                    "page_size": 1000,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=0)
+
+        assert isinstance(result, ProfilePageResult)
+
+    def test_has_more_true_when_session_id_present(
+        self, test_credentials: Credentials
+    ) -> None:
+        """has_more should be True when session_id is returned."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [{"$distinct_id": "user1"}],
+                    "session_id": "session_abc",
+                    "total": 5000,
+                    "page_size": 1000,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=0)
+
+        assert result.has_more is True
+
+    def test_has_more_false_when_no_session_id(
+        self, test_credentials: Credentials
+    ) -> None:
+        """has_more should be False when no session_id is returned."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [{"$distinct_id": "user1"}],
+                    "session_id": None,
+                    "total": 1,
+                    "page_size": 1000,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=0)
+
+        assert result.has_more is False
+
+    def test_empty_results_with_no_session(self, test_credentials: Credentials) -> None:
+        """Should handle empty results with no session_id."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [],
+                    "session_id": None,
+                    "total": 0,
+                    "page_size": 1000,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=0)
+
+        assert result.profiles == []
+        assert result.session_id is None
+        assert result.has_more is False
+
+
+class TestExportProfilesPagePagination:
+    """Tests for total and page_size extraction from API response.
+
+    The Mixpanel Engage API returns total and page_size in every response,
+    which enables pre-computing the total number of pages for parallel fetching.
+    """
+
+    def test_extracts_total_from_response(self, test_credentials: Credentials) -> None:
+        """Should extract total from API response.
+
+        The total field indicates how many profiles match the query across
+        all pages, enabling calculation of num_pages.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [{"$distinct_id": "user1"}],
+                    "session_id": "session_abc",
+                    "total": 5432,
+                    "page_size": 1000,
+                    "page": 0,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=0)
+
+        assert result.total == 5432
+
+    def test_extracts_page_size_from_response(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should extract page_size from API response.
+
+        The page_size field indicates profiles per page (typically 1000).
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [],
+                    "session_id": "session_abc",
+                    "total": 500,
+                    "page_size": 500,
+                    "page": 0,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=0)
+
+        assert result.page_size == 500
+
+    def test_defaults_total_to_zero_when_missing(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should default total to 0 when not in response.
+
+        Defensive handling for unexpected API responses.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [],
+                    "session_id": None,
+                    # total field missing
+                    "page_size": 1000,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=0)
+
+        assert result.total == 0
+
+    def test_defaults_page_size_to_1000_when_missing(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should default page_size to 1000 when not in response.
+
+        1000 is the standard Mixpanel page size for Engage API.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [],
+                    "session_id": None,
+                    "total": 0,
+                    # page_size field missing
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=0)
+
+        assert result.page_size == 1000
+
+    def test_num_pages_computed_correctly(self, test_credentials: Credentials) -> None:
+        """num_pages property should be computed from total and page_size.
+
+        Verifies end-to-end that extraction and property work together.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [{"$distinct_id": f"user{i}"} for i in range(1000)],
+                    "session_id": "session_abc",
+                    "total": 5432,
+                    "page_size": 1000,
+                    "page": 0,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.export_profiles_page(page=0)
+
+        # ceil(5432/1000) = 6
+        assert result.num_pages == 6

@@ -401,6 +401,21 @@ def fetch_profiles(
             help="Include all users and mark cohort membership. Requires --cohort.",
         ),
     ] = False,
+    parallel: Annotated[
+        bool,
+        typer.Option(
+            "--parallel",
+            "-p",
+            help="Fetch in parallel using multiple threads. Up to 5x faster for large exports.",
+        ),
+    ] = False,
+    workers: Annotated[
+        int | None,
+        typer.Option(
+            "--workers",
+            help="Number of parallel workers (default: 5, max: 5). Only applies with --parallel.",
+        ),
+    ] = None,
     format: FormatOption = "json",
     jq_filter: JqOption = None,
 ) -> None:
@@ -409,8 +424,8 @@ def fetch_profiles(
     Profiles are stored in a DuckDB table for SQL querying. A progress bar
     shows fetch progress (disable with --no-progress or --quiet).
 
-    **Note:** This is a long-running operation. For large profile sets,
-    consider running in the background.
+    **Note:** This can be a long-running operation for large profile sets.
+    Use --parallel for up to 5x faster exports.
 
     Use --where for Mixpanel expression filters on profile properties.
     Use --cohort to filter by cohort ID membership.
@@ -423,10 +438,11 @@ def fetch_profiles(
     Use --include-all-users with --cohort to include non-members with membership flag.
     Use --replace to drop and recreate an existing table.
     Use --append to add data to an existing table.
+    Use --parallel/-p for faster parallel fetching (recommended for large profile sets).
     Use --stdout to stream JSONL to stdout instead of storing locally.
     Use --raw with --stdout to output raw Mixpanel API format.
 
-    **Output Structure (JSON):**
+    **Output Structure (JSON - Sequential):**
 
         {
           "table": "profiles",
@@ -437,11 +453,25 @@ def fetch_profiles(
           "fetched_at": "2025-01-15T10:30:00Z"
         }
 
+    **Output Structure (JSON - Parallel):**
+
+        {
+          "table": "profiles",
+          "total_rows": 5000,
+          "successful_pages": 5,
+          "failed_pages": 0,
+          "failed_page_indices": [],
+          "duration_seconds": 1.8,
+          "fetched_at": "2025-01-15T10:30:00Z"
+        }
+
     **Examples:**
 
         mp fetch profiles
         mp fetch profiles users --replace
         mp fetch profiles users --append
+        mp fetch profiles --parallel
+        mp fetch profiles --parallel --workers 3
         mp fetch profiles --where 'properties["plan"]=="premium"'
         mp fetch profiles --cohort 12345
         mp fetch profiles --output-properties '$email,$name,plan'
@@ -456,7 +486,8 @@ def fetch_profiles(
 
     **jq Examples:**
 
-        --jq '.rows'                         # Number of profiles fetched
+        --jq '.rows'                         # Number of profiles fetched (sequential)
+        --jq '.total_rows'                   # Number of profiles fetched (parallel)
         --jq '.table'                        # Table name created
         --jq '.duration_seconds | round'     # Fetch duration in seconds
     """
@@ -470,6 +501,14 @@ def fetch_profiles(
     # Validate --raw only with --stdout
     if raw and not stdout:
         err_console.print("[red]Error:[/red] --raw requires --stdout")
+        raise typer.Exit(3)
+
+    # Validate --parallel not with --stdout (parallel only for storage mode)
+    if parallel and stdout:
+        err_console.print(
+            "[red]Error:[/red] --parallel is not supported with --stdout. "
+            "Use --parallel only for storage mode."
+        )
         raise typer.Exit(3)
 
     # Validate --distinct-id and --distinct-ids are mutually exclusive
@@ -583,6 +622,22 @@ def fetch_profiles(
     quiet = ctx.obj.get("quiet", False)
     show_progress = not quiet and not no_progress
 
+    # Create page progress callback for parallel mode
+    page_callback = None
+    if parallel and show_progress:
+        from mixpanel_data.types import ProfileProgress
+
+        def on_page_complete(progress: ProfileProgress) -> None:
+            status = "✓" if progress.success else "✗"
+            err_console.print(
+                f"  {status} Page {progress.page_index}: "
+                f"{progress.rows} rows (cumulative: {progress.cumulative_rows})",
+                highlight=False,
+            )
+
+        page_callback = on_page_complete
+        err_console.print("Fetching profiles in parallel...", highlight=False)
+
     result = workspace.fetch_profiles(
         name=table_name,
         where=where,
@@ -597,6 +652,20 @@ def fetch_profiles(
         behaviors=behaviors_list,
         as_of_timestamp=as_of_timestamp,
         include_all_users=include_all_users,
+        parallel=parallel,
+        max_workers=workers,
+        on_page_complete=page_callback,
     )
 
     output_result(ctx, result.to_dict(), format=format, jq_filter=jq_filter)
+
+    # Exit with code 1 if parallel fetch had failures
+    if parallel:
+        from mixpanel_data.types import ParallelProfileResult
+
+        if isinstance(result, ParallelProfileResult) and result.failed_pages > 0:
+            err_console.print(
+                f"[yellow]Warning: {result.failed_pages} page(s) failed during parallel fetch. "
+                f"Failed page indices: {list(result.failed_page_indices)}[/yellow]"
+            )
+            raise typer.Exit(1)

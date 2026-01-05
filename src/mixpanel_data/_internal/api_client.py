@@ -31,6 +31,7 @@ from mixpanel_data.exceptions import (
     RateLimitError,
     ServerError,
 )
+from mixpanel_data.types import ProfilePageResult
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -898,6 +899,101 @@ class MixpanelAPIClient:
             if not session_id:
                 break
             page += 1
+
+    def export_profiles_page(
+        self,
+        page: int,
+        session_id: str | None = None,
+        *,
+        where: str | None = None,
+        cohort_id: str | None = None,
+        output_properties: list[str] | None = None,
+        group_id: str | None = None,
+        behaviors: list[dict[str, Any]] | None = None,
+        as_of_timestamp: int | None = None,
+        include_all_users: bool = False,
+    ) -> ProfilePageResult:
+        """Fetch a single page of profiles from the Engage API.
+
+        This method fetches exactly one page from the Engage API, enabling
+        parallel fetching of multiple pages. For sequential fetching of
+        all profiles, use export_profiles() instead.
+
+        Args:
+            page: Zero-based page index to fetch.
+            session_id: Session ID from previous page (None for first page).
+            where: Filter expression (e.g., 'properties["plan"] == "premium"').
+            cohort_id: Filter to specific cohort by ID.
+            output_properties: Properties to include (None for all).
+            group_id: Group analytics group identifier.
+            behaviors: Behavioral filter definitions.
+            as_of_timestamp: Unix timestamp for point-in-time query.
+            include_all_users: Include non-members in cohort results.
+
+        Returns:
+            ProfilePageResult with profiles, session_id, page, and has_more.
+
+        Raises:
+            AuthenticationError: Invalid credentials.
+            RateLimitError: API rate limit exceeded.
+            APIError: Other API errors.
+
+        Example:
+            ```python
+            # Fetch first page
+            result = client.export_profiles_page(page=0)
+
+            # Continue fetching if more pages
+            while result.has_more:
+                result = client.export_profiles_page(
+                    page=result.page + 1,
+                    session_id=result.session_id,
+                )
+            ```
+        """
+        url = self._build_url("engage", "")
+
+        params: dict[str, Any] = {
+            "project_id": self._credentials.project_id,
+            "page": page,
+        }
+        if session_id:
+            params["session_id"] = session_id
+        if where:
+            params["where"] = where
+        if cohort_id:
+            params["filter_by_cohort"] = json.dumps({"id": cohort_id})
+        if output_properties:
+            params["output_properties"] = json.dumps(output_properties)
+        if group_id:
+            params["data_group_id"] = group_id
+        if behaviors:
+            params["behaviors"] = json.dumps(behaviors)
+        if as_of_timestamp is not None:
+            params["as_of_timestamp"] = as_of_timestamp
+        # Only send include_all_users when cohort_id is set (it's meaningless otherwise)
+        # Must send explicitly because API defaults to True
+        if cohort_id:
+            params["include_all_users"] = include_all_users
+
+        response = self._request("POST", url, data=params)
+
+        profiles = response.get("results", [])
+        returned_session_id = response.get("session_id")
+        has_more = returned_session_id is not None
+
+        # Extract pagination metadata for pre-computed page approach
+        total = response.get("total", 0)
+        page_size = response.get("page_size", 1000)
+
+        return ProfilePageResult(
+            profiles=profiles,
+            session_id=returned_session_id,
+            page=page,
+            has_more=has_more,
+            total=total,
+            page_size=page_size,
+        )
 
     # =========================================================================
     # Discovery API

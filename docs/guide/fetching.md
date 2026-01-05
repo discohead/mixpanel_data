@@ -565,6 +565,142 @@ This is useful for comparing users inside and outside a cohort. The response inc
 !!! note "Requires Cohort"
     `include_all_users` requires `cohort_id`. It has no effect without specifying a cohort.
 
+## Parallel Profile Fetching
+
+For large profile datasets (thousands of profiles), parallel fetching can dramatically speed up exports—up to 5x faster.
+
+### Basic Parallel Profile Fetch
+
+Enable parallel fetching with the `parallel` flag:
+
+=== "Python"
+
+    ```python
+    result = ws.fetch_profiles(
+        name="all_users",
+        parallel=True
+    )
+
+    print(f"Fetched {result.total_rows} profiles in {result.duration_seconds:.1f}s")
+    print(f"Pages: {result.successful_pages} succeeded, {result.failed_pages} failed")
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp fetch profiles all_users --parallel
+    ```
+
+Parallel profile fetching uses page-based parallelism—fetching multiple pages of profiles concurrently using a session ID for consistency.
+
+### How It Works
+
+1. **Session-Based Pagination**: The initial page establishes a session ID for consistent results
+2. **Dynamic Page Discovery**: Pages are fetched as they're discovered (not pre-scheduled)
+3. **Concurrent Fetching**: Multiple threads fetch pages simultaneously (default: 5 workers)
+4. **Single-Writer Queue**: A dedicated writer thread serializes writes to DuckDB
+5. **Partial Failure Handling**: Failed pages are tracked for potential retry
+
+### Performance
+
+| Profile Count | Sequential | Parallel (5 workers) | Speedup |
+|--------------|------------|---------------------|---------|
+| 1,000 | ~2s | ~2s | 1x (no benefit) |
+| 10,000 | ~10s | ~3s | 3x |
+| 50,000 | ~50s | ~12s | 4x |
+
+!!! tip "When to Use Parallel Profile Fetching"
+    - **Use parallel** for datasets with 5,000+ profiles
+    - **Use sequential** for small datasets or when you need maximum consistency
+
+### Configuring Workers
+
+Control the number of concurrent fetch threads:
+
+=== "Python"
+
+    ```python
+    result = ws.fetch_profiles(
+        name="users",
+        parallel=True,
+        max_workers=3  # Default is 5, max is 5
+    )
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp fetch profiles users --parallel --workers 3
+    ```
+
+!!! warning "Worker Limit"
+    Workers are capped at 5 to avoid Mixpanel API rate limits (60 requests/hour for Engage API). Requesting more than 5 workers will be automatically capped.
+
+### Progress Callbacks
+
+Monitor page completion with a callback:
+
+```python
+from mixpanel_data import ProfileProgress
+
+def on_page(progress: ProfileProgress) -> None:
+    status = "✓" if progress.success else "✗"
+    print(f"[{status}] Page {progress.page_index}: "
+          f"{progress.rows} rows (cumulative: {progress.cumulative_rows})")
+
+result = ws.fetch_profiles(
+    name="users",
+    parallel=True,
+    on_page_complete=on_page
+)
+```
+
+The CLI automatically displays page progress when `--parallel` is used.
+
+### Handling Failures
+
+Parallel fetching tracks failures and provides information for debugging:
+
+```python
+result = ws.fetch_profiles(
+    name="users",
+    parallel=True
+)
+
+if result.has_failures:
+    print(f"Warning: {result.failed_pages} pages failed")
+    print(f"Failed page indices: {result.failed_page_indices}")
+```
+
+!!! warning "Parallel Profile Fetch Limitations"
+    - **Rate limits**: The Engage API has a 60 requests/hour limit. Large exports with many pages may hit this limit.
+    - **Exit code 1 on partial failure**: The CLI returns exit code 1 if any pages fail, even if some succeeded.
+
+### Combining with Filters
+
+Parallel fetching works with all profile filters:
+
+=== "Python"
+
+    ```python
+    result = ws.fetch_profiles(
+        name="premium_users",
+        where='properties["plan"] == "premium"',
+        output_properties=["$email", "$name", "plan"],
+        parallel=True,
+        max_workers=3
+    )
+    ```
+
+=== "CLI"
+
+    ```bash
+    mp fetch profiles premium_users \
+        --where 'properties["plan"] == "premium"' \
+        --output-properties '$email,$name,plan' \
+        --parallel --workers 3
+    ```
+
 ## Table Naming
 
 Tables are stored with the name you provide:

@@ -74,13 +74,20 @@ Fetch data from Mixpanel into local storage, or stream directly to stdout.
 | `--where` | `-w` | Mixpanel filter expression |
 | `--limit` | `-l` | Maximum events to return (max 100000, not compatible with --parallel) |
 
-**Parallel Fetch Options (fetch events only):**
+**Parallel Fetch Options (fetch events):**
 
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--parallel` | `-p` | Fetch in parallel using multiple threads (faster for large date ranges) |
 | `--workers` | | Number of parallel workers (default: 10, only with --parallel) |
 | `--chunk-days` | | Days per chunk for parallel fetching (default: 7, only with --parallel) |
+
+**Parallel Fetch Options (fetch profiles):**
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--parallel` | `-p` | Fetch in parallel using multiple threads (up to 5x faster for large datasets) |
+| `--workers` | | Number of parallel workers (default: 5, max: 5, only with --parallel) |
 
 **Profile Filter Options (fetch profiles only):**
 
@@ -340,6 +347,15 @@ mp fetch events events --from 2025-01-01 --to 2025-12-31 --parallel
 
 # Parallel fetch with custom settings
 mp fetch events events --from 2025-01-01 --to 2025-12-31 --parallel --workers 20 --chunk-days 3
+
+# Parallel profile fetch for large datasets (up to 5x faster)
+mp fetch profiles users --parallel
+
+# Parallel profile fetch with custom workers
+mp fetch profiles users --parallel --workers 3
+
+# Parallel profile fetch with filters
+mp fetch profiles premium --where 'properties["plan"] == "premium"' --parallel
 ```
 
 ### Piping and Scripting

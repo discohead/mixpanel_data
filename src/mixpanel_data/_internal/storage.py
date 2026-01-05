@@ -769,7 +769,7 @@ class StorageEngine:
 
         # Check if table exists - prevent accidental overwrites
         if self.table_exists(name):
-            raise TableExistsError(f"Table '{name}' already exists")
+            raise TableExistsError(name)
 
         # Start transaction - will be periodically committed during insert
         # for memory efficiency. On error, only the current chunk is rolled back.
@@ -834,7 +834,7 @@ class StorageEngine:
 
         # Check if table exists - prevent accidental overwrites
         if self.table_exists(name):
-            raise TableExistsError(f"Table '{name}' already exists")
+            raise TableExistsError(name)
 
         # Start transaction - will be periodically committed during insert
         # for memory efficiency. On error, only the current chunk is rolled back.

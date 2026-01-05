@@ -314,6 +314,7 @@ def test_fetch_profiles_with_real_duckdb(tmp_path: Path) -> None:
         result = fetcher.fetch_profiles(name="profiles")
 
         # Verify result
+        assert isinstance(result, FetchResult)
         assert result.table == "profiles"
         assert result.rows == 3
         assert result.type == "profiles"

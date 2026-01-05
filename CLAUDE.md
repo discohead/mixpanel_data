@@ -246,6 +246,8 @@ Design documents in `context/`:
 - DuckDB (single-writer constraint requires queue-based serialization) (017-parallel-export)
 - Python 3.11+ + Typer (CLI), Rich (output), httpx (HTTP), Pydantic v2 (validation) (018-engage-api-params)
 - DuckDB (local storage for fetched profiles) (018-engage-api-params)
+- Python 3.11+ + concurrent.futures (stdlib), threading (stdlib), queue (stdlib) - no new dependencies (019-parallel-profile-fetch)
+- DuckDB (existing StorageEngine) (019-parallel-profile-fetch)
 
 ## Recent Changes
 - 017-parallel-export: Added Python 3.11+ + concurrent.futures (stdlib), threading (stdlib), queue (stdlib) - no new external dependencies
