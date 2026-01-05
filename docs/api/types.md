@@ -32,6 +32,25 @@ Types for parallel event fetching with progress tracking and failure handling.
       show_root_heading: true
       show_root_toc_entry: true
 
+## Parallel Profile Fetch Types
+
+Types for parallel profile fetching with page-based progress tracking.
+
+::: mixpanel_data.ParallelProfileResult
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.ProfileProgress
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.ProfilePageResult
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
 ## Query Results
 
 ::: mixpanel_data.SegmentationResult

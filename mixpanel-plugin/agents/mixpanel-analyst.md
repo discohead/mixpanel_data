@@ -48,10 +48,15 @@ Based on the goal, choose the right approach:
 - Retention: Cohort behavior, return rates
 - JQL: Complex transformations not possible in SQL
 
-**For data fetching:**
+**For event fetching:**
 - Determine date range (use `--parallel` for > 7 days, required for > 100 days)
 - Identify which events to fetch
 - Apply filters to reduce data volume
+
+**For profile fetching:**
+- Use `--parallel` for large datasets (5,000+ profiles) for up to 5x speedup
+- Apply cohort or property filters to reduce data volume
+- Use `--output-properties` to fetch only needed fields
 
 ### 4. Execute and Iterate
 ```bash
@@ -202,8 +207,13 @@ result = ws.query_segmentation(
 
 **CLI:**
 ```bash
-# Fetch events
+# Fetch events (use --parallel for large date ranges)
 mp fetch events --from 2024-01-01 --to 2024-01-31 --table events
+mp fetch events --from 2024-01-01 --to 2024-12-31 --table events --parallel
+
+# Fetch profiles (use --parallel for large datasets)
+mp fetch profiles --table users
+mp fetch profiles --table users --parallel  # Up to 5x faster
 
 # Query SQL
 mp query sql "SELECT COUNT(*) FROM events"

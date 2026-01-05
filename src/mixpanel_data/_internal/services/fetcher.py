@@ -12,12 +12,14 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from mixpanel_data._internal.transforms import transform_event
+from mixpanel_data._internal.transforms import transform_event, transform_profile
 from mixpanel_data.exceptions import DateRangeTooLargeError
 from mixpanel_data.types import (
     BatchProgress,
     FetchResult,
     ParallelFetchResult,
+    ParallelProfileResult,
+    ProfileProgress,
     TableMetadata,
 )
 
@@ -26,34 +28,6 @@ if TYPE_CHECKING:
     from mixpanel_data._internal.storage import StorageEngine
 
 _logger = logging.getLogger(__name__)
-
-# Reserved keys that _transform_profile extracts from properties.
-# These are standard Mixpanel fields that become top-level columns in storage.
-_RESERVED_PROFILE_KEYS = frozenset({"$last_seen"})
-
-
-def _transform_profile(profile: dict[str, Any]) -> dict[str, Any]:
-    """Transform API profile to storage format.
-
-    Args:
-        profile: Raw profile from Mixpanel Engage API with '$distinct_id'
-            and '$properties' keys.
-
-    Returns:
-        Transformed profile dict with distinct_id, last_seen, and properties keys.
-    """
-    distinct_id = profile.get("$distinct_id", "")
-    properties = profile.get("$properties", {})
-
-    # Extract and remove $last_seen from properties (shallow copy to avoid mutation)
-    remaining_props = dict(properties)
-    last_seen = remaining_props.pop("$last_seen", None)
-
-    return {
-        "distinct_id": distinct_id,
-        "last_seen": last_seen,
-        "properties": remaining_props,
-    }
 
 
 class FetcherService:
@@ -295,7 +269,10 @@ class FetcherService:
         behaviors: list[dict[str, Any]] | None = None,
         as_of_timestamp: int | None = None,
         include_all_users: bool = False,
-    ) -> FetchResult:
+        parallel: bool = False,
+        max_workers: int | None = None,
+        on_page_complete: Callable[[ProfileProgress], None] | None = None,
+    ) -> FetchResult | ParallelProfileResult:
         """Fetch user profiles from Mixpanel and store in local database.
 
         Args:
@@ -326,9 +303,17 @@ class FetcherService:
                 a specific point in time. Must be in the past.
             include_all_users: If True, include all users and mark cohort membership.
                 Only valid when cohort_id is provided.
+            parallel: If True, use parallel fetching with multiple threads.
+                Uses page-based parallelism for concurrent profile fetching.
+                Default: False.
+            max_workers: Maximum concurrent fetch threads when parallel=True.
+                Default: 5, capped at 5. Ignored when parallel=False.
+            on_page_complete: Callback invoked when each page completes during
+                parallel fetch. Receives ProfileProgress with status.
+                Ignored when parallel=False.
 
         Returns:
-            FetchResult with table name, row count, duration, and metadata.
+            FetchResult when parallel=False, ParallelProfileResult when parallel=True.
             The date_range field will be None for profiles.
 
         Raises:
@@ -338,6 +323,27 @@ class FetcherService:
             RateLimitError: If Mixpanel rate limit is exceeded.
             ValueError: If table name is invalid or parameters are mutually exclusive.
         """
+        # Delegate to parallel fetcher if requested
+        if parallel:
+            from mixpanel_data._internal.services.parallel_profile_fetcher import (
+                ParallelProfileFetcherService,
+            )
+
+            parallel_fetcher = ParallelProfileFetcherService(
+                api_client=self._api_client,
+                storage=self._storage,
+            )
+            return parallel_fetcher.fetch_profiles(
+                name=name,
+                where=where,
+                cohort_id=cohort_id,
+                output_properties=output_properties,
+                max_workers=max_workers,
+                on_page_complete=on_page_complete,
+                append=append,
+                batch_size=batch_size,
+            )
+
         start_time = datetime.now(UTC)
 
         # Wrap progress callback for API client
@@ -362,7 +368,7 @@ class FetcherService:
         # Transform profiles as they stream through
         def transform_iterator() -> Iterator[dict[str, Any]]:
             for profile in profiles_iter:
-                yield _transform_profile(profile)
+                yield transform_profile(profile)
 
         # Serialize behaviors for metadata storage
         filter_behaviors = json.dumps(behaviors) if behaviors else None

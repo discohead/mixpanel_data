@@ -2050,3 +2050,391 @@ class TestPropertyCoverageResult:
         assert "Purchase" in json_str
         assert data["total_events"] == 1000
         assert len(data["coverage"]) == 1
+
+
+# =============================================================================
+# Parallel Profile Fetch Types (Phase 019)
+# =============================================================================
+
+
+class TestProfilePageResult:
+    """Tests for ProfilePageResult type."""
+
+    def test_create_with_profiles(self) -> None:
+        """ProfilePageResult should hold page data and metadata."""
+        from mixpanel_data.types import ProfilePageResult
+
+        profiles = [
+            {"$distinct_id": "user1", "$properties": {"name": "Alice"}},
+            {"$distinct_id": "user2", "$properties": {"name": "Bob"}},
+        ]
+        result = ProfilePageResult(
+            profiles=profiles,
+            session_id="abc123",
+            page=0,
+            has_more=True,
+        )
+
+        assert result.profiles == profiles
+        assert result.session_id == "abc123"
+        assert result.page == 0
+        assert result.has_more is True
+
+    def test_create_last_page(self) -> None:
+        """ProfilePageResult should handle last page with no session_id."""
+        from mixpanel_data.types import ProfilePageResult
+
+        result = ProfilePageResult(
+            profiles=[{"$distinct_id": "user1"}],
+            session_id=None,
+            page=5,
+            has_more=False,
+        )
+
+        assert result.session_id is None
+        assert result.has_more is False
+
+    def test_to_dict(self) -> None:
+        """to_dict should serialize all fields including profile_count."""
+        from mixpanel_data.types import ProfilePageResult
+
+        profiles = [
+            {"$distinct_id": "user1"},
+            {"$distinct_id": "user2"},
+        ]
+        result = ProfilePageResult(
+            profiles=profiles,
+            session_id="session123",
+            page=2,
+            has_more=True,
+        )
+
+        data = result.to_dict()
+
+        assert data["profiles"] == profiles
+        assert data["session_id"] == "session123"
+        assert data["page"] == 2
+        assert data["has_more"] is True
+        assert data["profile_count"] == 2
+
+    def test_to_dict_json_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import ProfilePageResult
+
+        result = ProfilePageResult(
+            profiles=[
+                {"$distinct_id": "user1", "$properties": {"email": "test@example.com"}}
+            ],
+            session_id="session123",
+            page=0,
+            has_more=True,
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+
+        assert "session123" in json_str
+        assert "profile_count" in json_str
+
+    def test_frozen_dataclass(self) -> None:
+        """ProfilePageResult should be immutable."""
+        from mixpanel_data.types import ProfilePageResult
+
+        result = ProfilePageResult(
+            profiles=[],
+            session_id=None,
+            page=0,
+            has_more=False,
+        )
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.page = 1  # type: ignore[misc]
+
+
+class TestProfileProgress:
+    """Tests for ProfileProgress callback type."""
+
+    def test_create_success_progress(self) -> None:
+        """ProfileProgress should track successful page fetch."""
+        from mixpanel_data.types import ProfileProgress
+
+        progress = ProfileProgress(
+            page_index=0,
+            total_pages=None,
+            rows=1000,
+            success=True,
+            error=None,
+            cumulative_rows=1000,
+        )
+
+        assert progress.page_index == 0
+        assert progress.total_pages is None
+        assert progress.rows == 1000
+        assert progress.success is True
+        assert progress.error is None
+        assert progress.cumulative_rows == 1000
+
+    def test_create_failure_progress(self) -> None:
+        """ProfileProgress should track failed page fetch."""
+        from mixpanel_data.types import ProfileProgress
+
+        progress = ProfileProgress(
+            page_index=5,
+            total_pages=10,
+            rows=0,
+            success=False,
+            error="Rate limit exceeded",
+            cumulative_rows=5000,
+        )
+
+        assert progress.page_index == 5
+        assert progress.total_pages == 10
+        assert progress.rows == 0
+        assert progress.success is False
+        assert progress.error == "Rate limit exceeded"
+        assert progress.cumulative_rows == 5000
+
+    def test_to_dict_success(self) -> None:
+        """to_dict should serialize successful progress."""
+        from mixpanel_data.types import ProfileProgress
+
+        progress = ProfileProgress(
+            page_index=0,
+            total_pages=None,
+            rows=1000,
+            success=True,
+            error=None,
+            cumulative_rows=1000,
+        )
+
+        data = progress.to_dict()
+
+        assert data["page_index"] == 0
+        assert data["total_pages"] is None
+        assert data["rows"] == 1000
+        assert data["success"] is True
+        assert data["error"] is None
+        assert data["cumulative_rows"] == 1000
+
+    def test_to_dict_failure(self) -> None:
+        """to_dict should serialize failed progress."""
+        from mixpanel_data.types import ProfileProgress
+
+        progress = ProfileProgress(
+            page_index=5,
+            total_pages=10,
+            rows=0,
+            success=False,
+            error="API error",
+            cumulative_rows=5000,
+        )
+
+        data = progress.to_dict()
+
+        assert data["page_index"] == 5
+        assert data["total_pages"] == 10
+        assert data["rows"] == 0
+        assert data["success"] is False
+        assert data["error"] == "API error"
+        assert data["cumulative_rows"] == 5000
+
+    def test_to_dict_json_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import ProfileProgress
+
+        progress = ProfileProgress(
+            page_index=0,
+            total_pages=None,
+            rows=1000,
+            success=True,
+            error=None,
+            cumulative_rows=1000,
+        )
+
+        data = progress.to_dict()
+        json_str = json.dumps(data)
+
+        assert "page_index" in json_str
+        assert "cumulative_rows" in json_str
+
+    def test_frozen_dataclass(self) -> None:
+        """ProfileProgress should be immutable."""
+        from mixpanel_data.types import ProfileProgress
+
+        progress = ProfileProgress(
+            page_index=0,
+            total_pages=None,
+            rows=1000,
+            success=True,
+            error=None,
+            cumulative_rows=1000,
+        )
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            progress.page_index = 1  # type: ignore[misc]
+
+
+class TestParallelProfileResult:
+    """Tests for ParallelProfileResult type."""
+
+    def test_create_success_result(self) -> None:
+        """ParallelProfileResult should track successful parallel fetch."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        now = datetime.now()
+        result = ParallelProfileResult(
+            table="my_profiles",
+            total_rows=10000,
+            successful_pages=10,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=30.5,
+            fetched_at=now,
+        )
+
+        assert result.table == "my_profiles"
+        assert result.total_rows == 10000
+        assert result.successful_pages == 10
+        assert result.failed_pages == 0
+        assert result.failed_page_indices == ()
+        assert result.duration_seconds == 30.5
+        assert result.fetched_at == now
+
+    def test_create_partial_failure_result(self) -> None:
+        """ParallelProfileResult should track partial failures."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        now = datetime.now()
+        result = ParallelProfileResult(
+            table="profiles_with_issues",
+            total_rows=8000,
+            successful_pages=8,
+            failed_pages=2,
+            failed_page_indices=(5, 9),
+            duration_seconds=45.0,
+            fetched_at=now,
+        )
+
+        assert result.table == "profiles_with_issues"
+        assert result.total_rows == 8000
+        assert result.successful_pages == 8
+        assert result.failed_pages == 2
+        assert result.failed_page_indices == (5, 9)
+        assert result.duration_seconds == 45.0
+
+    def test_has_failures_true(self) -> None:
+        """has_failures should return True when failed_pages > 0."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        result = ParallelProfileResult(
+            table="profiles",
+            total_rows=8000,
+            successful_pages=8,
+            failed_pages=2,
+            failed_page_indices=(5, 9),
+            duration_seconds=45.0,
+            fetched_at=datetime.now(),
+        )
+
+        assert result.has_failures is True
+
+    def test_has_failures_false(self) -> None:
+        """has_failures should return False when failed_pages == 0."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        result = ParallelProfileResult(
+            table="profiles",
+            total_rows=10000,
+            successful_pages=10,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=30.0,
+            fetched_at=datetime.now(),
+        )
+
+        assert result.has_failures is False
+
+    def test_to_dict_success(self) -> None:
+        """to_dict should serialize successful result."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        now = datetime.now()
+        result = ParallelProfileResult(
+            table="profiles",
+            total_rows=10000,
+            successful_pages=10,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=30.0,
+            fetched_at=now,
+        )
+
+        data = result.to_dict()
+
+        assert data["table"] == "profiles"
+        assert data["total_rows"] == 10000
+        assert data["successful_pages"] == 10
+        assert data["failed_pages"] == 0
+        assert data["failed_page_indices"] == []
+        assert data["duration_seconds"] == 30.0
+        assert data["fetched_at"] == now.isoformat()
+        assert data["has_failures"] is False
+
+    def test_to_dict_with_failures(self) -> None:
+        """to_dict should serialize result with failures."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        now = datetime.now()
+        result = ParallelProfileResult(
+            table="profiles",
+            total_rows=8000,
+            successful_pages=8,
+            failed_pages=2,
+            failed_page_indices=(5, 9),
+            duration_seconds=45.0,
+            fetched_at=now,
+        )
+
+        data = result.to_dict()
+
+        assert data["failed_pages"] == 2
+        assert data["failed_page_indices"] == [5, 9]
+        assert data["has_failures"] is True
+
+    def test_to_dict_json_serializable(self) -> None:
+        """to_dict output should be JSON serializable."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        result = ParallelProfileResult(
+            table="profiles",
+            total_rows=10000,
+            successful_pages=10,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=30.0,
+            fetched_at=datetime.now(),
+        )
+
+        data = result.to_dict()
+        json_str = json.dumps(data)
+
+        assert "profiles" in json_str
+        assert "successful_pages" in json_str
+        assert "failed_page_indices" in json_str
+
+    def test_frozen_dataclass(self) -> None:
+        """ParallelProfileResult should be immutable."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        result = ParallelProfileResult(
+            table="profiles",
+            total_rows=10000,
+            successful_pages=10,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=30.0,
+            fetched_at=datetime.now(),
+        )
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.total_rows = 5000  # type: ignore[misc]

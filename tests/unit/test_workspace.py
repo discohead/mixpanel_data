@@ -322,6 +322,7 @@ class TestBasicWorkflow:
 
             result = ws.fetch_profiles("profiles", progress=False)
 
+            assert isinstance(result, FetchResult)
             assert result.table == "profiles"
             assert result.rows == 50
             mock_fetcher.fetch_profiles.assert_called_once()
@@ -2901,5 +2902,225 @@ class TestFetchEventsParallel:
                 progress=False,
             )
             assert isinstance(result2, ParallelFetchResult)
+        finally:
+            ws.close()
+
+
+# =============================================================================
+# Parallel Profile Fetch Tests (T021)
+# =============================================================================
+
+
+class TestWorkspaceFetchProfilesParallel:
+    """Tests for Workspace.fetch_profiles parallel mode."""
+
+    def test_fetch_profiles_parallel_passes_to_fetcher(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_profiles with parallel=True passes parameter to FetcherService."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            mock_fetcher = MagicMock()
+
+            mock_fetcher.fetch_profiles.return_value = ParallelProfileResult(
+                table="profiles",
+                total_rows=100,
+                successful_pages=2,
+                failed_pages=0,
+                failed_page_indices=(),
+                duration_seconds=1.5,
+                fetched_at=MagicMock(),
+            )
+            ws._fetcher = mock_fetcher
+
+            result = ws.fetch_profiles(
+                "profiles",
+                parallel=True,
+                progress=False,
+            )
+
+            # Verify parallel=True was passed
+            call_kwargs = mock_fetcher.fetch_profiles.call_args.kwargs
+            assert call_kwargs["parallel"] is True
+            assert isinstance(result, ParallelProfileResult)
+        finally:
+            ws.close()
+
+    def test_fetch_profiles_parallel_false_uses_sequential(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_profiles with parallel=False uses sequential mode."""
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            mock_fetcher = MagicMock()
+            mock_fetcher.fetch_profiles.return_value = FetchResult(
+                table="profiles",
+                rows=100,
+                type="profiles",
+                duration_seconds=1.5,
+                date_range=None,
+                fetched_at=MagicMock(),
+            )
+            ws._fetcher = mock_fetcher
+
+            result = ws.fetch_profiles(
+                "profiles",
+                parallel=False,
+                progress=False,
+            )
+
+            # Verify parallel=False was passed
+            call_kwargs = mock_fetcher.fetch_profiles.call_args.kwargs
+            assert call_kwargs["parallel"] is False
+            assert isinstance(result, FetchResult)
+        finally:
+            ws.close()
+
+    def test_fetch_profiles_default_is_sequential(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_profiles defaults to sequential (parallel=False)."""
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            mock_fetcher = MagicMock()
+            mock_fetcher.fetch_profiles.return_value = FetchResult(
+                table="profiles",
+                rows=100,
+                type="profiles",
+                duration_seconds=1.5,
+                date_range=None,
+                fetched_at=MagicMock(),
+            )
+            ws._fetcher = mock_fetcher
+
+            ws.fetch_profiles("profiles", progress=False)
+
+            # Verify parallel=False was passed by default
+            call_kwargs = mock_fetcher.fetch_profiles.call_args.kwargs
+            assert call_kwargs["parallel"] is False
+        finally:
+            ws.close()
+
+    def test_fetch_profiles_parallel_passes_max_workers(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_profiles passes max_workers to fetcher."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            mock_fetcher = MagicMock()
+
+            mock_fetcher.fetch_profiles.return_value = ParallelProfileResult(
+                table="profiles",
+                total_rows=100,
+                successful_pages=2,
+                failed_pages=0,
+                failed_page_indices=(),
+                duration_seconds=1.5,
+                fetched_at=MagicMock(),
+            )
+            ws._fetcher = mock_fetcher
+
+            ws.fetch_profiles(
+                "profiles",
+                parallel=True,
+                max_workers=3,
+                progress=False,
+            )
+
+            # Verify max_workers was passed
+            call_kwargs = mock_fetcher.fetch_profiles.call_args.kwargs
+            assert call_kwargs["max_workers"] == 3
+        finally:
+            ws.close()
+
+    def test_fetch_profiles_returns_correct_types(
+        self,
+        mock_config_manager: MagicMock,
+        mock_api_client: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """fetch_profiles returns ParallelProfileResult or FetchResult based on mode."""
+        from mixpanel_data.types import ParallelProfileResult
+
+        db_path = tmp_path / "test.db"
+        ws = Workspace(
+            path=db_path,
+            _config_manager=mock_config_manager,
+            _api_client=mock_api_client,
+        )
+        try:
+            mock_fetcher = MagicMock()
+
+            # Test FetchResult return
+            mock_fetcher.fetch_profiles.return_value = FetchResult(
+                table="profiles",
+                rows=100,
+                type="profiles",
+                duration_seconds=1.5,
+                date_range=None,
+                fetched_at=MagicMock(),
+            )
+            ws._fetcher = mock_fetcher
+
+            result1 = ws.fetch_profiles(
+                "profiles",
+                parallel=False,
+                progress=False,
+            )
+            assert isinstance(result1, FetchResult)
+
+            # Test ParallelProfileResult return
+            mock_fetcher.fetch_profiles.return_value = ParallelProfileResult(
+                table="profiles",
+                total_rows=100,
+                successful_pages=2,
+                failed_pages=0,
+                failed_page_indices=(),
+                duration_seconds=1.5,
+                fetched_at=MagicMock(),
+            )
+
+            result2 = ws.fetch_profiles(
+                "profiles",
+                parallel=True,
+                progress=False,
+            )
+            assert isinstance(result2, ParallelProfileResult)
         finally:
             ws.close()

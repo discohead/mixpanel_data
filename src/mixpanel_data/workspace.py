@@ -46,13 +46,10 @@ import pandas as pd
 from mixpanel_data._internal.api_client import MixpanelAPIClient
 from mixpanel_data._internal.config import ConfigManager, Credentials
 from mixpanel_data._internal.services.discovery import DiscoveryService
-from mixpanel_data._internal.services.fetcher import (
-    FetcherService,
-    _transform_profile,
-)
+from mixpanel_data._internal.services.fetcher import FetcherService
 from mixpanel_data._internal.services.live_query import LiveQueryService
 from mixpanel_data._internal.storage import StorageEngine
-from mixpanel_data._internal.transforms import transform_event
+from mixpanel_data._internal.transforms import transform_event, transform_profile
 from mixpanel_data._literal_types import TableType
 from mixpanel_data.exceptions import ConfigError, QueryError
 from mixpanel_data.types import (
@@ -80,6 +77,8 @@ from mixpanel_data.types import (
     NumericPropertySummaryResult,
     NumericSumResult,
     ParallelFetchResult,
+    ParallelProfileResult,
+    ProfileProgress,
     PropertyCountsResult,
     PropertyCoverageResult,
     PropertyDistributionResult,
@@ -993,13 +992,16 @@ class Workspace:
         behaviors: list[dict[str, Any]] | None = None,
         as_of_timestamp: int | None = None,
         include_all_users: bool = False,
-    ) -> FetchResult:
+        parallel: bool = False,
+        max_workers: int | None = None,
+        on_page_complete: Callable[[ProfileProgress], None] | None = None,
+    ) -> FetchResult | ParallelProfileResult:
         """Fetch user profiles from Mixpanel and store in local database.
 
         Note:
             This is a potentially long-running operation that streams data from
-            Mixpanel's Engage API. For large profile sets, consider running in a
-            background process.
+            Mixpanel's Engage API. For large profile sets, use ``parallel=True``
+            for up to 5x faster exports.
 
         Args:
             name: Table name to create or append to (default: "profiles").
@@ -1029,9 +1031,18 @@ class Workspace:
                 a specific point in time. Must be in the past.
             include_all_users: If True, include all users and mark cohort membership.
                 Only valid when cohort_id is provided.
+            parallel: If True, use parallel fetching with multiple threads.
+                Uses page-based parallelism for concurrent profile fetching.
+                Enables up to 5x faster exports. Default: False.
+            max_workers: Maximum concurrent fetch threads when parallel=True.
+                Default: 5, capped at 5. Ignored when parallel=False.
+            on_page_complete: Callback invoked when each page completes during
+                parallel fetch. Receives ProfileProgress with status.
+                Useful for custom progress reporting. Ignored when parallel=False.
 
         Returns:
-            FetchResult with table name, row count, duration.
+            FetchResult when parallel=False, ParallelProfileResult when parallel=True.
+            ParallelProfileResult includes per-page statistics and any failure info.
 
         Raises:
             TableExistsError: If table exists and append=False.
@@ -1043,10 +1054,15 @@ class Workspace:
         # Validate batch_size
         _validate_batch_size(batch_size)
 
+        # Validate max_workers for parallel mode
+        if max_workers is not None and max_workers <= 0:
+            raise ValueError("max_workers must be positive")
+
         # Create progress callback if requested (only for interactive terminals)
+        # Sequential mode uses spinner progress bar
         progress_callback = None
         pbar = None
-        if progress and sys.stderr.isatty():
+        if progress and sys.stderr.isatty() and not parallel:
             try:
                 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -1081,6 +1097,9 @@ class Workspace:
                 behaviors=behaviors,
                 as_of_timestamp=as_of_timestamp,
                 include_all_users=include_all_users,
+                parallel=parallel,
+                max_workers=max_workers,
+                on_page_complete=on_page_complete,
             )
         finally:
             if pbar is not None:
@@ -1269,7 +1288,7 @@ class Workspace:
             yield from profile_iterator
         else:
             for profile in profile_iterator:
-                yield _transform_profile(profile)
+                yield transform_profile(profile)
 
     # =========================================================================
     # LOCAL QUERY METHODS

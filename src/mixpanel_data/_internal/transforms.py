@@ -78,3 +78,53 @@ def transform_event(event: dict[str, Any]) -> dict[str, Any]:
         "insert_id": insert_id,
         "properties": remaining_props,
     }
+
+
+# Reserved keys that transform_profile extracts from properties.
+# These are standard Mixpanel fields that become top-level columns in storage.
+RESERVED_PROFILE_KEYS = frozenset({"$last_seen"})
+
+
+def transform_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    """Transform API profile to storage format.
+
+    Extracts standard Mixpanel fields ($distinct_id, $last_seen) from the
+    profile and promotes them to top-level fields.
+
+    Args:
+        profile: Raw profile from Mixpanel Engage API with '$distinct_id'
+            and '$properties' keys.
+
+    Returns:
+        Transformed profile dict with distinct_id, last_seen, and properties keys.
+
+    Example:
+        ```python
+        raw = {
+            "$distinct_id": "user123",
+            "$properties": {
+                "$last_seen": "2024-01-15T10:30:00",
+                "plan": "premium",
+                "email": "alice@example.com",
+            }
+        }
+        transformed = transform_profile(raw)
+        # {
+        #     "distinct_id": "user123",
+        #     "last_seen": "2024-01-15T10:30:00",
+        #     "properties": {"plan": "premium", "email": "alice@example.com"},
+        # }
+        ```
+    """
+    distinct_id = profile.get("$distinct_id", "")
+    properties = profile.get("$properties", {})
+
+    # Extract and remove $last_seen from properties (shallow copy to avoid mutation)
+    remaining_props = dict(properties)
+    last_seen = remaining_props.pop("$last_seen", None)
+
+    return {
+        "distinct_id": distinct_id,
+        "last_seen": last_seen,
+        "properties": remaining_props,
+    }

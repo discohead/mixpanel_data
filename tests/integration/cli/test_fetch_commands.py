@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from mixpanel_data.cli.main import app
-from mixpanel_data.types import FetchResult, ParallelFetchResult
+from mixpanel_data.types import FetchResult, ParallelFetchResult, ParallelProfileResult
 
 
 class TestFetchEvents:
@@ -364,6 +364,156 @@ class TestFetchProfiles:
         assert result.exit_code == 0
         call_kwargs = mock_workspace.fetch_profiles.call_args.kwargs
         assert call_kwargs["progress"] is False
+
+
+class TestFetchProfilesParallel:
+    """Tests for mp fetch profiles --parallel command options."""
+
+    def test_parallel_flag_passed_to_workspace(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that --parallel flag is passed to workspace.fetch_profiles."""
+        mock_workspace.fetch_profiles.return_value = ParallelProfileResult(
+            table="profiles",
+            total_rows=1000,
+            successful_pages=2,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=2.0,
+            fetched_at=datetime.now(),
+        )
+
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["fetch", "profiles", "--parallel", "--format", "json"],
+            )
+
+        assert result.exit_code == 0
+        call_kwargs = mock_workspace.fetch_profiles.call_args.kwargs
+        assert call_kwargs["parallel"] is True
+
+    def test_workers_option_passed_to_workspace(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that --workers option is passed to workspace.fetch_profiles."""
+        mock_workspace.fetch_profiles.return_value = ParallelProfileResult(
+            table="profiles",
+            total_rows=500,
+            successful_pages=1,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=1.5,
+            fetched_at=datetime.now(),
+        )
+
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                [
+                    "fetch",
+                    "profiles",
+                    "--parallel",
+                    "--workers",
+                    "3",
+                    "--format",
+                    "json",
+                ],
+            )
+
+        assert result.exit_code == 0
+        call_kwargs = mock_workspace.fetch_profiles.call_args.kwargs
+        assert call_kwargs["parallel"] is True
+        assert call_kwargs["max_workers"] == 3
+
+    def test_parallel_output_structure(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that parallel fetch output includes page statistics."""
+        mock_workspace.fetch_profiles.return_value = ParallelProfileResult(
+            table="profiles",
+            total_rows=2000,
+            successful_pages=4,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=3.0,
+            fetched_at=datetime.now(),
+        )
+
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["fetch", "profiles", "--parallel", "--format", "json"],
+            )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["table"] == "profiles"
+        assert data["total_rows"] == 2000
+        assert data["successful_pages"] == 4
+        assert data["failed_pages"] == 0
+
+    def test_parallel_with_failures_exit_code_1(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that exit code is 1 when parallel profile fetch has failures."""
+        mock_workspace.fetch_profiles.return_value = ParallelProfileResult(
+            table="profiles",
+            total_rows=1500,
+            successful_pages=3,
+            failed_pages=1,
+            failed_page_indices=(2,),
+            duration_seconds=2.5,
+            fetched_at=datetime.now(),
+        )
+
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["fetch", "profiles", "--parallel", "--format", "json"],
+            )
+
+        assert result.exit_code == 1
+
+    def test_parallel_requires_parallel_flag_for_workers(
+        self, cli_runner: CliRunner, mock_workspace: MagicMock
+    ) -> None:
+        """Test that --workers without --parallel uses sequential mode."""
+        mock_workspace.fetch_profiles.return_value = FetchResult(
+            table="profiles",
+            rows=500,
+            type="profiles",
+            date_range=None,
+            duration_seconds=1.5,
+            fetched_at=datetime.now(),
+        )
+
+        with patch(
+            "mixpanel_data.cli.commands.fetch.get_workspace",
+            return_value=mock_workspace,
+        ):
+            result = cli_runner.invoke(
+                app,
+                ["fetch", "profiles", "--workers", "3", "--format", "json"],
+            )
+
+        # Should succeed but not use parallel mode
+        assert result.exit_code == 0
+        call_kwargs = mock_workspace.fetch_profiles.call_args.kwargs
+        # parallel defaults to False when not specified
+        assert call_kwargs.get("parallel", False) is False
 
 
 # =============================================================================

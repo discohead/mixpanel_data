@@ -5,7 +5,7 @@ catching edge cases that example-based tests might miss.
 
 Properties tested:
 - transform_event: Non-mutation of input, field extraction invariants
-- _transform_profile: Non-mutation of input, field extraction invariants
+- transform_profile: Non-mutation of input, field extraction invariants
 """
 
 from __future__ import annotations
@@ -17,13 +17,11 @@ from typing import Any
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from mixpanel_data._internal.services.fetcher import (
-    _RESERVED_PROFILE_KEYS,
-    _transform_profile,
-)
 from mixpanel_data._internal.transforms import (
     RESERVED_EVENT_KEYS,
+    RESERVED_PROFILE_KEYS,
     transform_event,
+    transform_profile,
 )
 
 # =============================================================================
@@ -60,11 +58,11 @@ event_property_keys = st.text().filter(lambda k: k not in RESERVED_EVENT_KEYS)
 event_properties = st.dictionaries(event_property_keys, json_values, max_size=10)
 
 # Strategy for profile property keys (excluding reserved keys)
-profile_property_keys = st.text().filter(lambda k: k not in _RESERVED_PROFILE_KEYS)
+profile_property_keys = st.text().filter(lambda k: k not in RESERVED_PROFILE_KEYS)
 
 # Strategy for profile properties dict
 # Reserved keys ($last_seen) are excluded since they're handled separately
-# as standard fields in _transform_profile
+# as standard fields in transform_profile
 profile_properties = st.dictionaries(profile_property_keys, json_values, max_size=10)
 
 # Strategy for Unix timestamps (valid range for Mixpanel events)
@@ -305,14 +303,14 @@ class TestTransformEventProperties:
 
 
 # =============================================================================
-# _transform_profile Property Tests
+# transform_profile Property Tests
 # =============================================================================
 
 
 class TestTransformProfileProperties:
-    """Property-based tests for _transform_profile function.
+    """Property-based tests for transform_profile function.
 
-    The _transform_profile function transforms raw Mixpanel Engage API profiles
+    The transform_profile function transforms raw Mixpanel Engage API profiles
     into the storage format expected by StorageEngine. It must:
     1. Never mutate the input dictionary
     2. Extract $last_seen from properties
@@ -321,10 +319,10 @@ class TestTransformProfileProperties:
 
     @given(profile=api_profiles())
     @settings(max_examples=100)
-    def test_transform_profile_never_mutates_input(
+    def testtransform_profile_never_mutates_input(
         self, profile: dict[str, Any]
     ) -> None:
-        """_transform_profile should never mutate the input dictionary.
+        """transform_profile should never mutate the input dictionary.
 
         This property is critical for streaming pipelines where the same
         dictionary might be reused or referenced elsewhere.
@@ -336,7 +334,7 @@ class TestTransformProfileProperties:
         original = copy.deepcopy(profile)
 
         # Transform the profile
-        _transform_profile(profile)
+        transform_profile(profile)
 
         # Input should be unchanged
         assert profile == original, (
@@ -345,10 +343,8 @@ class TestTransformProfileProperties:
 
     @given(profile=api_profiles())
     @settings(max_examples=100)
-    def test_transform_profile_extracts_last_seen(
-        self, profile: dict[str, Any]
-    ) -> None:
-        """_transform_profile output properties should not contain $last_seen.
+    def testtransform_profile_extracts_last_seen(self, profile: dict[str, Any]) -> None:
+        """transform_profile output properties should not contain $last_seen.
 
         The $last_seen field must be extracted to a top-level output field
         and removed from the output properties dict.
@@ -356,7 +352,7 @@ class TestTransformProfileProperties:
         Args:
             profile: A raw profile dict from Mixpanel's Engage API.
         """
-        result = _transform_profile(profile)
+        result = transform_profile(profile)
 
         # $last_seen should NOT be in output properties
         output_props = result["properties"]
@@ -365,26 +361,26 @@ class TestTransformProfileProperties:
         )
 
     @given(profile=api_profiles())
-    def test_transform_profile_has_required_output_fields(
+    def testtransform_profile_has_required_output_fields(
         self, profile: dict[str, Any]
     ) -> None:
-        """_transform_profile output should have all required fields.
+        """transform_profile output should have all required fields.
 
         The output dict must contain exactly: distinct_id, last_seen, properties.
 
         Args:
             profile: A raw profile dict from Mixpanel's Engage API.
         """
-        result = _transform_profile(profile)
+        result = transform_profile(profile)
 
         required_fields = {"distinct_id", "last_seen", "properties"}
         assert set(result.keys()) == required_fields
 
     @given(profile=api_profiles())
-    def test_transform_profile_preserves_custom_properties(
+    def testtransform_profile_preserves_custom_properties(
         self, profile: dict[str, Any]
     ) -> None:
-        """_transform_profile should preserve all non-standard properties.
+        """transform_profile should preserve all non-standard properties.
 
         Any property that isn't $last_seen should appear unchanged in
         the output properties.
@@ -392,7 +388,7 @@ class TestTransformProfileProperties:
         Args:
             profile: A raw profile dict from Mixpanel's Engage API.
         """
-        result = _transform_profile(profile)
+        result = transform_profile(profile)
 
         input_props = profile.get("$properties", {})
         output_props = result["properties"]
@@ -448,8 +444,8 @@ class TestTransformConsistency:
         result1_event = transform_event(copy.deepcopy(event))
         result2_event = transform_event(copy.deepcopy(event))
 
-        result1_profile = _transform_profile(copy.deepcopy(profile))
-        result2_profile = _transform_profile(copy.deepcopy(profile))
+        result1_profile = transform_profile(copy.deepcopy(profile))
+        result2_profile = transform_profile(copy.deepcopy(profile))
 
         # Deterministic fields should be identical across calls
         # Note: insert_id is excluded since it's randomly generated when missing

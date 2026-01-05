@@ -170,9 +170,18 @@ def fetch_profiles(
     behaviors: list[dict] | None = None,  # Behavioral filters (see format below)
     as_of_timestamp: int | None = None,   # Historical state Unix timestamp
     include_all_users: bool = False,      # Include all users with cohort marking
-) -> FetchResult
+    parallel: bool = False,               # Use parallel fetching (up to 5x faster)
+    max_workers: int | None = None,       # Parallel workers (default: 5, max: 5)
+    on_page_complete: Callable[[ProfileProgress], None] | None = None,  # Progress callback
+) -> FetchResult | ParallelProfileResult
 ```
 Fetch user profiles from Engage API into local table.
+
+Returns `FetchResult` (sequential) or `ParallelProfileResult` (parallel).
+- `FetchResult(table, rows, duration_seconds, from_date, to_date, fetched_at)`
+- `ParallelProfileResult(table, total_rows, successful_pages, failed_pages, has_failures, failed_page_indices, duration_seconds, fetched_at)`
+
+**Note**: For large profile datasets, use `parallel=True` for significantly faster exports (up to 5x speedup).
 
 **Behaviors Format:**
 ```python

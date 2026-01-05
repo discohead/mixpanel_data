@@ -5,6 +5,7 @@ Tests use mocked API client and storage engine for deterministic behavior.
 
 from __future__ import annotations
 
+import unittest.mock
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -12,11 +13,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mixpanel_data._internal.services.fetcher import (
-    FetcherService,
-    _transform_profile,
-)
-from mixpanel_data._internal.transforms import transform_event
+from mixpanel_data._internal.services.fetcher import FetcherService
+from mixpanel_data._internal.transforms import transform_event, transform_profile
 from mixpanel_data.exceptions import DateRangeTooLargeError, TableExistsError
 from mixpanel_data.types import FetchResult
 
@@ -134,10 +132,10 @@ class TestTransformEvent:
 
 
 class TestTransformProfile:
-    """Tests for _transform_profile function."""
+    """Tests for transform_profile function."""
 
-    def test_transform_profile_with_valid_data(self) -> None:
-        """_transform_profile should transform API profile to storage format."""
+    def testtransform_profile_with_valid_data(self) -> None:
+        """transform_profile should transform API profile to storage format."""
         api_profile = {
             "$distinct_id": "user_123",
             "$properties": {
@@ -147,7 +145,7 @@ class TestTransformProfile:
             },
         }
 
-        result = _transform_profile(api_profile)
+        result = transform_profile(api_profile)
 
         assert result["distinct_id"] == "user_123"
         assert result["last_seen"] == "2024-01-15T10:30:00"
@@ -156,8 +154,8 @@ class TestTransformProfile:
             "plan": "premium",
         }
 
-    def test_transform_profile_with_missing_last_seen(self) -> None:
-        """_transform_profile should return None when $last_seen is missing."""
+    def testtransform_profile_with_missing_last_seen(self) -> None:
+        """transform_profile should return None when $last_seen is missing."""
         api_profile = {
             "$distinct_id": "user_456",
             "$properties": {
@@ -166,7 +164,7 @@ class TestTransformProfile:
             },
         }
 
-        result = _transform_profile(api_profile)
+        result = transform_profile(api_profile)
 
         assert result["distinct_id"] == "user_456"
         assert result["last_seen"] is None
@@ -175,8 +173,8 @@ class TestTransformProfile:
             "status": "active",
         }
 
-    def test_transform_profile_does_not_mutate_input(self) -> None:
-        """_transform_profile should not mutate the input dictionary."""
+    def testtransform_profile_does_not_mutate_input(self) -> None:
+        """transform_profile should not mutate the input dictionary."""
         api_profile: dict[str, Any] = {
             "$distinct_id": "user_789",
             "$properties": {
@@ -188,13 +186,13 @@ class TestTransformProfile:
         # Make a copy for comparison
         original_props = api_profile["$properties"].copy()
 
-        _transform_profile(api_profile)
+        transform_profile(api_profile)
 
         # Original should be unchanged
         assert api_profile["$properties"] == original_props
 
-    def test_transform_profile_with_empty_properties(self) -> None:
-        """_transform_profile should handle empty properties."""
+    def testtransform_profile_with_empty_properties(self) -> None:
+        """transform_profile should handle empty properties."""
         api_profile = {
             "$distinct_id": "user_000",
             "$properties": {
@@ -202,31 +200,31 @@ class TestTransformProfile:
             },
         }
 
-        result = _transform_profile(api_profile)
+        result = transform_profile(api_profile)
 
         assert result["distinct_id"] == "user_000"
         assert result["last_seen"] == "2024-01-17T08:00:00"
         assert result["properties"] == {}
 
-    def test_transform_profile_with_missing_distinct_id(self) -> None:
-        """_transform_profile should handle missing $distinct_id."""
+    def testtransform_profile_with_missing_distinct_id(self) -> None:
+        """transform_profile should handle missing $distinct_id."""
         api_profile = {
             "$properties": {
                 "$last_seen": "2024-01-18T09:00:00",
             },
         }
 
-        result = _transform_profile(api_profile)
+        result = transform_profile(api_profile)
 
         assert result["distinct_id"] == ""
 
-    def test_transform_profile_with_missing_properties(self) -> None:
-        """_transform_profile should handle missing $properties."""
+    def testtransform_profile_with_missing_properties(self) -> None:
+        """transform_profile should handle missing $properties."""
         api_profile = {
             "$distinct_id": "user_111",
         }
 
-        result = _transform_profile(api_profile)
+        result = transform_profile(api_profile)
 
         assert result["distinct_id"] == "user_111"
         assert result["last_seen"] is None
@@ -491,6 +489,7 @@ class TestFetchProfiles:
         assert storage_call.kwargs["name"] == "test_profiles"
 
         # Verify result
+        assert isinstance(result, FetchResult)
         assert result.table == "test_profiles"
         assert result.rows == 2
         assert result.type == "profiles"
@@ -679,6 +678,7 @@ class TestFetchProfiles:
 
         result = fetcher.fetch_profiles(name="profiles")
 
+        assert isinstance(result, FetchResult)
         assert result.date_range is None
 
 
@@ -878,6 +878,7 @@ class TestFetchProfilesAppend:
         mock_storage.create_profiles_table.assert_not_called()
 
         # Verify result
+        assert isinstance(result, FetchResult)
         assert result.table == "existing_profiles"
         assert result.rows == 1
 
@@ -1439,3 +1440,204 @@ class TestFetchEventsParallel:
         from mixpanel_data.types import FetchResult
 
         assert isinstance(result, FetchResult)
+
+
+# =============================================================================
+# Parallel Profile Fetch Delegation Tests (T019)
+# =============================================================================
+
+
+class TestFetchProfilesParallelDelegation:
+    """Tests for FetcherService.fetch_profiles parallel delegation."""
+
+    def test_fetch_profiles_parallel_true_delegates_to_parallel_fetcher(
+        self,
+    ) -> None:
+        """fetch_profiles with parallel=True delegates to ParallelProfileFetcherService."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+
+        # Configure mock for ParallelProfileFetcherService
+        from mixpanel_data.types import ParallelProfileResult
+
+        mock_result = ParallelProfileResult(
+            table="profiles",
+            total_rows=100,
+            successful_pages=2,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=1.5,
+            fetched_at=datetime.now(UTC),
+        )
+
+        with unittest.mock.patch(
+            "mixpanel_data._internal.services.parallel_profile_fetcher.ParallelProfileFetcherService"
+        ) as MockParallelFetcher:
+            mock_fetcher_instance = MagicMock()
+            mock_fetcher_instance.fetch_profiles.return_value = mock_result
+            MockParallelFetcher.return_value = mock_fetcher_instance
+
+            fetcher = FetcherService(mock_api_client, mock_storage)
+
+            result = fetcher.fetch_profiles(
+                name="profiles",
+                parallel=True,
+            )
+
+            # Verify delegation
+            MockParallelFetcher.assert_called_once_with(
+                api_client=mock_api_client,
+                storage=mock_storage,
+            )
+            mock_fetcher_instance.fetch_profiles.assert_called_once()
+            assert result is mock_result
+
+    def test_fetch_profiles_parallel_false_uses_sequential(self) -> None:
+        """fetch_profiles with parallel=False uses sequential fetch."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+
+        mock_api_client.export_profiles.return_value = iter([])
+        mock_storage.create_profiles_table.return_value = 0
+
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        result = fetcher.fetch_profiles(
+            name="profiles",
+            parallel=False,
+        )
+
+        # Should return FetchResult (sequential), not ParallelProfileResult
+        assert isinstance(result, FetchResult)
+        mock_api_client.export_profiles.assert_called_once()
+
+    def test_fetch_profiles_default_is_sequential(self) -> None:
+        """fetch_profiles defaults to sequential (parallel=False)."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+
+        mock_api_client.export_profiles.return_value = iter([])
+        mock_storage.create_profiles_table.return_value = 0
+
+        fetcher = FetcherService(mock_api_client, mock_storage)
+
+        result = fetcher.fetch_profiles(name="profiles")
+
+        # Should return FetchResult (sequential)
+        assert isinstance(result, FetchResult)
+        mock_api_client.export_profiles.assert_called_once()
+
+    def test_fetch_profiles_parallel_passes_max_workers(self) -> None:
+        """fetch_profiles with parallel=True passes max_workers to parallel fetcher."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+
+        from mixpanel_data.types import ParallelProfileResult
+
+        mock_result = ParallelProfileResult(
+            table="profiles",
+            total_rows=100,
+            successful_pages=2,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=1.5,
+            fetched_at=datetime.now(UTC),
+        )
+
+        with unittest.mock.patch(
+            "mixpanel_data._internal.services.parallel_profile_fetcher.ParallelProfileFetcherService"
+        ) as MockParallelFetcher:
+            mock_fetcher_instance = MagicMock()
+            mock_fetcher_instance.fetch_profiles.return_value = mock_result
+            MockParallelFetcher.return_value = mock_fetcher_instance
+
+            fetcher = FetcherService(mock_api_client, mock_storage)
+
+            fetcher.fetch_profiles(
+                name="profiles",
+                parallel=True,
+                max_workers=3,
+            )
+
+            # Verify max_workers was passed
+            call_kwargs = mock_fetcher_instance.fetch_profiles.call_args.kwargs
+            assert call_kwargs["max_workers"] == 3
+
+    def test_fetch_profiles_parallel_passes_on_page_complete(self) -> None:
+        """fetch_profiles with parallel=True passes on_page_complete callback."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+
+        from mixpanel_data.types import ParallelProfileResult
+
+        mock_result = ParallelProfileResult(
+            table="profiles",
+            total_rows=100,
+            successful_pages=2,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=1.5,
+            fetched_at=datetime.now(UTC),
+        )
+
+        def on_page_callback(progress: Any) -> None:
+            pass
+
+        with unittest.mock.patch(
+            "mixpanel_data._internal.services.parallel_profile_fetcher.ParallelProfileFetcherService"
+        ) as MockParallelFetcher:
+            mock_fetcher_instance = MagicMock()
+            mock_fetcher_instance.fetch_profiles.return_value = mock_result
+            MockParallelFetcher.return_value = mock_fetcher_instance
+
+            fetcher = FetcherService(mock_api_client, mock_storage)
+
+            fetcher.fetch_profiles(
+                name="profiles",
+                parallel=True,
+                on_page_complete=on_page_callback,
+            )
+
+            # Verify on_page_complete was passed
+            call_kwargs = mock_fetcher_instance.fetch_profiles.call_args.kwargs
+            assert call_kwargs["on_page_complete"] is on_page_callback
+
+    def test_fetch_profiles_parallel_passes_filters(self) -> None:
+        """fetch_profiles with parallel=True passes filter parameters."""
+        mock_api_client = MagicMock()
+        mock_storage = MagicMock()
+
+        from mixpanel_data.types import ParallelProfileResult
+
+        mock_result = ParallelProfileResult(
+            table="profiles",
+            total_rows=100,
+            successful_pages=2,
+            failed_pages=0,
+            failed_page_indices=(),
+            duration_seconds=1.5,
+            fetched_at=datetime.now(UTC),
+        )
+
+        with unittest.mock.patch(
+            "mixpanel_data._internal.services.parallel_profile_fetcher.ParallelProfileFetcherService"
+        ) as MockParallelFetcher:
+            mock_fetcher_instance = MagicMock()
+            mock_fetcher_instance.fetch_profiles.return_value = mock_result
+            MockParallelFetcher.return_value = mock_fetcher_instance
+
+            fetcher = FetcherService(mock_api_client, mock_storage)
+
+            fetcher.fetch_profiles(
+                name="profiles",
+                parallel=True,
+                where='properties["plan"] == "premium"',
+                cohort_id="cohort_abc",
+                output_properties=["$email", "$name"],
+            )
+
+            # Verify filters were passed
+            call_kwargs = mock_fetcher_instance.fetch_profiles.call_args.kwargs
+            assert call_kwargs["where"] == 'properties["plan"] == "premium"'
+            assert call_kwargs["cohort_id"] == "cohort_abc"
+            assert call_kwargs["output_properties"] == ["$email", "$name"]

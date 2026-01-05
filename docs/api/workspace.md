@@ -36,6 +36,29 @@ Parallel fetching:
 - Returns `ParallelFetchResult` with batch statistics and failure tracking
 - Supports progress callbacks via `on_batch_complete`
 
+### Parallel Profile Fetching
+
+For large profile datasets, use `parallel=True` for up to 5x faster exports:
+
+```python
+# Parallel profile fetch for large datasets
+result = ws.fetch_profiles(
+    name="users",
+    parallel=True,
+    max_workers=5  # Default and max is 5
+)
+
+print(f"Fetched {result.total_rows} profiles in {result.duration_seconds:.1f}s")
+print(f"Pages: {result.successful_pages} succeeded, {result.failed_pages} failed")
+```
+
+Parallel profile fetching:
+
+- Uses page-based parallelism with session IDs for consistency
+- Fetches pages concurrently (configurable via `max_workers`, default: 5, max: 5)
+- Returns `ParallelProfileResult` with page statistics and failure tracking
+- Supports progress callbacks via `on_page_complete`
+
 ### Append Mode
 
 The `fetch_events()` and `fetch_profiles()` methods support an `append` parameter for incremental data loading:
