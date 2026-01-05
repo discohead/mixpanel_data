@@ -68,3 +68,7 @@ man/
 
 # Demo
 demo/
+
+# Credential staging (never commit)
+.devcontainer/.gcloud-staging/
+.devcontainer/.gh-staging/

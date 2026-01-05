@@ -53,8 +53,9 @@
   "mounts": [
     "source=mixpanel-data-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
     "source=mixpanel-data-claude-config-${devcontainerId},target=/home/vscode/.claude,type=volume",
-    "source=${localEnv:HOME}/.mp,target=/home/vscode/.mp,type=bind,consistency=cached",
-    "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind,consistency=cached"
+    "source=mixpanel-data-mp-config-${devcontainerId},target=/home/vscode/.mp,type=volume",
+    "source=mixpanel-data-gh-config-${devcontainerId},target=/home/vscode/.config/gh,type=volume",
+    "source=mixpanel-data-gcloud-config-${devcontainerId},target=/home/vscode/.config/gcloud,type=volume"
   ],
   "containerEnv": {
     "PYTHONDONTWRITEBYTECODE": "1",
@@ -64,6 +65,13 @@
     "UV_VENV_CLEAR": "1",
     "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
   },
+  "remoteEnv": {
+    "CLAUDE_CODE_USE_VERTEX": "${localEnv:CLAUDE_CODE_USE_VERTEX}",
+    "ANTHROPIC_VERTEX_PROJECT_ID": "${localEnv:ANTHROPIC_VERTEX_PROJECT_ID}",
+    "CLOUD_ML_REGION": "${localEnv:CLOUD_ML_REGION}",
+    "BASH_DEFAULT_TIMEOUT_MS": "${localEnv:BASH_DEFAULT_TIMEOUT_MS}"
+  },
+  "initializeCommand": ["/bin/bash", ".devcontainer/init-host.sh"],
   "postCreateCommand": ".devcontainer/post-create.sh",
-  "postStartCommand": "uv sync --all-extras"
+  "postStartCommand": ".devcontainer/post-start.sh && uv sync --all-extras"
 }
