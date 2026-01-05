@@ -2109,13 +2109,17 @@ class TestEngageIncludeAllUsersParameter:
         assert captured_body.get("filter_by_cohort") == "cohort_123"
         assert captured_body.get("include_all_users") is True
 
-    def test_export_profiles_include_all_users_false_not_sent(
+    def test_export_profiles_include_all_users_false_sent_with_cohort(
         self, test_credentials: Credentials
     ) -> None:
-        """Should not include include_all_users when False.
+        """Should explicitly send include_all_users=False with cohort_id.
 
-        T060: When include_all_users is False (default), it should not be
-        included in the request body.
+        T060: When include_all_users is False and cohort_id is provided,
+        the parameter must be sent explicitly because the API defaults to True.
+        Without sending False, users cannot exclude non-members from cohort queries.
+
+        Regression test for bug where include_all_users=False was not sent,
+        causing the API to default to True and return all users.
         """
         captured_body: dict[str, Any] = {}
 
@@ -2134,4 +2138,31 @@ class TestEngageIncludeAllUsersParameter:
             )
 
         assert captured_body.get("filter_by_cohort") == "cohort_123"
+        assert captured_body.get("include_all_users") is False
+
+    def test_export_profiles_include_all_users_not_sent_without_cohort(
+        self, test_credentials: Credentials
+    ) -> None:
+        """Should not send include_all_users when no cohort_id is provided.
+
+        T061: The include_all_users parameter is only meaningful in the context
+        of a cohort query. Without cohort_id, it should not be included in the
+        request body regardless of its value.
+        """
+        captured_body: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.content:
+                nonlocal captured_body
+                captured_body = json.loads(request.content)
+            return httpx.Response(200, json={"results": [], "session_id": None})
+
+        with create_mock_client(test_credentials, handler) as client:
+            # Note: This would normally raise ValueError due to validation,
+            # but we're testing the raw API behavior here. The validation
+            # is tested separately in TestEngageParameterValidation.
+            # For this test, we just verify the parameter isn't sent
+            # when fetching without cohort.
+            list(client.export_profiles())
+
         assert "include_all_users" not in captured_body

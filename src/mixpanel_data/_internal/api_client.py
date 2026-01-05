@@ -876,8 +876,10 @@ class MixpanelAPIClient:
                 params["behaviors"] = json.dumps(behaviors)
             if as_of_timestamp is not None:
                 params["as_of_timestamp"] = as_of_timestamp
-            if include_all_users:
-                params["include_all_users"] = True
+            # Only send include_all_users when cohort_id is set (it's meaningless otherwise)
+            # Must send explicitly because API defaults to True
+            if cohort_id:
+                params["include_all_users"] = include_all_users
 
             response = self._request("POST", url, data=params)
 
