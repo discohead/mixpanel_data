@@ -120,11 +120,11 @@ Then restart Claude Code.
 
 ### For Development/Testing
 
-Use the local development marketplace:
+Use the local marketplace from the repository root:
 
 ```bash
-/plugin marketplace add /workspace/mixpanel-plugin
-/plugin install mixpanel-data@mixpanel-data-dev
+/plugin marketplace add /path/to/mixpanel_data
+/plugin install mixpanel-data
 ```
 
 Restart Claude Code to load the plugin.
