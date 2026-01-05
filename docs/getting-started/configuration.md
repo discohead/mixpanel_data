@@ -1,6 +1,6 @@
 # Configuration
 
-mixpanel_data supports multiple configuration methods for credentials and settings.
+mixpanel_data uses Service Accounts for authentication and supports multiple configuration methods for credentials and settings.
 
 ## Environment Variables
 
