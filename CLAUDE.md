@@ -241,6 +241,37 @@ Design documents in `context/`:
 - [mp-cli-project-spec.md](context/mp-cli-project-spec.md) — CLI specification
 - [mixpanel-http-api-specification.md](context/mixpanel-http-api-specification.md) — Mixpanel API reference
 
+## mixpanel-data Plugin
+
+This project includes a Claude Code plugin in `mixpanel-plugin/`.
+
+### Plugin Components
+
+| Type | Location | Invocation |
+|------|----------|------------|
+| **Slash Commands** | `commands/*.md` | Skill tool (`/mp-auth`, `/mp-fetch`, etc.) |
+| **Subagents** | `agents/*.md` | Task tool (`subagent_type`) |
+| **Skills** | `skills/mixpanel-data/` | Auto-loaded by agents |
+
+### Known Issue: Agent/Skill Confusion
+
+**Bug**: Plugin agents incorrectly appear in the Skill tool's `available_skills` list ([anthropics/claude-code#16407](https://github.com/anthropics/claude-code/issues/16407)).
+
+**Workaround**: When using mixpanel-data analysts, use the **Task tool**, not the Skill tool:
+
+```
+# CORRECT - use Task tool for agents
+Task(subagent_type="mixpanel-data:mixpanel-analyst", prompt="...")
+Task(subagent_type="mixpanel-data:funnel-optimizer", prompt="...")
+Task(subagent_type="mixpanel-data:retention-specialist", prompt="...")
+Task(subagent_type="mixpanel-data:jql-expert", prompt="...")
+
+# WRONG - do not use Skill tool for agents
+Skill(skill="mixpanel-data:mixpanel-analyst")  # Will fail!
+```
+
+**Slash commands** (starting with `/mp-`) use the Skill tool correctly.
+
 ## Active Technologies
 - Python 3.11+ + concurrent.futures (stdlib), threading (stdlib), queue (stdlib) - no new external dependencies (017-parallel-export)
 - DuckDB (single-writer constraint requires queue-based serialization) (017-parallel-export)
