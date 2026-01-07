@@ -6,7 +6,7 @@ This guide walks you through your first queries with mixpanel_data in about 5 mi
 
 You'll need:
 
-- mixpanel_data installed (`pip install mixpanel_data`)
+- mixpanel_data installed (`pip install git+https://github.com/jaredmcfarland/mixpanel_data.git`)
 - A Mixpanel service account with username, secret, and project ID
 - Your project's data residency region (us, eu, or in)
 
