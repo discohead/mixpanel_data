@@ -223,6 +223,8 @@ Full documentation: [jaredmcfarland.github.io/mixpanel_data](https://jaredmcfarl
 - [SQL Query Guide](https://jaredmcfarland.github.io/mixpanel_data/guide/sql-queries/)
 - [Live Analytics](https://jaredmcfarland.github.io/mixpanel_data/guide/live-analytics/)
 
+- [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/jaredmcfarland/mixpanel_data)
+
 ## For Humans and Agents
 
 The entire surface area is self-documenting. Every CLI command supports `--help` with complete argument descriptions. The Python API uses typed dataclasses for all return values—IDEs show you what fields are available. Exceptions include error codes and context for programmatic handling. This means both human developers and AI coding agents can explore capabilities without external documentation.
