@@ -648,6 +648,63 @@ class TestOutputResult:
             parsed = json.loads(output.strip())
             assert parsed == {"name": "a"}
 
+    def test_json_output_uses_soft_wrap_to_prevent_line_corruption(self) -> None:
+        """Test that JSON output uses soft_wrap=True to prevent Rich line wrapping.
+
+        Regression test for issue where Rich's Console.print() would insert hard
+        line breaks at 80 chars when stdout is not a TTY (e.g., piped to jq),
+        corrupting JSON by putting literal newlines inside string values.
+        """
+        ctx = MagicMock(spec=typer.Context)
+        ctx.obj = {"format": "json"}
+
+        # Data with escaped newline that would appear near column 80 in output
+        data = [
+            {
+                "id": 3764793,
+                "name": "Long Name With Newline (Blueprint \n2)92f003ec-uuid",
+                "count": 0,
+                "description": "",
+            }
+        ]
+
+        with patch("mixpanel_data.cli.utils.console") as mock_console:
+            output_result(ctx, data, format="json")
+
+            mock_console.print.assert_called_once()
+            call_args = mock_console.print.call_args
+            # Verify soft_wrap=True is passed to prevent Rich from inserting
+            # hard line breaks that would corrupt JSON
+            assert call_args.kwargs.get("soft_wrap") is True
+
+    def test_jsonl_output_uses_soft_wrap(self) -> None:
+        """Test that JSONL output uses soft_wrap=True."""
+        ctx = MagicMock(spec=typer.Context)
+        ctx.obj = {"format": "jsonl"}
+
+        data = [{"name": "Value with newline\nin it"}]
+
+        with patch("mixpanel_data.cli.utils.console") as mock_console:
+            output_result(ctx, data, format="jsonl")
+
+            mock_console.print.assert_called_once()
+            call_args = mock_console.print.call_args
+            assert call_args.kwargs.get("soft_wrap") is True
+
+    def test_csv_output_uses_soft_wrap(self) -> None:
+        """Test that CSV output uses soft_wrap=True."""
+        ctx = MagicMock(spec=typer.Context)
+        ctx.obj = {"format": "csv"}
+
+        data = [{"name": "test"}]
+
+        with patch("mixpanel_data.cli.utils.console") as mock_console:
+            output_result(ctx, data, format="csv")
+
+            mock_console.print.assert_called_once()
+            call_args = mock_console.print.call_args
+            assert call_args.kwargs.get("soft_wrap") is True
+
 
 class TestApplyJqFilter:
     """Tests for _apply_jq_filter function (User Story 1)."""
