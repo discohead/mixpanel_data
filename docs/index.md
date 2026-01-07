@@ -186,7 +186,7 @@ This documentation is built with AI consumption in mind. In addition to the stan
 |----------|------|----------|
 | [`llms.txt`](https://jaredmcfarland.github.io/mixpanel_data/llms.txt) | ~3KB | Structured index—discover what documentation exists |
 | [`llms-full.txt`](https://jaredmcfarland.github.io/mixpanel_data/llms-full.txt) | ~400KB | Complete documentation in one file—comprehensive search |
-| `*.md` pages | Varies | Each HTML page has a corresponding markdown file at the same path |
+| [`index.md`](https://jaredmcfarland.github.io/mixpanel_data/index.md) pages | Varies | Each HTML page has a corresponding `index.md` at the same path |
 
 For interactive exploration of the codebase itself, see [DeepWiki](https://deepwiki.com/jaredmcfarland/mixpanel_data).
 
