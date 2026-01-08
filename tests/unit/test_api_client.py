@@ -12,7 +12,11 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from mixpanel_data._internal.api_client import ENDPOINTS, MixpanelAPIClient
+from mixpanel_data._internal.api_client import (
+    ENDPOINTS,
+    MixpanelAPIClient,
+    _iter_jsonl_lines,
+)
 from mixpanel_data._internal.config import Credentials
 from mixpanel_data.exceptions import (
     AuthenticationError,
@@ -2543,3 +2547,151 @@ class TestExportProfilesPagePagination:
 
         # ceil(5432/1000) = 6
         assert result.num_pages == 6
+
+
+class TestIterJsonlLines:
+    """Tests for the _iter_jsonl_lines buffered line reader.
+
+    This function handles chunk boundary issues in httpx streaming responses
+    where iter_lines() can incorrectly split lines at chunk boundaries.
+    """
+
+    def test_simple_lines(self) -> None:
+        """Should yield complete lines from a simple response.
+
+        Tests basic functionality with single-chunk response containing
+        multiple JSON lines.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            content = b'{"event":"a"}\n{"event":"b"}\n{"event":"c"}\n'
+            return httpx.Response(200, content=content)
+
+        with (
+            httpx.Client(transport=httpx.MockTransport(handler)) as client,
+            client.stream("GET", "http://test.example.com") as response,
+        ):
+            lines = list(_iter_jsonl_lines(response))
+
+        assert lines == ['{"event":"a"}', '{"event":"b"}', '{"event":"c"}']
+
+    def test_line_without_trailing_newline(self) -> None:
+        """Should handle final line that doesn't end with newline.
+
+        Some responses may not have a trailing newline after the last JSON object.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            content = b'{"event":"a"}\n{"event":"b"}'
+            return httpx.Response(200, content=content)
+
+        with (
+            httpx.Client(transport=httpx.MockTransport(handler)) as client,
+            client.stream("GET", "http://test.example.com") as response,
+        ):
+            lines = list(_iter_jsonl_lines(response))
+
+        assert lines == ['{"event":"a"}', '{"event":"b"}']
+
+    def test_empty_lines_skipped(self) -> None:
+        """Should skip empty lines in the response.
+
+        Empty lines between JSON objects should not be yielded.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            content = b'{"event":"a"}\n\n{"event":"b"}\n\n\n{"event":"c"}\n'
+            return httpx.Response(200, content=content)
+
+        with (
+            httpx.Client(transport=httpx.MockTransport(handler)) as client,
+            client.stream("GET", "http://test.example.com") as response,
+        ):
+            lines = list(_iter_jsonl_lines(response))
+
+        assert lines == ['{"event":"a"}', '{"event":"b"}', '{"event":"c"}']
+
+    def test_utf8_content(self) -> None:
+        """Should correctly handle UTF-8 encoded content.
+
+        Multi-byte UTF-8 characters should be properly decoded.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            content = '{"event":"日本語"}\n{"event":"한국어"}\n'.encode()
+            return httpx.Response(200, content=content)
+
+        with (
+            httpx.Client(transport=httpx.MockTransport(handler)) as client,
+            client.stream("GET", "http://test.example.com") as response,
+        ):
+            lines = list(_iter_jsonl_lines(response))
+
+        assert lines == ['{"event":"日本語"}', '{"event":"한국어"}']
+
+    def test_chunk_boundary_handling(self) -> None:
+        """Should correctly reassemble lines split across chunk boundaries.
+
+        This tests the core bug fix: when a line is split across multiple chunks,
+        the buffer should accumulate bytes until a complete line is found.
+        """
+        # Simulate chunks that split a line in the middle
+        chunks = [
+            b'{"event":"first"}\n{"eve',  # First line complete, second partial
+            b'nt":"second"}\n{"event":"th',  # Second complete, third partial
+            b'ird"}\n',  # Third complete
+        ]
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            # Use an iterator extension to simulate chunked response
+            return httpx.Response(
+                200,
+                stream=httpx.ByteStream(b"".join(chunks)),
+            )
+
+        with (
+            httpx.Client(transport=httpx.MockTransport(handler)) as client,
+            client.stream("GET", "http://test.example.com") as response,
+        ):
+            lines = list(_iter_jsonl_lines(response))
+
+        assert lines == [
+            '{"event":"first"}',
+            '{"event":"second"}',
+            '{"event":"third"}',
+        ]
+
+    def test_empty_response(self) -> None:
+        """Should handle empty response gracefully.
+
+        An empty response should yield no lines.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=b"")
+
+        with (
+            httpx.Client(transport=httpx.MockTransport(handler)) as client,
+            client.stream("GET", "http://test.example.com") as response,
+        ):
+            lines = list(_iter_jsonl_lines(response))
+
+        assert lines == []
+
+    def test_whitespace_only_lines_skipped(self) -> None:
+        """Should skip lines that contain only whitespace.
+
+        Lines with only spaces or tabs should not be yielded.
+        """
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            content = b'{"event":"a"}\n   \n{"event":"b"}\n\t\t\n{"event":"c"}\n'
+            return httpx.Response(200, content=content)
+
+        with (
+            httpx.Client(transport=httpx.MockTransport(handler)) as client,
+            client.stream("GET", "http://test.example.com") as response,
+        ):
+            lines = list(_iter_jsonl_lines(response))
+
+        assert lines == ['{"event":"a"}', '{"event":"b"}', '{"event":"c"}']

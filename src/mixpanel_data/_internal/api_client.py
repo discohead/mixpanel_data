@@ -38,6 +38,43 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _iter_jsonl_lines(response: httpx.Response) -> Iterator[str]:
+    """Iterate over JSONL lines from a streaming response with proper buffering.
+
+    The httpx iter_lines() method can incorrectly split lines at chunk boundaries,
+    especially with gzip-compressed responses. This function uses iter_bytes() with
+    manual buffering to handle incomplete lines correctly.
+
+    Args:
+        response: An httpx streaming Response object (from client.stream()).
+
+    Yields:
+        Complete lines from the response, stripped of trailing newlines.
+        Empty lines are skipped.
+
+    Example:
+        ```python
+        with client.stream("GET", url) as response:
+            for line in _iter_jsonl_lines(response):
+                event = json.loads(line)
+        ```
+    """
+    buffer = b""
+    for chunk in response.iter_bytes():
+        buffer += chunk
+        # Split on newlines but keep the last segment (may be incomplete)
+        while b"\n" in buffer:
+            line, buffer = buffer.split(b"\n", 1)
+            line_str = line.decode("utf-8", errors="replace").strip()
+            if line_str:
+                yield line_str
+    # Handle any remaining data in buffer (final line without trailing newline)
+    if buffer:
+        line_str = buffer.decode("utf-8", errors="replace").strip()
+        if line_str:
+            yield line_str
+
 # Regional endpoint configuration
 # Each region has separate URLs for query APIs and export/data APIs
 ENDPOINTS: dict[str, dict[str, str]] = {
@@ -726,9 +763,9 @@ class MixpanelAPIClient:
 
                     response.raise_for_status()
 
-                    for line in response.iter_lines():
-                        if not line.strip():
-                            continue
+                    # Use buffered JSONL reader to handle chunk boundary issues
+                    # with gzip-compressed streaming responses
+                    for line in _iter_jsonl_lines(response):
                         try:
                             event = json.loads(line)
                             yield event
