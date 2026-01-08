@@ -16,6 +16,7 @@ import json
 from datetime import date, datetime
 from typing import Any
 
+from rich.markup import escape as rich_escape
 from rich.table import Table
 
 
@@ -116,7 +117,8 @@ def _format_cell(value: Any) -> str:
     """Format a single cell value for Rich table display.
 
     Converts various Python types to human-readable string representations
-    suitable for display in terminal tables.
+    suitable for display in terminal tables. All output is escaped to prevent
+    Rich from interpreting square brackets as markup tags.
 
     Args:
         value: The value to format. Handles None, bool, datetime, date,
@@ -124,7 +126,8 @@ def _format_cell(value: Any) -> str:
 
     Returns:
         Formatted string: empty for None, "Yes"/"No" for bool, ISO format
-        for dates, JSON for collections, str() for others.
+        for dates, JSON for collections, str() for others. All strings are
+        escaped to prevent Rich markup interpretation.
     """
     if value is None:
         return ""
@@ -133,8 +136,9 @@ def _format_cell(value: Any) -> str:
     if isinstance(value, datetime | date):
         return value.isoformat()
     if isinstance(value, list | dict):
-        return json.dumps(value, default=_json_serializer, ensure_ascii=False)
-    return str(value)
+        result = json.dumps(value, default=_json_serializer, ensure_ascii=False)
+        return rich_escape(result)
+    return rich_escape(str(value))
 
 
 def format_csv(data: dict[str, Any] | list[Any]) -> str:

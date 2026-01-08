@@ -520,11 +520,11 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "json"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, {"key": "value"})
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args
             # First argument should be the JSON string
             assert '"key"' in call_args[0][0]
             assert '"value"' in call_args[0][0]
@@ -544,11 +544,11 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "csv"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, [{"name": "test"}])
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args
             assert "name" in call_args[0][0]
             assert "test" in call_args[0][0]
 
@@ -557,11 +557,11 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "plain"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, ["item1", "item2"])
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args
             assert "item1" in call_args[0][0]
 
     def test_outputs_jsonl_format(self) -> None:
@@ -569,11 +569,11 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "jsonl"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, [{"a": 1}, {"b": 2}])
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args
             output = call_args[0][0]
             # JSONL should have one object per line
             lines = output.strip().split("\n")
@@ -584,11 +584,11 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}  # No format in context
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, {"key": "value"}, format="json")
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args
             assert '"key"' in call_args[0][0]
 
     def test_explicit_format_overrides_context(self) -> None:
@@ -596,11 +596,11 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "table"}  # Context says table
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, {"key": "value"}, format="json")  # Explicit json
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args
             # Should be JSON, not table
             assert '"key"' in call_args[0][0]
             assert '"value"' in call_args[0][0]
@@ -610,11 +610,11 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}  # No format in context
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, {"key": "value"})  # No explicit format
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args
             # Should default to JSON
             assert '"key"' in call_args[0][0]
 
@@ -623,12 +623,12 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "json"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             data = {"name": "test", "count": 42}
             output_result(ctx, data, format="json", jq_filter=".name")
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args
             output = call_args[0][0]
             # Should only have the name field extracted
             assert output.strip() == '"test"'
@@ -638,72 +638,67 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "jsonl"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             data = [{"name": "a"}, {"name": "b"}]
             output_result(ctx, data, format="jsonl", jq_filter=".[0]")
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args
             output = call_args[0][0]
             # Should extract first element
             parsed = json.loads(output.strip())
             assert parsed == {"name": "a"}
 
-    def test_json_output_uses_soft_wrap_to_prevent_line_corruption(self) -> None:
-        """Test that JSON output uses soft_wrap=True to prevent Rich line wrapping.
+    def test_json_output_uses_builtin_print(self) -> None:
+        """Test that JSON output uses builtin print() for machine-readable output.
 
-        Regression test for issue where Rich's Console.print() would insert hard
-        line breaks at 80 chars when stdout is not a TTY (e.g., piped to jq),
-        corrupting JSON by putting literal newlines inside string values.
+        Using print() directly avoids Rich formatting issues like markup
+        interpretation, syntax highlighting, and word wrapping.
         """
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "json"}
 
-        # Data with escaped newline that would appear near column 80 in output
+        # Data with bracket content that Rich would interpret as markup
         data = [
             {
                 "id": 3764793,
-                "name": "Long Name With Newline (Blueprint \n2)92f003ec-uuid",
+                "name": "[dbt] Activation Reached",
                 "count": 0,
-                "description": "",
             }
         ]
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, data, format="json")
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
-            # Verify soft_wrap=True is passed to prevent Rich from inserting
-            # hard line breaks that would corrupt JSON
-            assert call_args.kwargs.get("soft_wrap") is True
+            # Verify print was called and bracket content preserved
+            mock_print.assert_called_once()
+            output = mock_print.call_args[0][0]
+            assert "[dbt]" in output
 
     @pytest.mark.parametrize(
         "fmt, data",
         [
-            ("jsonl", [{"name": "Value with newline\nin it"}]),
+            ("jsonl", [{"name": "[tag] Value"}]),
             ("csv", [{"name": "test"}]),
-            ("plain", ["a long line of text that might otherwise be wrapped"]),
+            ("plain", ["a long line of text"]),
             ("unknown_format", {"key": "value"}),  # Tests the default case
         ],
     )
-    def test_structured_data_formats_use_soft_wrap(
+    def test_structured_data_formats_use_builtin_print(
         self, fmt: str, data: Any
     ) -> None:
-        """Test that JSONL, CSV, plain, and default formats use soft_wrap=True.
+        """Test that JSONL, CSV, plain, and default formats use builtin print().
 
-        Parameterized test covering all structured data output formats to verify
-        they prevent Rich from inserting hard line breaks when piped.
+        Using print() directly avoids Rich formatting issues.
         """
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, data, format=fmt)
 
-            mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
-            assert call_args.kwargs.get("soft_wrap") is True
+            # Verify print was called
+            mock_print.assert_called_once()
 
 
 class TestApplyJqFilter:
@@ -904,33 +899,33 @@ class TestOutputResultFormatValidation:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, {"name": "test"}, format="json", jq_filter=".name")
-            mock_console.print.assert_called_once()
+            mock_print.assert_called_once()
 
     def test_jq_filter_allowed_with_jsonl_format(self) -> None:
         """Test that jq_filter works with jsonl format."""
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             output_result(ctx, [{"a": 1}], format="jsonl", jq_filter=".[0]")
-            mock_console.print.assert_called_once()
+            mock_print.assert_called_once()
 
     def test_jq_filter_jsonl_outputs_per_line(self) -> None:
         """Test that jq filter with jsonl outputs each result on its own line."""
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("builtins.print") as mock_print:
             # Filter that produces multiple results
             output_result(
                 ctx, [{"x": 1}, {"x": 2}, {"x": 3}], format="jsonl", jq_filter=".[].x"
             )
             # Each result should be printed separately (3 calls for 3 results)
-            assert mock_console.print.call_count == 3
+            assert mock_print.call_count == 3
             # Each call should have a single JSON value (1, 2, 3)
-            calls = mock_console.print.call_args_list
+            calls = mock_print.call_args_list
             assert calls[0][0][0] == "1"
             assert calls[1][0][0] == "2"
             assert calls[2][0][0] == "3"

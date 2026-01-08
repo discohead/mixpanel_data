@@ -55,6 +55,7 @@ class ResultWithTableAndDict(Protocol):
 
 # Console instances for stdout/stderr separation
 # Data output goes to stdout; progress/errors go to stderr
+# Note: Table cell content is escaped via rich_escape() in formatters.py
 console = Console()
 err_console = Console(stderr=True, no_color=bool(os.environ.get("NO_COLOR")))
 
@@ -462,9 +463,7 @@ def output_result(
                 output = json.dumps(results, indent=2)
         else:
             output = format_json(data)
-        # soft_wrap=True prevents Rich from inserting hard line breaks at 80 chars
-        # when piped, which would corrupt JSON by putting newlines inside strings
-        console.print(output, highlight=False, soft_wrap=True)
+        print(output)
     elif fmt == "jsonl":
         if jq_filter:
             # Apply jq filter, then output each result as JSONL (one per line)
@@ -472,23 +471,24 @@ def output_result(
             results = _apply_jq_filter(json_str, jq_filter)
             # Output each result element on its own line
             for item in results:
-                console.print(json.dumps(item), highlight=False, soft_wrap=True)
+                print(json.dumps(item))
         else:
             output = format_jsonl(data)
-            console.print(output, highlight=False, soft_wrap=True)
+            print(output)
     elif fmt == "table":
+        # Tables use styled console for box-drawing characters
         table = format_table(data, columns)
         console.print(table)
     elif fmt == "csv":
         output = format_csv(data)
-        console.print(output, highlight=False, soft_wrap=True, end="")
+        print(output, end="")
     elif fmt == "plain":
         output = format_plain(data)
-        console.print(output, highlight=False, soft_wrap=True)
+        print(output)
     else:
         # Default to JSON for unknown formats
         output = format_json(data)
-        console.print(output, highlight=False, soft_wrap=True)
+        print(output)
 
 
 @contextmanager
