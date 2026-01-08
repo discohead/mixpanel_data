@@ -7,17 +7,25 @@ Properties tested:
 - Auth header roundtrip: Base64-encoded auth decodes to original credentials
 - Backoff bounds: Exponential backoff stays within documented limits
 - URL path normalization: Leading slash handling is consistent
+- JSONL chunk invariance: Line parsing is independent of chunk boundaries
 """
 
 from __future__ import annotations
 
 import base64
+from collections.abc import Iterator
 
+import httpx
+from httpx._types import SyncByteStream
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from pydantic import SecretStr
 
-from mixpanel_data._internal.api_client import ENDPOINTS, MixpanelAPIClient
+from mixpanel_data._internal.api_client import (
+    ENDPOINTS,
+    MixpanelAPIClient,
+    _iter_jsonl_lines,
+)
 from mixpanel_data._internal.config import Credentials
 
 # =============================================================================
@@ -422,3 +430,225 @@ class TestUrlBuildProperties:
             assert url.startswith("https://"), f"URL should use HTTPS: {url}"
         finally:
             client.close()
+
+
+# =============================================================================
+# JSONL Chunk Invariance Property Tests
+# =============================================================================
+
+
+class _IterableByteStream(SyncByteStream):
+    """Helper stream that yields chunks individually for testing chunk boundaries.
+
+    Unlike httpx.ByteStream which may combine data, this stream yields each
+    chunk from the input list as a separate iteration, allowing tests to
+    verify correct handling of data split across chunk boundaries.
+    """
+
+    def __init__(self, chunks: list[bytes]) -> None:
+        """Initialize with a list of byte chunks to yield.
+
+        Args:
+            chunks: List of byte chunks to yield individually.
+        """
+        self._chunks = chunks
+
+    def __iter__(self) -> Iterator[bytes]:
+        """Iterate over chunks.
+
+        Returns:
+            Iterator over byte chunks.
+        """
+        return iter(self._chunks)
+
+    def close(self) -> None:
+        """Close the stream (no-op for this implementation)."""
+
+
+def _split_bytes_at_positions(data: bytes, positions: list[int]) -> list[bytes]:
+    """Split bytes at the given positions.
+
+    Args:
+        data: The byte string to split.
+        positions: Sorted list of positions at which to split.
+
+    Returns:
+        List of byte chunks.
+    """
+    # Filter to valid positions and deduplicate
+    valid_positions = sorted({p for p in positions if 0 < p < len(data)})
+
+    # Always include 0 at start and len(data) at end
+    boundaries = [0, *valid_positions, len(data)]
+
+    chunks = []
+    for i in range(len(boundaries) - 1):
+        chunk = data[boundaries[i] : boundaries[i + 1]]
+        if chunk:  # Only add non-empty chunks
+            chunks.append(chunk)
+
+    return chunks if chunks else [data] if data else [b""]
+
+
+def _collect_lines_from_chunks(chunks: list[bytes]) -> list[str]:
+    """Collect lines from _iter_jsonl_lines given chunks.
+
+    Args:
+        chunks: List of byte chunks to feed to the function.
+
+    Returns:
+        List of lines yielded by _iter_jsonl_lines.
+    """
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=_IterableByteStream(chunks))
+
+    with (
+        httpx.Client(transport=httpx.MockTransport(handler)) as client,
+        client.stream("GET", "http://test.example.com") as response,
+    ):
+        return list(_iter_jsonl_lines(response))
+
+
+# Strategy for JSON-like line content (no newlines, no leading/trailing whitespace)
+# Use printable characters excluding newlines
+json_line_content = st.text(
+    alphabet=st.characters(
+        whitelist_categories=("L", "N", "P", "S"),
+        whitelist_characters='{}[]":, ',
+        blacklist_characters="\n\r",
+    ),
+    min_size=1,
+    max_size=100,
+).map(lambda s: s.strip()).filter(bool)
+
+# Strategy for JSONL documents (list of non-empty lines)
+jsonl_documents = st.lists(json_line_content, min_size=1, max_size=10)
+
+# Strategy for chunk split positions
+chunk_positions = st.lists(st.integers(min_value=0, max_value=1000), max_size=20)
+
+
+class TestIterJsonlLinesProperties:
+    """Property-based tests for _iter_jsonl_lines().
+
+    These tests verify that the JSONL line reader correctly handles
+    arbitrary chunk boundaries, which was the core bug being fixed.
+    """
+
+    @given(lines=jsonl_documents, split_positions=chunk_positions)
+    @settings(max_examples=100)
+    def test_chunk_invariance(
+        self, lines: list[str], split_positions: list[int]
+    ) -> None:
+        """Output should be identical regardless of chunk boundaries.
+
+        This is the core property: given the same byte content, the
+        output lines should be identical whether the content is delivered
+        as a single chunk or split at arbitrary byte positions.
+
+        This property directly tests the bug fix where httpx iter_lines()
+        incorrectly split lines at gzip decompression chunk boundaries.
+
+        Args:
+            lines: List of non-empty line contents.
+            split_positions: Positions at which to split the byte content.
+        """
+        # Create JSONL content
+        content = "\n".join(lines) + "\n"
+        content_bytes = content.encode("utf-8")
+
+        # Get reference output from single chunk
+        reference_lines = _collect_lines_from_chunks([content_bytes])
+
+        # Get output from arbitrarily chunked content
+        chunks = _split_bytes_at_positions(content_bytes, split_positions)
+        chunked_lines = _collect_lines_from_chunks(chunks)
+
+        # Output should be identical regardless of chunking
+        assert chunked_lines == reference_lines, (
+            f"Chunk invariance violated!\n"
+            f"Content: {content!r}\n"
+            f"Split at: {split_positions}\n"
+            f"Chunks: {chunks}\n"
+            f"Reference: {reference_lines}\n"
+            f"Chunked: {chunked_lines}"
+        )
+
+    @given(lines=jsonl_documents)
+    @settings(max_examples=50)
+    def test_content_preservation(self, lines: list[str]) -> None:
+        """All non-empty input lines should appear in output.
+
+        The function should preserve all non-empty, non-whitespace lines
+        from the input content.
+
+        Args:
+            lines: List of non-empty line contents.
+        """
+        # Create JSONL content
+        content = "\n".join(lines) + "\n"
+        content_bytes = content.encode("utf-8")
+
+        output_lines = _collect_lines_from_chunks([content_bytes])
+
+        # All input lines should appear in output
+        assert output_lines == lines, (
+            f"Content not preserved!\n"
+            f"Input lines: {lines}\n"
+            f"Output lines: {output_lines}"
+        )
+
+    @given(data=st.binary(max_size=500))
+    @settings(max_examples=50)
+    def test_never_raises_on_arbitrary_bytes(self, data: bytes) -> None:
+        """Function should never raise an exception for any input.
+
+        The function uses errors='replace' for UTF-8 decoding, so it
+        should handle arbitrary byte sequences gracefully without
+        raising exceptions.
+
+        Args:
+            data: Arbitrary byte content.
+        """
+        # Should not raise any exception
+        try:
+            result = _collect_lines_from_chunks([data])
+            # Result should be a list of strings
+            assert isinstance(result, list)
+            for line in result:
+                assert isinstance(line, str)
+        except Exception as e:
+            raise AssertionError(
+                f"Function raised exception on input {data!r}: {e}"
+            ) from e
+
+    @given(lines=jsonl_documents)
+    @settings(max_examples=30)
+    def test_byte_by_byte_chunking(self, lines: list[str]) -> None:
+        """Output should be correct even with byte-by-byte chunking.
+
+        Extreme case: splitting content into individual bytes should
+        still produce correct output.
+
+        Args:
+            lines: List of non-empty line contents.
+        """
+        content = "\n".join(lines) + "\n"
+        content_bytes = content.encode("utf-8")
+
+        # Assume content is not too large (byte-by-byte creates many chunks)
+        assume(len(content_bytes) <= 200)
+
+        # Split into individual bytes
+        byte_chunks = [bytes([b]) for b in content_bytes]
+
+        # Get output
+        output_lines = _collect_lines_from_chunks(byte_chunks)
+
+        # Should match input
+        assert output_lines == lines, (
+            f"Byte-by-byte chunking failed!\n"
+            f"Input: {lines}\n"
+            f"Output: {output_lines}"
+        )
