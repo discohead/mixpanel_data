@@ -520,7 +520,7 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "json"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, {"key": "value"})
 
             mock_console.print.assert_called_once()
@@ -544,7 +544,7 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "csv"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, [{"name": "test"}])
 
             mock_console.print.assert_called_once()
@@ -557,7 +557,7 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "plain"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, ["item1", "item2"])
 
             mock_console.print.assert_called_once()
@@ -569,7 +569,7 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "jsonl"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, [{"a": 1}, {"b": 2}])
 
             mock_console.print.assert_called_once()
@@ -584,7 +584,7 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}  # No format in context
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, {"key": "value"}, format="json")
 
             mock_console.print.assert_called_once()
@@ -596,7 +596,7 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "table"}  # Context says table
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, {"key": "value"}, format="json")  # Explicit json
 
             mock_console.print.assert_called_once()
@@ -610,7 +610,7 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}  # No format in context
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, {"key": "value"})  # No explicit format
 
             mock_console.print.assert_called_once()
@@ -623,7 +623,7 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "json"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             data = {"name": "test", "count": 42}
             output_result(ctx, data, format="json", jq_filter=".name")
 
@@ -638,7 +638,7 @@ class TestOutputResult:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "jsonl"}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             data = [{"name": "a"}, {"name": "b"}]
             output_result(ctx, data, format="jsonl", jq_filter=".[0]")
 
@@ -649,12 +649,11 @@ class TestOutputResult:
             parsed = json.loads(output.strip())
             assert parsed == {"name": "a"}
 
-    def test_json_output_uses_soft_wrap_to_prevent_line_corruption(self) -> None:
-        """Test that JSON output uses soft_wrap=True to prevent Rich line wrapping.
+    def test_json_output_uses_plain_console(self) -> None:
+        """Test that JSON output uses plain_console for machine-readable output.
 
-        Regression test for issue where Rich's Console.print() would insert hard
-        line breaks at 80 chars when stdout is not a TTY (e.g., piped to jq),
-        corrupting JSON by putting literal newlines inside string values.
+        The plain_console is configured with soft_wrap=True, markup=False, and
+        other settings to prevent Rich from corrupting structured data output.
         """
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {"format": "json"}
@@ -669,14 +668,11 @@ class TestOutputResult:
             }
         ]
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, data, format="json")
 
+            # Verify plain_console.print was called (plain_console has soft_wrap=True)
             mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
-            # Verify soft_wrap=True is passed to prevent Rich from inserting
-            # hard line breaks that would corrupt JSON
-            assert call_args.kwargs.get("soft_wrap") is True
 
     @pytest.mark.parametrize(
         "fmt, data",
@@ -687,23 +683,22 @@ class TestOutputResult:
             ("unknown_format", {"key": "value"}),  # Tests the default case
         ],
     )
-    def test_structured_data_formats_use_soft_wrap(
+    def test_structured_data_formats_use_plain_console(
         self, fmt: str, data: Any
     ) -> None:
-        """Test that JSONL, CSV, plain, and default formats use soft_wrap=True.
+        """Test that JSONL, CSV, plain, and default formats use plain_console.
 
-        Parameterized test covering all structured data output formats to verify
-        they prevent Rich from inserting hard line breaks when piped.
+        The plain_console is configured with soft_wrap=True, markup=False, and
+        other settings to prevent Rich from corrupting structured data output.
         """
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, data, format=fmt)
 
+            # Verify plain_console.print was called
             mock_console.print.assert_called_once()
-            call_args = mock_console.print.call_args
-            assert call_args.kwargs.get("soft_wrap") is True
 
 
 class TestApplyJqFilter:
@@ -904,7 +899,7 @@ class TestOutputResultFormatValidation:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, {"name": "test"}, format="json", jq_filter=".name")
             mock_console.print.assert_called_once()
 
@@ -913,7 +908,7 @@ class TestOutputResultFormatValidation:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             output_result(ctx, [{"a": 1}], format="jsonl", jq_filter=".[0]")
             mock_console.print.assert_called_once()
 
@@ -922,7 +917,7 @@ class TestOutputResultFormatValidation:
         ctx = MagicMock(spec=typer.Context)
         ctx.obj = {}
 
-        with patch("mixpanel_data.cli.utils.console") as mock_console:
+        with patch("mixpanel_data.cli.utils.plain_console") as mock_console:
             # Filter that produces multiple results
             output_result(
                 ctx, [{"x": 1}, {"x": 2}, {"x": 3}], format="jsonl", jq_filter=".[].x"

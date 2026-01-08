@@ -58,6 +58,23 @@ class ResultWithTableAndDict(Protocol):
 console = Console()
 err_console = Console(stderr=True, no_color=bool(os.environ.get("NO_COLOR")))
 
+# Plain console for machine-readable output (JSON, JSONL, CSV, plain text)
+# Disables all Rich formatting that could corrupt structured data:
+# - markup=False: Prevents [text] from being interpreted as style tags
+# - highlight=False: Disables syntax highlighting of URLs, numbers, UUIDs
+# - emoji=False: Prevents :emoji_name: from being converted to emoji
+# - soft_wrap=True: Disables word wrapping that could break long lines
+# - force_terminal=False: Never emit ANSI escape codes
+# - no_color=True: Belt-and-suspenders for color disabling
+plain_console = Console(
+    markup=False,
+    highlight=False,
+    emoji=False,
+    soft_wrap=True,
+    force_terminal=False,
+    no_color=True,
+)
+
 
 class ExitCode(IntEnum):
     """Standardized exit codes for CLI commands.
@@ -462,10 +479,7 @@ def output_result(
                 output = json.dumps(results, indent=2)
         else:
             output = format_json(data)
-        # soft_wrap=True prevents Rich from inserting hard line breaks at 80 chars
-        # when piped, which would corrupt JSON by putting newlines inside strings
-        # markup=False prevents Rich from interpreting [...] as markup tags
-        console.print(output, highlight=False, markup=False, soft_wrap=True)
+        plain_console.print(output)
     elif fmt == "jsonl":
         if jq_filter:
             # Apply jq filter, then output each result as JSONL (one per line)
@@ -473,23 +487,24 @@ def output_result(
             results = _apply_jq_filter(json_str, jq_filter)
             # Output each result element on its own line
             for item in results:
-                console.print(json.dumps(item), highlight=False, markup=False, soft_wrap=True)
+                plain_console.print(json.dumps(item))
         else:
             output = format_jsonl(data)
-            console.print(output, highlight=False, markup=False, soft_wrap=True)
+            plain_console.print(output)
     elif fmt == "table":
+        # Tables use styled console for visual formatting
         table = format_table(data, columns)
         console.print(table)
     elif fmt == "csv":
         output = format_csv(data)
-        console.print(output, highlight=False, markup=False, soft_wrap=True, end="")
+        plain_console.print(output, end="")
     elif fmt == "plain":
         output = format_plain(data)
-        console.print(output, highlight=False, markup=False, soft_wrap=True)
+        plain_console.print(output)
     else:
         # Default to JSON for unknown formats
         output = format_json(data)
-        console.print(output, highlight=False, markup=False, soft_wrap=True)
+        plain_console.print(output)
 
 
 @contextmanager
