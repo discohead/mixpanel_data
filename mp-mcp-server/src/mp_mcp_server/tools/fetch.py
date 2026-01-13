@@ -92,6 +92,9 @@ def fetch_profiles(
     distinct_id: str | None = None,
     distinct_ids: list[str] | None = None,
     group_id: str | None = None,
+    behaviors: list[dict[str, Any]] | None = None,
+    as_of_timestamp: int | None = None,
+    include_all_users: bool = False,
     append: bool = False,
     parallel: bool = False,
     workers: int = 4,
@@ -110,6 +113,9 @@ def fetch_profiles(
         distinct_id: Optional single user ID to fetch.
         distinct_ids: Optional list of user IDs to fetch.
         group_id: Optional group ID for group profiles.
+        behaviors: Optional list of behavioral filter conditions.
+        as_of_timestamp: Optional Unix timestamp for point-in-time profile state.
+        include_all_users: Include all users with cohort membership markers.
         append: Append to existing table instead of creating new one.
         parallel: Use parallel fetching.
         workers: Number of parallel workers.
@@ -139,6 +145,12 @@ def fetch_profiles(
         kwargs["distinct_ids"] = distinct_ids
     if group_id:
         kwargs["group_id"] = group_id
+    if behaviors:
+        kwargs["behaviors"] = behaviors
+    if as_of_timestamp is not None:
+        kwargs["as_of_timestamp"] = as_of_timestamp
+    if include_all_users:
+        kwargs["include_all_users"] = include_all_users
     if append:
         kwargs["append"] = append
     if parallel:
@@ -206,6 +218,10 @@ def stream_profiles(
     output_properties: list[str] | None = None,
     distinct_id: str | None = None,
     distinct_ids: list[str] | None = None,
+    group_id: str | None = None,
+    behaviors: list[dict[str, Any]] | None = None,
+    as_of_timestamp: int | None = None,
+    include_all_users: bool = False,
 ) -> list[dict[str, Any]]:
     """Stream profiles directly without storing them.
 
@@ -222,6 +238,10 @@ def stream_profiles(
         output_properties: Optional list of properties to include in output.
         distinct_id: Optional single user ID to fetch.
         distinct_ids: Optional list of user IDs to fetch.
+        group_id: Optional group ID for group profiles.
+        behaviors: Optional list of behavioral filter conditions.
+        as_of_timestamp: Optional Unix timestamp for point-in-time profile state.
+        include_all_users: Include all users with cohort membership markers.
 
     Returns:
         List of profile dictionaries.
@@ -243,5 +263,13 @@ def stream_profiles(
         kwargs["distinct_id"] = distinct_id
     if distinct_ids:
         kwargs["distinct_ids"] = distinct_ids
+    if group_id:
+        kwargs["group_id"] = group_id
+    if behaviors:
+        kwargs["behaviors"] = behaviors
+    if as_of_timestamp is not None:
+        kwargs["as_of_timestamp"] = as_of_timestamp
+    if include_all_users:
+        kwargs["include_all_users"] = include_all_users
 
     return list(ws.stream_profiles(**kwargs))

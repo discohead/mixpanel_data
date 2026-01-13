@@ -322,6 +322,42 @@ class TestFetchProfilesOptionalParams:
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["append"] is True
 
+    def test_fetch_profiles_with_behaviors(self, mock_context: MagicMock) -> None:
+        """fetch_profiles should pass behaviors to workspace."""
+        from mp_mcp_server.tools.fetch import fetch_profiles
+
+        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        behaviors = [{"event": "login", "count": {"min": 1}}]
+
+        fetch_profiles.fn(mock_context, behaviors=behaviors)
+
+        call_kwargs = ws.fetch_profiles.call_args[1]
+        assert call_kwargs["behaviors"] == behaviors
+
+    def test_fetch_profiles_with_as_of_timestamp(self, mock_context: MagicMock) -> None:
+        """fetch_profiles should pass as_of_timestamp to workspace."""
+        from mp_mcp_server.tools.fetch import fetch_profiles
+
+        ws = mock_context.fastmcp._lifespan_result["workspace"]
+
+        fetch_profiles.fn(mock_context, as_of_timestamp=1704067200)
+
+        call_kwargs = ws.fetch_profiles.call_args[1]
+        assert call_kwargs["as_of_timestamp"] == 1704067200
+
+    def test_fetch_profiles_with_include_all_users(
+        self, mock_context: MagicMock
+    ) -> None:
+        """fetch_profiles should pass include_all_users to workspace."""
+        from mp_mcp_server.tools.fetch import fetch_profiles
+
+        ws = mock_context.fastmcp._lifespan_result["workspace"]
+
+        fetch_profiles.fn(mock_context, include_all_users=True)
+
+        call_kwargs = ws.fetch_profiles.call_args[1]
+        assert call_kwargs["include_all_users"] is True
+
 
 class TestStreamEventsOptionalParams:
     """Tests for stream_events optional parameters coverage."""
@@ -384,3 +420,56 @@ class TestStreamProfilesOptionalParams:
 
         call_kwargs = ws.stream_profiles.call_args[1]
         assert call_kwargs["distinct_ids"] == ["user1", "user2"]
+
+    def test_stream_profiles_with_group_id(self, mock_context: MagicMock) -> None:
+        """stream_profiles should pass group_id to workspace."""
+        from mp_mcp_server.tools.fetch import stream_profiles
+
+        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws.stream_profiles.return_value = iter([{"$distinct_id": "company1"}])
+
+        stream_profiles.fn(mock_context, group_id="company")
+
+        call_kwargs = ws.stream_profiles.call_args[1]
+        assert call_kwargs["group_id"] == "company"
+
+    def test_stream_profiles_with_behaviors(self, mock_context: MagicMock) -> None:
+        """stream_profiles should pass behaviors to workspace."""
+        from mp_mcp_server.tools.fetch import stream_profiles
+
+        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws.stream_profiles.return_value = iter([{"$distinct_id": "user1"}])
+        behaviors = [{"event": "purchase", "count": {"min": 5}}]
+
+        stream_profiles.fn(mock_context, behaviors=behaviors)
+
+        call_kwargs = ws.stream_profiles.call_args[1]
+        assert call_kwargs["behaviors"] == behaviors
+
+    def test_stream_profiles_with_as_of_timestamp(
+        self, mock_context: MagicMock
+    ) -> None:
+        """stream_profiles should pass as_of_timestamp to workspace."""
+        from mp_mcp_server.tools.fetch import stream_profiles
+
+        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws.stream_profiles.return_value = iter([{"$distinct_id": "user1"}])
+
+        stream_profiles.fn(mock_context, as_of_timestamp=1704067200)
+
+        call_kwargs = ws.stream_profiles.call_args[1]
+        assert call_kwargs["as_of_timestamp"] == 1704067200
+
+    def test_stream_profiles_with_include_all_users(
+        self, mock_context: MagicMock
+    ) -> None:
+        """stream_profiles should pass include_all_users to workspace."""
+        from mp_mcp_server.tools.fetch import stream_profiles
+
+        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws.stream_profiles.return_value = iter([{"$distinct_id": "user1"}])
+
+        stream_profiles.fn(mock_context, include_all_users=True)
+
+        call_kwargs = ws.stream_profiles.call_args[1]
+        assert call_kwargs["include_all_users"] is True
