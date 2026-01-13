@@ -46,6 +46,35 @@ if TYPE_CHECKING:
     from mixpanel_data._internal.api_client import MixpanelAPIClient
 
 
+def _extract_steps_from_date_data(date_data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract steps from date data, handling both regular and segmented formats.
+
+    API response formats:
+        - Without 'on' param: {"steps": [step1, step2, ...]}
+        - With 'on' param: {"$overall": [step1, ...], "Chrome": [...], ...}
+
+    For segmented responses, uses "$overall" which contains aggregate data.
+
+    Args:
+        date_data: Single date's data from the funnel response.
+
+    Returns:
+        List of step dictionaries.
+    """
+    # Non-segmented format: data has "steps" key
+    if "steps" in date_data:
+        steps = date_data.get("steps", [])
+        return steps if isinstance(steps, list) else []
+
+    # Segmented format: use $overall for aggregate data
+    if "$overall" in date_data:
+        overall = date_data.get("$overall", [])
+        return overall if isinstance(overall, list) else []
+
+    # Fallback: no recognized format
+    return []
+
+
 def _transform_funnel(
     raw: dict[str, Any],
     funnel_id: int,
@@ -65,8 +94,14 @@ def _transform_funnel(
         - Empty steps: Returns 0.0 conversion rate
         - Previous step count = 0: Returns 0.0 to avoid division by zero
 
+    Segmented responses (when 'on' parameter is used):
+        - Uses the '$overall' segment which contains aggregate data
+        - Individual segment breakdowns are not included in FunnelResult
+
     Args:
-        raw: Raw API response dictionary with data[date][steps] structure.
+        raw: Raw API response dictionary with data[date] structure.
+            Non-segmented: data[date]["steps"] = list of steps
+            Segmented: data[date]["$overall"] = list of steps
         funnel_id: Funnel identifier.
         from_date: Query start date.
         to_date: Query end date.
@@ -82,7 +117,7 @@ def _transform_funnel(
     ] = {}  # step_idx -> (event, total_count)
 
     for date_data in data.values():
-        steps_data = date_data.get("steps", [])
+        steps_data = _extract_steps_from_date_data(date_data)
         for idx, step in enumerate(steps_data):
             event = step.get("event", step.get("goal", f"Step {idx + 1}"))
             count = step.get("count", 0)

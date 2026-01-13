@@ -89,12 +89,18 @@ class TestListBookmarksTools:
     def test_list_bookmarks_returns_bookmark_info(
         self, mock_context: MagicMock
     ) -> None:
-        """list_bookmarks should return saved report metadata."""
+        """list_bookmarks should return saved report metadata with pagination info."""
         from mp_mcp_server.tools.discovery import list_bookmarks
 
         result = list_bookmarks.fn(mock_context)
-        assert len(result) == 1
-        assert result[0]["name"] == "Daily Signups"
+        # New format returns dict with bookmarks list and pagination metadata
+        assert "bookmarks" in result
+        assert "truncated" in result
+        assert "total_count" in result
+        assert len(result["bookmarks"]) == 1
+        assert result["bookmarks"][0]["name"] == "Daily Signups"
+        assert result["truncated"] is False
+        assert result["total_count"] == 1
 
 
 class TestTopEventsTools:

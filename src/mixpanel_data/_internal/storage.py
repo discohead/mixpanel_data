@@ -895,7 +895,7 @@ class StorageEngine:
 
         # Check if table exists
         if not self.table_exists(name):
-            raise TableNotFoundError(f"Table '{name}' does not exist")
+            raise TableNotFoundError(name)
 
         # Verify table is an events table (not profiles)
         existing_metadata = self.get_metadata(name)
@@ -959,7 +959,7 @@ class StorageEngine:
 
         # Check if table exists
         if not self.table_exists(name):
-            raise TableNotFoundError(f"Table '{name}' does not exist")
+            raise TableNotFoundError(name)
 
         # Verify table is a profiles table (not events)
         existing_metadata = self.get_metadata(name)
@@ -1523,7 +1523,7 @@ class StorageEngine:
         """
         # Check if table exists
         if not self.table_exists(name):
-            raise TableNotFoundError(f"Table '{name}' does not exist")
+            raise TableNotFoundError(name)
 
         # Drop the table
         quoted_name = _quote_identifier(name)

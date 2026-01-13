@@ -151,26 +151,51 @@ def list_cohorts(ctx: Context) -> list[dict[str, Any]]:
 def list_bookmarks(
     ctx: Context,
     bookmark_type: BookmarkType | None = None,
-) -> list[dict[str, Any]]:
+    limit: int = 100,
+) -> dict[str, Any]:
     """List saved reports (bookmarks) in the Mixpanel project.
 
     Returns metadata about saved reports including bookmark ID,
     name, report type, and URL.
 
+    Note: Projects with many bookmarks may experience slow response times.
+    Use the bookmark_type filter to reduce response size and latency.
+
     Args:
         ctx: FastMCP context with workspace access.
         bookmark_type: Optional filter by type
             (insights, funnels, retention, flows, launch-analysis).
+            RECOMMENDED for large projects to reduce latency.
+        limit: Maximum number of bookmarks to return (default 100).
+            Set to 0 for unlimited (may timeout for large projects).
 
     Returns:
-        List of bookmark metadata dictionaries.
+        Dictionary with bookmarks list and metadata about truncation.
 
     Example:
         Ask: "Show me my saved funnel reports"
         Uses: list_bookmarks(bookmark_type="funnels")
+
+        Ask: "Show first 50 saved reports"
+        Uses: list_bookmarks(limit=50)
     """
     ws = get_workspace(ctx)
-    return [b.to_dict() for b in ws.list_bookmarks(bookmark_type=bookmark_type)]
+    bookmarks = [b.to_dict() for b in ws.list_bookmarks(bookmark_type=bookmark_type)]
+
+    # Apply limit to prevent overwhelming context windows and timeouts
+    if limit > 0 and len(bookmarks) > limit:
+        return {
+            "bookmarks": bookmarks[:limit],
+            "truncated": True,
+            "total_count": len(bookmarks),
+            "note": "Use bookmark_type filter to reduce results, or increase limit.",
+        }
+
+    return {
+        "bookmarks": bookmarks,
+        "truncated": False,
+        "total_count": len(bookmarks),
+    }
 
 
 @mcp.tool
