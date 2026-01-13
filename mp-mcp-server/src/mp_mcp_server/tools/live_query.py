@@ -306,6 +306,7 @@ def activity_feed(
         to_date: Optional end date (YYYY-MM-DD).
         limit: Maximum number of events to return (default 100).
             Use higher values for longer histories.
+            Set to 0 for unlimited results.
 
     Returns:
         Dictionary with user events (limited to specified count).
@@ -326,12 +327,17 @@ def activity_feed(
 
     # Limit events to prevent overwhelming context windows
     output = result.to_dict()
-    if "events" in output and len(output["events"]) > limit:
-        output["events"] = output["events"][:limit]
-        output["truncated"] = True
-        output["total_events"] = len(result.events)
+    if "events" in output:
+        total_event_count = len(result.events)
+        if limit > 0 and total_event_count > limit:
+            output["events"] = output["events"][:limit]
+            output["truncated"] = True
+        else:
+            output["truncated"] = False
+        output["total_events"] = total_event_count
     else:
         output["truncated"] = False
+        output["total_events"] = 0
 
     return output
 

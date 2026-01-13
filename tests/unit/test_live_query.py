@@ -521,6 +521,136 @@ class TestFunnel:
 
 
 # =============================================================================
+# Funnel Helper Tests
+# =============================================================================
+
+
+class TestExtractStepsFromDateData:
+    """Tests for _extract_steps_from_date_data helper function.
+
+    This function handles both regular and segmented funnel response formats.
+    """
+
+    def test_non_segmented_format_returns_steps(self) -> None:
+        """Non-segmented format with 'steps' key returns step list."""
+        from mixpanel_data._internal.services.live_query import (
+            _extract_steps_from_date_data,
+        )
+
+        date_data = {
+            "steps": [
+                {"count": 100, "step_label": "Step 1"},
+                {"count": 80, "step_label": "Step 2"},
+            ]
+        }
+        result = _extract_steps_from_date_data(date_data)
+        assert result == [
+            {"count": 100, "step_label": "Step 1"},
+            {"count": 80, "step_label": "Step 2"},
+        ]
+
+    def test_segmented_format_returns_overall(self) -> None:
+        """Segmented format with '$overall' key returns aggregate data."""
+        from mixpanel_data._internal.services.live_query import (
+            _extract_steps_from_date_data,
+        )
+
+        date_data = {
+            "$overall": [
+                {"count": 200, "step_label": "Step 1"},
+                {"count": 150, "step_label": "Step 2"},
+            ],
+            "Chrome": [
+                {"count": 100, "step_label": "Step 1"},
+                {"count": 70, "step_label": "Step 2"},
+            ],
+            "Firefox": [
+                {"count": 100, "step_label": "Step 1"},
+                {"count": 80, "step_label": "Step 2"},
+            ],
+        }
+        result = _extract_steps_from_date_data(date_data)
+        # Should return $overall, not individual segments
+        assert result == [
+            {"count": 200, "step_label": "Step 1"},
+            {"count": 150, "step_label": "Step 2"},
+        ]
+
+    def test_empty_steps_list_returns_empty(self) -> None:
+        """Empty steps list returns empty list."""
+        from mixpanel_data._internal.services.live_query import (
+            _extract_steps_from_date_data,
+        )
+
+        date_data: dict[str, list[dict[str, str]]] = {"steps": []}
+        result = _extract_steps_from_date_data(date_data)
+        assert result == []
+
+    def test_empty_overall_returns_empty(self) -> None:
+        """Empty $overall list returns empty list."""
+        from mixpanel_data._internal.services.live_query import (
+            _extract_steps_from_date_data,
+        )
+
+        date_data: dict[str, list[dict[str, str]]] = {"$overall": []}
+        result = _extract_steps_from_date_data(date_data)
+        assert result == []
+
+    def test_steps_non_list_type_returns_empty(self) -> None:
+        """Non-list type for steps returns empty list."""
+        from mixpanel_data._internal.services.live_query import (
+            _extract_steps_from_date_data,
+        )
+
+        date_data = {"steps": "not a list"}
+        result = _extract_steps_from_date_data(date_data)
+        assert result == []
+
+    def test_overall_non_list_type_returns_empty(self) -> None:
+        """Non-list type for $overall returns empty list."""
+        from mixpanel_data._internal.services.live_query import (
+            _extract_steps_from_date_data,
+        )
+
+        date_data = {"$overall": {"not": "a list"}}
+        result = _extract_steps_from_date_data(date_data)
+        assert result == []
+
+    def test_unrecognized_format_returns_empty(self) -> None:
+        """Unrecognized format without steps or $overall returns empty list."""
+        from mixpanel_data._internal.services.live_query import (
+            _extract_steps_from_date_data,
+        )
+
+        date_data = {"some_other_key": [1, 2, 3]}
+        result = _extract_steps_from_date_data(date_data)
+        assert result == []
+
+    def test_empty_dict_returns_empty(self) -> None:
+        """Empty dict returns empty list."""
+        from mixpanel_data._internal.services.live_query import (
+            _extract_steps_from_date_data,
+        )
+
+        result = _extract_steps_from_date_data({})
+        assert result == []
+
+    def test_steps_takes_precedence_over_overall(self) -> None:
+        """When both 'steps' and '$overall' exist, 'steps' takes precedence."""
+        from mixpanel_data._internal.services.live_query import (
+            _extract_steps_from_date_data,
+        )
+
+        date_data = {
+            "steps": [{"count": 50, "step_label": "From steps"}],
+            "$overall": [{"count": 100, "step_label": "From overall"}],
+        }
+        result = _extract_steps_from_date_data(date_data)
+        # steps key is checked first, so it takes precedence
+        assert result == [{"count": 50, "step_label": "From steps"}]
+
+
+# =============================================================================
 # User Story 3: Retention Tests
 # =============================================================================
 
