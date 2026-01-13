@@ -18,12 +18,31 @@ from __future__ import annotations
 
 import signal
 import sys
-from typing import Annotated
+from typing import Annotated, Literal
 
 import typer
 
 import mixpanel_data
 from mixpanel_data.cli.utils import ExitCode, err_console
+
+
+def _get_rich_markup_mode() -> Literal["markdown", "rich"] | None:
+    """Determine rich_markup_mode based on terminal detection.
+
+    Returns "markdown" for interactive terminals to provide rich formatting,
+    or None for non-TTY contexts (pipes, AI agents) to minimize token usage.
+
+    Returns:
+        "markdown" if stdout is a TTY, None otherwise.
+    """
+    import os
+
+    # MP_PLAIN=1 forces plain output even in TTY
+    if os.environ.get("MP_PLAIN", "").lower() in ("1", "true", "yes"):
+        return None
+    # Use rich formatting only in interactive terminals
+    return "markdown" if sys.stdout.isatty() else None
+
 
 # Create main application
 app = typer.Typer(
@@ -36,7 +55,7 @@ app = typer.Typer(
 Workflow: mp inspect events → mp fetch events → mp query sql""",
     no_args_is_help=True,
     add_completion=True,
-    rich_markup_mode="markdown",
+    rich_markup_mode=_get_rich_markup_mode(),
 )
 
 

@@ -66,7 +66,8 @@ class TestMainCallback:
 
         # Typer returns exit code 2 when no_args_is_help=True and no args provided
         assert result.exit_code == 2
-        assert "Usage:" in result.stdout or "usage:" in result.stdout.lower()
+        # Help goes to output (combined stdout/stderr) when exit_code=2
+        assert "Usage:" in result.output or "usage:" in result.output.lower()
 
     def test_help_flag_shows_help(self, cli_runner: CliRunner) -> None:
         """Test that --help shows help."""
