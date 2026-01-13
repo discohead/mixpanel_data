@@ -311,6 +311,17 @@ class TestFetchProfilesOptionalParams:
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["group_id"] == "company"
 
+    def test_fetch_profiles_with_append(self, mock_context: MagicMock) -> None:
+        """fetch_profiles should pass append flag to workspace."""
+        from mp_mcp_server.tools.fetch import fetch_profiles
+
+        ws = mock_context.fastmcp._lifespan_result["workspace"]
+
+        fetch_profiles.fn(mock_context, append=True)
+
+        call_kwargs = ws.fetch_profiles.call_args[1]
+        assert call_kwargs["append"] is True
+
 
 class TestStreamEventsOptionalParams:
     """Tests for stream_events optional parameters coverage."""

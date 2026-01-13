@@ -9,15 +9,20 @@ Example:
 """
 
 import json
+import logging
 from collections.abc import Callable
 from functools import wraps
 from typing import ParamSpec, TypeVar
 
 from fastmcp import Context
+from mcp.shared.exceptions import McpError
+from mcp.types import INTERNAL_ERROR, ErrorData
 
 from mixpanel_data.exceptions import MixpanelDataError
 from mp_mcp_server.context import get_workspace
 from mp_mcp_server.server import mcp
+
+logger = logging.getLogger(__name__)
 
 P = ParamSpec("P")
 R = TypeVar("R", bound=str)
@@ -26,14 +31,19 @@ R = TypeVar("R", bound=str)
 def handle_resource_errors(func: Callable[P, R]) -> Callable[P, R]:
     """Decorator to handle errors in MCP resources.
 
-    Resources return strings, so errors are returned as JSON-formatted
-    error objects that can be parsed by agents.
+    Raises McpError with structured error data that agents can parse
+    for self-correction. The error data includes error codes, messages,
+    and actionable suggestions.
 
     Args:
         func: The resource function to wrap.
 
     Returns:
-        The wrapped function that returns JSON errors on failure.
+        The wrapped function that raises McpError on failure.
+
+    Raises:
+        McpError: When the resource fails, with structured error data
+            in the `data` field for agent recovery.
 
     Example:
         ```python
@@ -50,23 +60,27 @@ def handle_resource_errors(func: Callable[P, R]) -> Callable[P, R]:
         try:
             return func(*args, **kwargs)
         except MixpanelDataError as e:
-            return json.dumps(
-                {
-                    "error": True,
-                    **e.to_dict(),
-                },
-                indent=2,
-            )
+            logger.warning("Resource error: %s", e, exc_info=True)
+            raise McpError(
+                ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=str(e),
+                    data=e.to_dict(),
+                )
+            ) from e
         except Exception as e:
-            return json.dumps(
-                {
-                    "error": True,
-                    "code": "INTERNAL_ERROR",
-                    "message": str(e),
-                    "details": {"error_type": type(e).__name__},
-                },
-                indent=2,
-            )
+            logger.exception("Unexpected resource error: %s", e)
+            raise McpError(
+                ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=str(e),
+                    data={
+                        "code": "INTERNAL_ERROR",
+                        "message": str(e),
+                        "details": {"error_type": type(e).__name__},
+                    },
+                )
+            ) from e
 
     return wrapper  # type: ignore[return-value]
 
@@ -114,7 +128,7 @@ def tables_resource(ctx: Context) -> str:
         JSON string with table list.
     """
     ws = get_workspace(ctx)
-    tables = [t.to_dict() for t in ws.tables()] if hasattr(ws, "tables") else []
+    tables = [t.to_dict() for t in ws.tables()]
     return json.dumps(tables, indent=2)
 
 

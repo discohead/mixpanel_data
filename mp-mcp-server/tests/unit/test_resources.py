@@ -1,15 +1,37 @@
 """Tests for MCP resources.
 
 These tests verify the MCP resources are registered and return correct data.
+
+Note: Resource function invocation is covered by integration tests in
+test_server_integration.py, which tests the full MCP client workflow.
 """
 
-import json
+from typing import Any, cast
+
+import pytest
+from mcp.shared.exceptions import McpError
 
 from mixpanel_data.exceptions import (
     AuthenticationError,
     MixpanelDataError,
     RateLimitError,
 )
+
+
+def get_error_data(error: McpError) -> dict[str, Any]:
+    """Extract error data from McpError, asserting it exists.
+
+    Args:
+        error: The McpError to extract data from.
+
+    Returns:
+        The error data dictionary.
+
+    Raises:
+        AssertionError: If error data is None.
+    """
+    assert error.error.data is not None, "Expected error.data to be present"
+    return cast(dict[str, Any], error.error.data)
 
 
 class TestHandleResourceErrors:
@@ -26,54 +48,59 @@ class TestHandleResourceErrors:
         result = successful_resource()
         assert result == '{"data": "value"}'
 
-    def test_mixpanel_error_returns_json_error(self) -> None:
-        """MixpanelDataError should return JSON error object."""
+    def test_mixpanel_error_raises_mcp_error(self) -> None:
+        """MixpanelDataError should raise McpError with structured data."""
         from mp_mcp_server.resources import handle_resource_errors
 
         @handle_resource_errors
         def failing_resource() -> str:
             raise AuthenticationError("Invalid credentials")
 
-        result = failing_resource()
-        data = json.loads(result)
+        with pytest.raises(McpError) as exc_info:
+            failing_resource()
 
-        assert data["error"] is True
+        error = exc_info.value
+        data = get_error_data(error)
+        assert error.error.code == -32603  # INTERNAL_ERROR
+        assert "Invalid credentials" in error.error.message
         assert data["code"] == "AUTH_FAILED"
-        assert "Invalid credentials" in data["message"]
 
-    def test_rate_limit_error_returns_json_with_retry(self) -> None:
-        """RateLimitError should include retry_after in JSON error."""
+    def test_rate_limit_error_includes_retry_after(self) -> None:
+        """RateLimitError should include retry_after in error data."""
         from mp_mcp_server.resources import handle_resource_errors
 
         @handle_resource_errors
         def failing_resource() -> str:
             raise RateLimitError("Rate limited", retry_after=30)
 
-        result = failing_resource()
-        data = json.loads(result)
+        with pytest.raises(McpError) as exc_info:
+            failing_resource()
 
-        assert data["error"] is True
+        error = exc_info.value
+        data = get_error_data(error)
         assert data["code"] == "RATE_LIMITED"
         assert data["details"]["retry_after"] == 30
 
-    def test_generic_error_returns_json_error(self) -> None:
-        """Non-MixpanelDataError should return INTERNAL_ERROR JSON."""
+    def test_generic_error_raises_mcp_error(self) -> None:
+        """Non-MixpanelDataError should raise McpError with INTERNAL_ERROR."""
         from mp_mcp_server.resources import handle_resource_errors
 
         @handle_resource_errors
         def failing_resource() -> str:
             raise ValueError("Something unexpected")
 
-        result = failing_resource()
-        data = json.loads(result)
+        with pytest.raises(McpError) as exc_info:
+            failing_resource()
 
-        assert data["error"] is True
+        error = exc_info.value
+        data = get_error_data(error)
+        assert error.error.code == -32603  # INTERNAL_ERROR
+        assert "Something unexpected" in error.error.message
         assert data["code"] == "INTERNAL_ERROR"
-        assert "Something unexpected" in data["message"]
         assert data["details"]["error_type"] == "ValueError"
 
-    def test_error_json_is_parseable(self) -> None:
-        """Error responses should be valid, parseable JSON."""
+    def test_error_data_is_structured(self) -> None:
+        """Error data should preserve structured details."""
         from mp_mcp_server.resources import handle_resource_errors
 
         @handle_resource_errors
@@ -84,11 +111,27 @@ class TestHandleResourceErrors:
                 details={"key": "value", "nested": {"a": 1}},
             )
 
-        result = failing_resource()
-        # Should not raise
-        data = json.loads(result)
+        with pytest.raises(McpError) as exc_info:
+            failing_resource()
+
+        error = exc_info.value
+        data = get_error_data(error)
         assert data["details"]["key"] == "value"
         assert data["details"]["nested"]["a"] == 1
+
+    def test_error_chains_original_exception(self) -> None:
+        """McpError should chain the original exception."""
+        from mp_mcp_server.resources import handle_resource_errors
+
+        @handle_resource_errors
+        def failing_resource() -> str:
+            raise AuthenticationError("Invalid credentials")
+
+        with pytest.raises(McpError) as exc_info:
+            failing_resource()
+
+        assert exc_info.value.__cause__ is not None
+        assert isinstance(exc_info.value.__cause__, AuthenticationError)
 
 
 class TestWorkspaceInfoResource:
@@ -155,3 +198,5 @@ class TestBookmarksResource:
 
         resource_uris = list(mcp._resource_manager._resources.keys())
         assert "schema://bookmarks" in resource_uris
+
+

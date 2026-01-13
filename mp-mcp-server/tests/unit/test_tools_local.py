@@ -5,6 +5,8 @@ These tests verify the local SQL tools work correctly with the DuckDB database.
 
 from unittest.mock import MagicMock
 
+import pytest
+
 
 class TestSqlTool:
     """Tests for the sql tool."""
@@ -145,7 +147,7 @@ class TestColumnStatsTool:
         assert result["min_value"] == "2024-01-01"
 
     def test_column_stats_empty_result(self, mock_context: MagicMock) -> None:
-        """column_stats should handle empty results."""
+        """column_stats should return structured result for empty tables."""
         from mp_mcp_server.tools.local import column_stats
 
         sql_rows_mock = MagicMock()
@@ -155,7 +157,13 @@ class TestColumnStatsTool:
         ].sql_rows.return_value = sql_rows_mock
 
         result = column_stats.fn(mock_context, table="events_jan", column="time")
-        assert result == {}
+        assert result == {
+            "count": 0,
+            "distinct_count": 0,
+            "min_value": None,
+            "max_value": None,
+            "note": "Table is empty or column has no values",
+        }
 
 
 class TestDropTableTool:
@@ -179,3 +187,109 @@ class TestDropAllTablesTool:
 
         result = drop_all_tables.fn(mock_context)
         assert result["success"] is True
+
+
+class TestSqlInjectionPrevention:
+    """Tests for SQL injection prevention in local tools."""
+
+    def test_validate_table_name_rejects_semicolon(self) -> None:
+        """Table names with semicolons should be rejected."""
+        from mp_mcp_server.tools.local import _validate_table_name
+
+        with pytest.raises(ValueError, match="Invalid table name"):
+            _validate_table_name("events; DROP TABLE users--")
+
+    def test_validate_table_name_rejects_spaces(self) -> None:
+        """Table names with spaces should be rejected."""
+        from mp_mcp_server.tools.local import _validate_table_name
+
+        with pytest.raises(ValueError, match="Invalid table name"):
+            _validate_table_name("events users")
+
+    def test_validate_table_name_rejects_quotes(self) -> None:
+        """Table names with quotes should be rejected."""
+        from mp_mcp_server.tools.local import _validate_table_name
+
+        with pytest.raises(ValueError, match="Invalid table name"):
+            _validate_table_name('events"--')
+
+    def test_validate_table_name_accepts_valid_names(self) -> None:
+        """Valid table names should pass validation."""
+        from mp_mcp_server.tools.local import _validate_table_name
+
+        # Should not raise
+        _validate_table_name("events")
+        _validate_table_name("events_jan")
+        _validate_table_name("_private_table")
+        _validate_table_name("Events2024")
+
+    def test_validate_column_rejects_drop(self) -> None:
+        """Column expressions with DROP should be rejected."""
+        from mp_mcp_server.tools.local import _validate_column_expression
+
+        with pytest.raises(ValueError, match="DROP"):
+            _validate_column_expression("time; DROP TABLE events")
+
+    def test_validate_column_rejects_union(self) -> None:
+        """Column expressions with UNION should be rejected."""
+        from mp_mcp_server.tools.local import _validate_column_expression
+
+        with pytest.raises(ValueError, match="UNION"):
+            _validate_column_expression("id UNION SELECT password FROM users")
+
+    def test_validate_column_rejects_select(self) -> None:
+        """Column expressions with SELECT should be rejected."""
+        from mp_mcp_server.tools.local import _validate_column_expression
+
+        with pytest.raises(ValueError, match="SELECT"):
+            _validate_column_expression("(SELECT secret FROM config)")
+
+    def test_validate_column_rejects_comments(self) -> None:
+        """Column expressions with SQL comments should be rejected."""
+        from mp_mcp_server.tools.local import _validate_column_expression
+
+        with pytest.raises(ValueError, match="--"):
+            _validate_column_expression("time -- ignore rest")
+
+        with pytest.raises(ValueError, match=r"/\*"):
+            _validate_column_expression("time /* comment */")
+
+    def test_validate_column_accepts_json_path(self) -> None:
+        """Valid JSON path expressions should pass validation."""
+        from mp_mcp_server.tools.local import _validate_column_expression
+
+        # These should not raise
+        _validate_column_expression("properties->>'$.field'")
+        _validate_column_expression("properties->'$.browser'")
+        _validate_column_expression("json_extract(properties, '$.name')")
+
+    def test_column_stats_validates_table_name(self, mock_context: MagicMock) -> None:
+        """column_stats should reject dangerous table names via ToolError."""
+        from fastmcp.exceptions import ToolError
+
+        from mp_mcp_server.tools.local import column_stats
+
+        with pytest.raises(ToolError, match="Invalid table name"):
+            column_stats.fn(mock_context, table="events; DROP TABLE--", column="time")
+
+    def test_column_stats_validates_column_expression(
+        self, mock_context: MagicMock
+    ) -> None:
+        """column_stats should reject dangerous column expressions via ToolError."""
+        from fastmcp.exceptions import ToolError
+
+        from mp_mcp_server.tools.local import column_stats
+
+        with pytest.raises(ToolError, match="disallowed pattern"):
+            column_stats.fn(mock_context, table="events", column="time; DROP TABLE x")
+
+    def test_event_breakdown_validates_table_name(
+        self, mock_context: MagicMock
+    ) -> None:
+        """event_breakdown should reject dangerous table names via ToolError."""
+        from fastmcp.exceptions import ToolError
+
+        from mp_mcp_server.tools.local import event_breakdown
+
+        with pytest.raises(ToolError, match="Invalid table name"):
+            event_breakdown.fn(mock_context, table='events"; DELETE FROM users;--')

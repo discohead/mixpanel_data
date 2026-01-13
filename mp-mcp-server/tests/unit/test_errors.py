@@ -355,6 +355,58 @@ class TestHandleErrors:
         assert "code" in details
         assert details["code"] == "RATE_LIMITED"
 
+    def test_rate_limit_error_without_retry_after(self) -> None:
+        """RateLimitError without retry_after shows generic wait message."""
+        from fastmcp.exceptions import ToolError
+
+        from mp_mcp_server.errors import handle_errors
+
+        @handle_errors
+        def failing_func() -> None:
+            raise RateLimitError("Rate limited")
+
+        with pytest.raises(ToolError) as exc_info:
+            failing_func()
+
+        error_msg = str(exc_info.value)
+        assert "Wait before retrying" in error_msg
+
+    def test_database_locked_without_pid(self) -> None:
+        """DatabaseLockedError without holding_pid omits PID info."""
+        from fastmcp.exceptions import ToolError
+
+        from mp_mcp_server.errors import handle_errors
+
+        @handle_errors
+        def failing_func() -> None:
+            raise DatabaseLockedError("/path/to/db.duckdb")
+
+        with pytest.raises(ToolError) as exc_info:
+            failing_func()
+
+        error_msg = str(exc_info.value)
+        assert "locked" in error_msg.lower()
+        # Should NOT have a specific PID message
+        assert "Database locked by process" not in error_msg
+
+    def test_account_not_found_without_available_accounts(self) -> None:
+        """AccountNotFoundError without available_accounts omits list."""
+        from fastmcp.exceptions import ToolError
+
+        from mp_mcp_server.errors import handle_errors
+
+        @handle_errors
+        def failing_func() -> None:
+            raise AccountNotFoundError("production")
+
+        with pytest.raises(ToolError) as exc_info:
+            failing_func()
+
+        error_msg = str(exc_info.value)
+        assert "production" in error_msg
+        # Should NOT have an "Available accounts:" line
+        assert "Available accounts" not in error_msg
+
 
 class TestFormatRichError:
     """Tests for the format_rich_error helper function."""

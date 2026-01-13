@@ -51,23 +51,24 @@ def list_properties(
 ) -> list[dict[str, Any]]:
     """List properties for a specific event.
 
-    Returns property names captured for the specified event.
+    Returns property names captured for the specified event. Note that
+    the Mixpanel API only returns property names, not types, so the
+    type field is always "unknown".
 
     Args:
         ctx: FastMCP context with workspace access.
         event: Event name to get properties for.
 
     Returns:
-        List of property definitions with name and type.
+        List of property definitions with name and type. Type is always
+        "unknown" as Mixpanel does not expose property type metadata.
 
     Example:
         Ask: "What properties does the signup event have?"
-        Returns: [{"name": "browser", "type": "string"}, ...]
+        Returns: [{"name": "browser", "type": "unknown"}, ...]
     """
     ws = get_workspace(ctx)
     property_names = ws.properties(event=event)
-    # Note: ws.properties() only returns names, not types
-    # Type information would require additional API calls
     return [{"name": name, "type": "unknown"} for name in property_names]
 
 

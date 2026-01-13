@@ -24,9 +24,39 @@ Example:
 """
 
 import argparse
+import sys
 from collections.abc import Sequence
 
 from mp_mcp_server.server import mcp, set_account
+
+
+def _validate_account(account: str) -> bool:
+    """Validate that an account exists in the configuration.
+
+    Args:
+        account: The account name to validate.
+
+    Returns:
+        True if the account exists.
+
+    Raises:
+        SystemExit: If the account does not exist.
+    """
+    from mixpanel_data import Workspace
+    from mixpanel_data.exceptions import AccountNotFoundError
+
+    try:
+        # Create a workspace with the account to validate it exists
+        Workspace(account=account)
+        return True
+    except AccountNotFoundError as e:
+        # Provide helpful error message
+        msg = f"Error: Account '{account}' not found."
+        if e.available_accounts:
+            msg += f"\nAvailable accounts: {', '.join(e.available_accounts)}"
+        msg += "\n\nCheck ~/.mp/config.toml for configured accounts."
+        sys.stderr.write(msg + "\n")
+        sys.exit(1)
 
 
 def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
@@ -72,11 +102,16 @@ def main() -> None:
     """Run the MCP server with configured options.
 
     Entry point for the `mp-mcp-server` command.
+
+    Validates the account exists before starting the server to provide
+    immediate feedback on configuration errors.
     """
     args = parse_args()
 
     # Configure the account before starting
     if args.account:
+        # Validate account exists before starting server
+        _validate_account(args.account)
         set_account(args.account)
 
     # Run the server with the specified transport

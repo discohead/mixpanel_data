@@ -14,6 +14,7 @@ Example:
 """
 
 import json
+import logging
 from collections.abc import Callable
 from functools import wraps
 from typing import Any, ParamSpec, TypeVar
@@ -37,6 +38,8 @@ from mixpanel_data.exceptions import (
     TableExistsError,
     TableNotFoundError,
 )
+
+logger = logging.getLogger(__name__)
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -129,6 +132,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
 
         # JQL-specific errors (must be before QueryError - it's a subclass)
         except JQLSyntaxError as e:
+            logger.warning("JQL syntax error: %s", e.error_message)
             suggestions = [
                 "Check the script syntax at the indicated line",
                 "Verify property names and function calls",
@@ -142,6 +146,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
 
         # API errors - specific types first
         except RateLimitError as e:
+            logger.warning("Rate limited: retry_after=%s", e.retry_after)
             retry_msg = (
                 f"Retry after {e.retry_after} seconds."
                 if e.retry_after
@@ -157,6 +162,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
             ) from e
 
         except AuthenticationError as e:
+            logger.warning("Authentication failed: %s", e)
             suggestions = [
                 "Check credentials in environment variables (MP_USERNAME, MP_SECRET)",
                 "Verify ~/.mp/config.toml has valid credentials",
@@ -167,6 +173,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
             ) from e
 
         except ServerError as e:
+            logger.warning("Server error: status_code=%s", e.status_code)
             suggestions = [
                 "This may be a transient issue - try again in a few moments",
                 "Check Mixpanel status page if errors persist",
@@ -178,6 +185,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
             ) from e
 
         except QueryError as e:
+            logger.warning("Query error: %s", e)
             status_info = f" (HTTP {e.status_code})" if e.status_code else ""
             suggestions = [
                 "Check query parameters for typos or invalid values",
@@ -189,6 +197,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
 
         # Validation errors
         except EventNotFoundError as e:
+            logger.info("Event not found: %s", e.event_name)
             suggestions = ["Use list_events to see available events"]
             if e.similar_events:
                 suggestions.insert(
@@ -199,6 +208,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
             ) from e
 
         except DateRangeTooLargeError as e:
+            logger.info("Date range too large: %d days", e.days_requested)
             suggestions = [
                 f"Maximum date range is {e.max_days} days per request",
                 "Split into multiple requests and use append=True to combine results",
@@ -214,6 +224,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
 
         # Storage errors
         except TableExistsError as e:
+            logger.info("Table exists: %s", e.table_name)
             suggestions = [
                 "Use drop_table to remove the existing table first",
                 "Choose a different table name",
@@ -222,6 +233,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
             raise ToolError(format_rich_error(str(e), e, suggestions)) from e
 
         except TableNotFoundError as e:
+            logger.info("Table not found: %s", e.table_name)
             suggestions = [
                 "Use list_tables to see available tables",
                 "Fetch data first with fetch_events or fetch_profiles",
@@ -229,6 +241,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
             raise ToolError(format_rich_error(str(e), e, suggestions)) from e
 
         except DatabaseLockedError as e:
+            logger.warning("Database locked: path=%s, pid=%s", e.db_path, e.holding_pid)
             suggestions = [
                 "Another mp command may be running - wait for it to complete",
                 "Check for other processes using the database file",
@@ -238,6 +251,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
             raise ToolError(format_rich_error(str(e), e, suggestions)) from e
 
         except DatabaseNotFoundError as e:
+            logger.info("Database not found: %s", e.db_path)
             suggestions = [
                 "Run fetch_events or fetch_profiles first to create the database",
                 "Check the database path in your configuration",
@@ -246,6 +260,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
 
         # Config errors
         except AccountNotFoundError as e:
+            logger.info("Account not found: %s", e.account_name)
             suggestions = ["Check account name spelling"]
             if e.available_accounts:
                 suggestions.insert(
@@ -254,6 +269,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
             raise ToolError(format_rich_error(str(e), e, suggestions)) from e
 
         except AccountExistsError as e:
+            logger.info("Account exists: %s", e.account_name)
             suggestions = [
                 "Choose a different account name",
                 "Delete the existing account first if you want to replace it",
@@ -261,6 +277,7 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
             raise ToolError(format_rich_error(str(e), e, suggestions)) from e
 
         except ConfigError as e:
+            logger.warning("Config error: %s", e)
             suggestions = [
                 "Check ~/.mp/config.toml for configuration errors",
                 "Verify environment variables are set correctly",
@@ -269,12 +286,21 @@ def handle_errors(func: Callable[P, R]) -> Callable[P, R]:
 
         # Catch-all for any other MixpanelDataError
         except MixpanelDataError as e:
+            logger.warning("Unhandled MixpanelDataError: %s", e)
             raise ToolError(format_rich_error(f"Mixpanel error: {e}", e)) from e
 
         # Catch unexpected exceptions to prevent unhandled crashes
         except Exception as e:
+            logger.exception("Unexpected error in tool")
+            error_details = {
+                "code": "UNEXPECTED_ERROR",
+                "type": type(e).__name__,
+                "message": str(e),
+            }
             raise ToolError(
                 f"Unexpected error: {type(e).__name__}: {e}\n\n"
+                "Error Details:\n"
+                f"{json.dumps(error_details, indent=2)}\n\n"
                 "This may be a bug in the MCP server. Please report this issue."
             ) from e
 

@@ -8,6 +8,7 @@ Example:
     Claude uses: sql(query="SELECT distinct_id, COUNT(*) ... LIMIT 10")
 """
 
+import re
 from typing import Any, Literal, cast
 
 from fastmcp import Context
@@ -18,6 +19,76 @@ from mp_mcp_server.server import mcp
 
 # Type alias for unit parameter
 UnitType = Literal["day", "week", "month"]
+
+# SQL injection prevention patterns
+# These patterns are checked case-insensitively in column expressions
+DANGEROUS_SQL_PATTERNS: list[str] = [
+    # Statement terminators and comments
+    ";",
+    "--",
+    "/*",
+    "*/",
+    # DDL/DML keywords
+    "DROP",
+    "DELETE",
+    "INSERT",
+    "UPDATE",
+    "ALTER",
+    "CREATE",
+    "TRUNCATE",
+    "GRANT",
+    "REVOKE",
+    # Query manipulation keywords
+    "UNION",
+    "SELECT",
+    "WHERE",
+    "EXEC",
+    "EXECUTE",
+]
+
+# Valid table name pattern: starts with letter/underscore, followed by alphanumeric/underscore
+TABLE_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _validate_table_name(table: str) -> None:
+    """Validate table name to prevent SQL injection.
+
+    Table names must be valid SQL identifiers: start with a letter or
+    underscore, followed by letters, digits, or underscores.
+
+    Args:
+        table: The table name to validate.
+
+    Raises:
+        ValueError: If the table name contains invalid characters.
+    """
+    if not TABLE_NAME_PATTERN.match(table):
+        raise ValueError(
+            f"Invalid table name: '{table}'. "
+            "Table names must start with a letter or underscore "
+            "and contain only letters, digits, and underscores."
+        )
+
+
+def _validate_column_expression(column: str) -> None:
+    """Validate column expression to prevent SQL injection.
+
+    Column expressions can include JSON path syntax (e.g., properties->>'$.field')
+    but must not contain dangerous SQL patterns.
+
+    Args:
+        column: The column expression to validate.
+
+    Raises:
+        ValueError: If the column contains dangerous SQL patterns.
+    """
+    col_upper = column.upper()
+    for pattern in DANGEROUS_SQL_PATTERNS:
+        if pattern in col_upper:
+            raise ValueError(
+                f"Invalid column expression: '{column}'. "
+                f"Contains disallowed pattern: '{pattern}'."
+            )
 
 
 @mcp.tool
@@ -195,12 +266,16 @@ def event_breakdown(
     Returns:
         List of event names with counts.
 
+    Raises:
+        ToolError: If the table name is invalid or query fails.
+
     Example:
         Ask: "What events are in my data?"
         Uses: event_breakdown(table="events")
     """
     ws = get_workspace(ctx)
-    # Quote table name to prevent SQL injection
+    # Validate table name to prevent SQL injection
+    _validate_table_name(table)
     return ws.sql_rows(
         f'SELECT event_name, COUNT(*) as count FROM "{table}" GROUP BY event_name ORDER BY count DESC'
     ).to_dicts()
@@ -247,10 +322,16 @@ def column_stats(
     Args:
         ctx: FastMCP context with workspace access.
         table: Name of the table.
-        column: Name of the column.
+        column: Name of the column or JSON path expression
+            (e.g., "properties->>'$.field'").
 
     Returns:
-        Dictionary with column statistics.
+        Dictionary with column statistics including count, distinct_count,
+        min_value, and max_value. If the table is empty, returns zeros
+        with a note field explaining the result.
+
+    Raises:
+        ToolError: If the table name or column expression is invalid.
 
     Example:
         Ask: "What's the range of the time column?"
@@ -258,16 +339,8 @@ def column_stats(
     """
     ws = get_workspace(ctx)
     # Validate identifiers to prevent SQL injection
-    # Table names must be valid identifiers (alphanumeric + underscore)
-    # Column can be a name or expression like properties->>'$.field'
-    if not table.replace("_", "").isalnum():
-        raise ValueError(f"Invalid table name: {table}")
-    # For column, we allow JSON path expressions but validate no dangerous chars
-    dangerous_chars = [";", "--", "/*", "*/", "DROP", "DELETE", "INSERT", "UPDATE"]
-    col_upper = column.upper()
-    for char in dangerous_chars:
-        if char in col_upper:
-            raise ValueError(f"Invalid column expression: {column}")
+    _validate_table_name(table)
+    _validate_column_expression(column)
 
     rows = ws.sql_rows(
         f"""
@@ -279,7 +352,16 @@ def column_stats(
         FROM "{table}"
         """
     ).to_dicts()
-    return rows[0] if rows else {}
+
+    if not rows:
+        return {
+            "count": 0,
+            "distinct_count": 0,
+            "min_value": None,
+            "max_value": None,
+            "note": "Table is empty or column has no values",
+        }
+    return rows[0]
 
 
 @mcp.tool

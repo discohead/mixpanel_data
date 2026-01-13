@@ -98,6 +98,7 @@ class TestCliExecution:
             patch.object(cli, "mcp") as mock_mcp,
             patch.object(cli, "parse_args") as mock_parse,
             patch.object(cli, "set_account") as mock_set_account,
+            patch.object(cli, "_validate_account", return_value=True),
         ):
             mock_mcp.run = MagicMock()
             mock_parse.return_value = MagicMock(
