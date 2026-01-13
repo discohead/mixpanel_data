@@ -1,0 +1,246 @@
+"""Shared test fixtures for mp-mcp-server tests.
+
+This module provides common fixtures used across unit and integration tests,
+including mock Workspace instances and FastMCP client fixtures.
+"""
+
+from collections.abc import AsyncIterator
+from typing import Any
+from unittest.mock import MagicMock
+
+import pytest
+
+
+@pytest.fixture
+def mock_workspace() -> MagicMock:
+    """Create a mock Workspace instance for unit tests.
+
+    Returns:
+        MagicMock configured with common Workspace methods.
+    """
+    workspace = MagicMock()
+
+    # Discovery methods
+    workspace.events.return_value = ["signup", "login", "purchase"]
+    # properties() returns list[str] (property names only) - matching real Workspace API
+    workspace.properties.return_value = ["browser", "price"]
+    workspace.property_values.return_value = ["Chrome", "Firefox", "Safari"]
+
+    # Methods returning objects with to_dict()
+    funnel_mock = MagicMock()
+    funnel_mock.to_dict.return_value = {
+        "funnel_id": 1,
+        "name": "Signup Funnel",
+        "steps": 3,
+    }
+    workspace.funnels.return_value = [funnel_mock]
+
+    cohort_mock = MagicMock()
+    cohort_mock.to_dict.return_value = {
+        "cohort_id": 1,
+        "name": "Active Users",
+        "count": 1000,
+    }
+    workspace.cohorts.return_value = [cohort_mock]
+
+    bookmark_mock = MagicMock()
+    bookmark_mock.to_dict.return_value = {
+        "bookmark_id": 1,
+        "name": "Daily Signups",
+        "report_type": "insights",
+    }
+    workspace.list_bookmarks.return_value = [bookmark_mock]
+
+    top_event_mock = MagicMock()
+    top_event_mock.to_dict.return_value = {"event": "login", "count": 5000}
+    top_event_mock2 = MagicMock()
+    top_event_mock2.to_dict.return_value = {"event": "signup", "count": 1000}
+    workspace.top_events.return_value = [top_event_mock, top_event_mock2]
+
+    # Live query methods
+    workspace.segmentation.return_value = MagicMock(
+        to_dict=lambda: {"data": {"values": {"2024-01-01": 100}}}
+    )
+    workspace.funnel.return_value = MagicMock(
+        to_dict=lambda: {"data": {"steps": [{"count": 100}, {"count": 50}]}}
+    )
+    workspace.retention.return_value = MagicMock(
+        to_dict=lambda: {"data": {"cohorts": []}}
+    )
+    jql_result_mock = MagicMock()
+    jql_result_mock.raw = [{"user": "alice", "count": 10}]
+    workspace.jql.return_value = jql_result_mock
+
+    # Fetch methods
+    workspace.fetch_events.return_value = MagicMock(
+        table_name="events_jan",
+        row_count=1000,
+        to_dict=lambda: {"table_name": "events_jan", "row_count": 1000},
+    )
+    workspace.fetch_profiles.return_value = MagicMock(
+        table_name="profiles",
+        row_count=500,
+        to_dict=lambda: {"table_name": "profiles", "row_count": 500},
+    )
+
+    # Streaming methods (return iterators)
+    workspace.stream_events.return_value = iter(
+        [
+            {"name": "login", "distinct_id": "user1", "time": 1704067200},
+            {"name": "login", "distinct_id": "user2", "time": 1704067300},
+            {"name": "signup", "distinct_id": "user3", "time": 1704067400},
+        ]
+    )
+    workspace.stream_profiles.return_value = iter(
+        [
+            {"$distinct_id": "user1", "$properties": {"email": "a@example.com"}},
+            {"$distinct_id": "user2", "$properties": {"email": "b@example.com"}},
+        ]
+    )
+
+    # Local methods
+    sql_rows_mock = MagicMock()
+    sql_rows_mock.to_dicts.return_value = [{"name": "login", "count": 100}]
+    workspace.sql_rows.return_value = sql_rows_mock
+    workspace.sql_scalar.return_value = 42
+
+    table_mock = MagicMock()
+    table_mock.to_dict.return_value = {
+        "name": "events_jan",
+        "row_count": 1000,
+        "type": "events",
+    }
+    workspace.tables.return_value = [table_mock]
+
+    col1_mock = MagicMock()
+    col1_mock.to_dict.return_value = {"column": "name", "type": "VARCHAR"}
+    col2_mock = MagicMock()
+    col2_mock.to_dict.return_value = {"column": "time", "type": "TIMESTAMP"}
+    schema_mock = MagicMock()
+    schema_mock.columns = [col1_mock, col2_mock]
+    workspace.table_schema.return_value = schema_mock
+
+    sample_df_mock = MagicMock()
+    sample_df_mock.to_dict.return_value = [{"name": "login", "time": "2024-01-01"}]
+    workspace.sample.return_value = sample_df_mock
+
+    summarize_col1 = MagicMock()
+    summarize_col1.to_dict.return_value = {"name": "event", "type": "VARCHAR"}
+    summarize_col2 = MagicMock()
+    summarize_col2.to_dict.return_value = {"name": "time", "type": "TIMESTAMP"}
+    summarize_mock = MagicMock()
+    summarize_mock.table = "events_jan"
+    summarize_mock.row_count = 1000
+    summarize_mock.columns = [summarize_col1, summarize_col2]
+    workspace.summarize.return_value = summarize_mock
+
+    # Table management
+    workspace.drop.return_value = None
+    workspace.drop_all.return_value = None
+
+    # Info - use info() method which returns WorkspaceInfo object
+    workspace.info.return_value = MagicMock(
+        project_id=123456,
+        region="us",
+        tables=[],
+    )
+
+    # Add event_counts() method for multi-event counting
+    workspace.event_counts.return_value = MagicMock(
+        to_dict=lambda: {
+            "events": ["login", "signup"],
+            "from_date": "2024-01-01",
+            "to_date": "2024-01-31",
+            "unit": "day",
+            "type": "general",
+            "series": {"login": {"2024-01-01": 100}, "signup": {"2024-01-01": 50}},
+        }
+    )
+
+    # Add frequency() method for addiction analysis
+    workspace.frequency.return_value = MagicMock(
+        to_dict=lambda: {
+            "event": None,
+            "from_date": "2024-01-01",
+            "to_date": "2024-01-07",
+            "unit": "day",
+            "addiction_unit": "hour",
+            "data": {"2024-01-01": [100, 50, 25, 10]},
+        }
+    )
+
+    # Add activity_feed() method for Activity Stream API
+    workspace.activity_feed.return_value = MagicMock(
+        to_dict=lambda: {
+            "distinct_ids": ["user1"],
+            "from_date": None,
+            "to_date": None,
+            "events": [
+                {"event": "login", "time": 1704067200, "distinct_id": "user1"},
+                {"event": "purchase", "time": 1704070800, "distinct_id": "user1"},
+            ],
+        }
+    )
+
+    # Add property_counts() method for property value breakdown
+    workspace.property_counts.return_value = MagicMock(
+        to_dict=lambda: {
+            "event": "login",
+            "property_name": "browser",
+            "from_date": "2024-01-01",
+            "to_date": "2024-01-31",
+            "type": "general",
+            "unit": "day",
+            "data": {"Chrome": 100, "Firefox": 50, "Safari": 25},
+        }
+    )
+
+    # Add property_keys() method for extracting unique property keys
+    workspace.property_keys.return_value = ["browser", "country", "device"]
+
+    return workspace
+
+
+@pytest.fixture
+def mock_lifespan_state(mock_workspace: MagicMock) -> dict[str, Any]:
+    """Create a mock lifespan state with workspace.
+
+    Args:
+        mock_workspace: The mock workspace fixture.
+
+    Returns:
+        Dict containing the workspace in lifespan state format.
+    """
+    return {"workspace": mock_workspace}
+
+
+@pytest.fixture
+def mock_context(mock_lifespan_state: dict[str, Any]) -> MagicMock:
+    """Create a mock FastMCP Context.
+
+    Args:
+        mock_lifespan_state: The mock lifespan state fixture.
+
+    Returns:
+        MagicMock configured as a FastMCP Context.
+    """
+    ctx = MagicMock()
+    # FastMCP 2.x stores lifespan state in server._lifespan_result
+    ctx.fastmcp._lifespan_result = mock_lifespan_state
+    return ctx
+
+
+@pytest.fixture
+async def mcp_client() -> AsyncIterator[Any]:
+    """Create an in-memory FastMCP client for integration tests.
+
+    Yields:
+        FastMCP Client connected to the server.
+    """
+    # Import here to avoid circular imports during collection
+    from fastmcp import Client
+
+    from mp_mcp_server.server import mcp
+
+    async with Client(mcp) as client:
+        yield client

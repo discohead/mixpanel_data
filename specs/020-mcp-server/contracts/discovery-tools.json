@@ -1,0 +1,232 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Discovery Tools",
+  "description": "MCP tools for Mixpanel schema discovery",
+  "tools": [
+    {
+      "name": "list_events",
+      "description": "List all event names tracked in the Mixpanel project",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Alphabetically sorted list of event names"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_event_properties",
+      "description": "List all properties for a specific event",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string",
+            "description": "Event name to get properties for"
+          }
+        },
+        "required": ["event"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "type": { "type": "string" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "get_property_values",
+      "description": "Get sample values for a property",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string",
+            "description": "Event name"
+          },
+          "property": {
+            "type": "string",
+            "description": "Property name"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 25,
+            "description": "Maximum values to return"
+          }
+        },
+        "required": ["event", "property"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {},
+        "description": "Sample property values"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_funnels",
+      "description": "List all saved funnels with metadata",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "funnel_id": { "type": "integer" },
+            "name": { "type": "string" },
+            "step_count": { "type": "integer" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_cohorts",
+      "description": "List all saved cohorts with metadata",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "cohort_id": { "type": "integer" },
+            "name": { "type": "string" },
+            "count": { "type": "integer" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_bookmarks",
+      "description": "List all saved bookmarks/reports",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "bookmark_id": { "type": "integer" },
+            "name": { "type": "string" },
+            "report_type": { "type": "string" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "top_events",
+      "description": "Get most active events in real-time",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "default": 10,
+            "description": "Number of events to return"
+          }
+        },
+        "required": []
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "event": { "type": "string" },
+            "count": { "type": "integer" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "event_activity",
+      "description": "Get real-time activity for specific events",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Event names to check"
+          }
+        },
+        "required": ["events"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": { "type": "integer" },
+        "description": "Map of event name to recent count"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "workspace_info",
+      "description": "Get current workspace state and configuration",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "integer" },
+          "region": { "type": "string" },
+          "db_path": { "type": ["string", "null"] },
+          "table_count": { "type": "integer" }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    }
+  ]
+}

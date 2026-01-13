@@ -293,6 +293,8 @@ Skill(skill="mixpanel-data:mixpanel-analyst")  # Will fail!
 - DuckDB (local storage for fetched profiles) (018-engage-api-params)
 - Python 3.11+ + concurrent.futures (stdlib), threading (stdlib), queue (stdlib) - no new dependencies (019-parallel-profile-fetch)
 - DuckDB (existing StorageEngine) (019-parallel-profile-fetch)
+- Python 3.11+ (matches mixpanel_data requirements) (020-mcp-server)
+- DuckDB (via mixpanel_data Workspace - shared session state) (020-mcp-server)
 
 ## Recent Changes
 - 017-parallel-export: Added Python 3.11+ + concurrent.futures (stdlib), threading (stdlib), queue (stdlib) - no new external dependencies

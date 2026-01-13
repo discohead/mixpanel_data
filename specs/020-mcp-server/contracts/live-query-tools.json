@@ -1,0 +1,537 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Live Query Tools",
+  "description": "MCP tools for live Mixpanel API queries",
+  "tools": [
+    {
+      "name": "segmentation",
+      "description": "Run a segmentation query for time-series event counts",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string",
+            "description": "Event name to analyze"
+          },
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Start date (YYYY-MM-DD)"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "description": "End date (YYYY-MM-DD)"
+          },
+          "unit": {
+            "type": "string",
+            "enum": ["hour", "day", "week", "month"],
+            "default": "day",
+            "description": "Time unit for aggregation"
+          },
+          "where": {
+            "type": "string",
+            "description": "Property filter expression"
+          },
+          "group_by": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Properties to segment by"
+          }
+        },
+        "required": ["event", "from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": { "type": "number" }
+            }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "funnel",
+      "description": "Query a saved funnel for conversion data",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "funnel_id": {
+            "type": "integer",
+            "description": "Funnel ID to query"
+          },
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Start date (YYYY-MM-DD)"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "description": "End date (YYYY-MM-DD)"
+          },
+          "group_by": {
+            "type": "string",
+            "description": "Property to segment by"
+          }
+        },
+        "required": ["funnel_id", "from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "event": { "type": "string" },
+                "count": { "type": "integer" },
+                "conversion_rate": { "type": "number" }
+              }
+            }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "retention",
+      "description": "Run a retention analysis query",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "born_event": {
+            "type": "string",
+            "description": "Event that defines cohort entry"
+          },
+          "return_event": {
+            "type": "string",
+            "description": "Event that defines return (defaults to born_event)"
+          },
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Start date (YYYY-MM-DD)"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "description": "End date (YYYY-MM-DD)"
+          },
+          "retention_type": {
+            "type": "string",
+            "enum": ["birth", "compounded"],
+            "default": "birth",
+            "description": "Retention calculation method"
+          },
+          "interval": {
+            "type": "integer",
+            "default": 1,
+            "description": "Interval count for retention buckets"
+          },
+          "interval_unit": {
+            "type": "string",
+            "enum": ["day", "week", "month"],
+            "default": "day",
+            "description": "Interval unit"
+          }
+        },
+        "required": ["born_event", "from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "cohorts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": { "type": "string" },
+                "counts": {
+                  "type": "array",
+                  "items": { "type": "integer" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "jql",
+      "description": "Execute a JQL (JavaScript Query Language) query",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "script": {
+            "type": "string",
+            "description": "JQL script to execute"
+          },
+          "params": {
+            "type": "object",
+            "description": "Parameters to pass to the script"
+          }
+        },
+        "required": ["script"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {},
+        "description": "Query results (shape depends on script)"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "insights",
+      "description": "Query Insights API for multi-event analysis",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "event": { "type": "string" },
+                "where": { "type": "string" }
+              },
+              "required": ["event"]
+            },
+            "description": "Events to compare"
+          },
+          "from_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "unit": {
+            "type": "string",
+            "enum": ["hour", "day", "week", "month"],
+            "default": "day"
+          }
+        },
+        "required": ["events", "from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "series": { "type": "object" }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "property_values_distribution",
+      "description": "Get distribution of property values",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event": { "type": "string" },
+          "property": { "type": "string" },
+          "from_date": { "type": "string", "format": "date" },
+          "to_date": { "type": "string", "format": "date" },
+          "limit": { "type": "integer", "default": 100 }
+        },
+        "required": ["event", "property", "from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "value": {},
+            "count": { "type": "integer" },
+            "percent": { "type": "number" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "user_activity",
+      "description": "Get activity feed for a specific user",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "distinct_id": {
+            "type": "string",
+            "description": "User identifier"
+          },
+          "from_date": { "type": "string", "format": "date" },
+          "to_date": { "type": "string", "format": "date" },
+          "limit": { "type": "integer", "default": 100 }
+        },
+        "required": ["distinct_id"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "event": { "type": "string" },
+            "time": { "type": "string", "format": "date-time" },
+            "properties": { "type": "object" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "event_frequency",
+      "description": "Analyze how often users perform an event",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event": { "type": "string" },
+          "from_date": { "type": "string", "format": "date" },
+          "to_date": { "type": "string", "format": "date" },
+          "buckets": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "Frequency bucket boundaries"
+          }
+        },
+        "required": ["event", "from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "bucket": { "type": "string" },
+            "user_count": { "type": "integer" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "numeric_aggregation",
+      "description": "Aggregate numeric property values (sum, avg, etc.)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event": { "type": "string" },
+          "property": { "type": "string" },
+          "aggregation": {
+            "type": "string",
+            "enum": ["sum", "average", "median", "min", "max"],
+            "default": "sum"
+          },
+          "from_date": { "type": "string", "format": "date" },
+          "to_date": { "type": "string", "format": "date" },
+          "unit": {
+            "type": "string",
+            "enum": ["hour", "day", "week", "month"],
+            "default": "day"
+          }
+        },
+        "required": ["event", "property", "from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "object",
+            "additionalProperties": { "type": "number" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "numeric_buckets",
+      "description": "Bucket numeric property values",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event": { "type": "string" },
+          "property": { "type": "string" },
+          "from_date": { "type": "string", "format": "date" },
+          "to_date": { "type": "string", "format": "date" },
+          "buckets": {
+            "type": "array",
+            "items": { "type": "number" },
+            "description": "Bucket boundaries"
+          }
+        },
+        "required": ["event", "property", "from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "bucket": { "type": "string" },
+            "count": { "type": "integer" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "addiction",
+      "description": "Run addiction/engagement analysis",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event": { "type": "string" },
+          "from_date": { "type": "string", "format": "date" },
+          "to_date": { "type": "string", "format": "date" },
+          "unit": {
+            "type": "string",
+            "enum": ["day", "week", "month"],
+            "default": "day"
+          }
+        },
+        "required": ["event", "from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "matrix": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": { "type": "number" }
+            }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "query_profiles",
+      "description": "Query user profiles with filters",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "where": {
+            "type": "string",
+            "description": "Profile filter expression"
+          },
+          "output_properties": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Properties to include in output"
+          },
+          "limit": { "type": "integer", "default": 100 }
+        },
+        "required": []
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": { "type": "object" }
+          },
+          "total": { "type": "integer" }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "cohort_members",
+      "description": "Get users in a cohort",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cohort_id": { "type": "integer" },
+          "limit": { "type": "integer", "default": 100 },
+          "offset": { "type": "integer", "default": 0 }
+        },
+        "required": ["cohort_id"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "distinct_id": { "type": "string" },
+                "properties": { "type": "object" }
+              }
+            }
+          },
+          "has_more": { "type": "boolean" }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "profile_properties",
+      "description": "List available profile properties",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "type": { "type": "string" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    }
+  ]
+}

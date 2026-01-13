@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP Resources",
+  "description": "MCP resources for cacheable Mixpanel schema data",
+  "resources": [
+    {
+      "uri": "schema://events",
+      "name": "Event List",
+      "description": "All event names tracked in the Mixpanel project",
+      "mimeType": "application/json",
+      "schema": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    {
+      "uriTemplate": "schema://events/{event}/properties",
+      "name": "Event Properties",
+      "description": "Properties for a specific event",
+      "mimeType": "application/json",
+      "schema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "type": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "uri": "schema://funnels",
+      "name": "Funnel List",
+      "description": "All saved funnels with metadata",
+      "mimeType": "application/json",
+      "schema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "funnel_id": { "type": "integer" },
+            "name": { "type": "string" },
+            "step_count": { "type": "integer" }
+          }
+        }
+      }
+    },
+    {
+      "uriTemplate": "schema://funnels/{funnel_id}",
+      "name": "Funnel Details",
+      "description": "Detailed funnel definition with steps",
+      "mimeType": "application/json",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "funnel_id": { "type": "integer" },
+          "name": { "type": "string" },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "event": { "type": "string" },
+                "selector": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "uri": "schema://cohorts",
+      "name": "Cohort List",
+      "description": "All saved cohorts with metadata",
+      "mimeType": "application/json",
+      "schema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "cohort_id": { "type": "integer" },
+            "name": { "type": "string" },
+            "count": { "type": "integer" }
+          }
+        }
+      }
+    },
+    {
+      "uri": "schema://bookmarks",
+      "name": "Bookmark List",
+      "description": "All saved bookmarks/reports",
+      "mimeType": "application/json",
+      "schema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "bookmark_id": { "type": "integer" },
+            "name": { "type": "string" },
+            "report_type": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "uri": "schema://profile-properties",
+      "name": "Profile Properties",
+      "description": "Available user profile properties",
+      "mimeType": "application/json",
+      "schema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "type": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "uri": "workspace://tables",
+      "name": "Local Tables",
+      "description": "Tables in local DuckDB database",
+      "mimeType": "application/json",
+      "schema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "type": { "type": "string" },
+            "row_count": { "type": "integer" }
+          }
+        }
+      }
+    },
+    {
+      "uri": "workspace://info",
+      "name": "Workspace Info",
+      "description": "Current workspace configuration and state",
+      "mimeType": "application/json",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "integer" },
+          "region": { "type": "string" },
+          "db_path": { "type": ["string", "null"] },
+          "table_count": { "type": "integer" }
+        }
+      }
+    }
+  ]
+}
