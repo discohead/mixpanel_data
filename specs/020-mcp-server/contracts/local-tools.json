@@ -1,0 +1,402 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Local Analysis Tools",
+  "description": "MCP tools for local SQL analysis of fetched data",
+  "tools": [
+    {
+      "name": "sql",
+      "description": "Execute SQL query against local DuckDB database",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "SQL query to execute"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 100,
+            "description": "Maximum rows to return"
+          }
+        },
+        "required": ["query"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "rows": {
+            "type": "array",
+            "items": { "type": "array" }
+          },
+          "row_count": { "type": "integer" }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "sql_scalar",
+      "description": "Execute SQL query returning a single value",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "SQL query returning single value"
+          }
+        },
+        "required": ["query"]
+      },
+      "outputSchema": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "number" },
+          { "type": "boolean" },
+          { "type": "null" }
+        ],
+        "description": "Single scalar value"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "list_tables",
+      "description": "List all tables in local database",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "type": { "type": "string" },
+            "row_count": { "type": "integer" },
+            "size_bytes": { "type": "integer" },
+            "created_at": { "type": "string", "format": "date-time" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "table_info",
+      "description": "Get metadata for a specific table",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "description": "Table name"
+          }
+        },
+        "required": ["table_name"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "row_count": { "type": "integer" },
+          "size_bytes": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "date_range": {
+            "type": "object",
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" }
+            }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "table_schema",
+      "description": "Get column schema for a table",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "description": "Table name"
+          }
+        },
+        "required": ["table_name"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "type": { "type": "string" },
+            "nullable": { "type": "boolean" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "sample_rows",
+      "description": "Get random sample rows from a table",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "description": "Table name"
+          },
+          "count": {
+            "type": "integer",
+            "default": 10,
+            "description": "Number of rows to sample"
+          }
+        },
+        "required": ["table_name"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "rows": {
+            "type": "array",
+            "items": { "type": "array" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "table_summary",
+      "description": "Get statistical summary of table columns",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "description": "Table name"
+          }
+        },
+        "required": ["table_name"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "column": { "type": "string" },
+            "type": { "type": "string" },
+            "count": { "type": "integer" },
+            "nulls": { "type": "integer" },
+            "distinct": { "type": "integer" },
+            "min": {},
+            "max": {}
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "count_events_by_name",
+      "description": "Count events grouped by event name",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "default": "events",
+            "description": "Event table name"
+          }
+        },
+        "required": []
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "event": { "type": "string" },
+            "count": { "type": "integer" },
+            "percent": { "type": "number" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "extract_property_keys",
+      "description": "Extract all JSON property keys from a column",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "description": "Table name"
+          },
+          "column": {
+            "type": "string",
+            "default": "properties",
+            "description": "JSON column name"
+          },
+          "sample_size": {
+            "type": "integer",
+            "default": 1000,
+            "description": "Rows to sample for key extraction"
+          }
+        },
+        "required": ["table_name"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "List of property keys found"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "column_stats",
+      "description": "Get detailed statistics for a specific column",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "description": "Table name"
+          },
+          "column": {
+            "type": "string",
+            "description": "Column name"
+          }
+        },
+        "required": ["table_name", "column"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "column": { "type": "string" },
+          "type": { "type": "string" },
+          "count": { "type": "integer" },
+          "nulls": { "type": "integer" },
+          "distinct": { "type": "integer" },
+          "min": {},
+          "max": {},
+          "mean": { "type": "number" },
+          "std": { "type": "number" },
+          "top_values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {},
+                "count": { "type": "integer" }
+              }
+            }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "drop_table",
+      "description": "Drop a specific table from local database",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "description": "Table name to drop"
+          }
+        },
+        "required": ["table_name"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "dropped": { "type": "boolean" },
+          "table_name": { "type": "string" }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "drop_all_tables",
+      "description": "Drop all tables from local database",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type_filter": {
+            "type": "string",
+            "enum": ["events", "profiles", "all"],
+            "default": "all",
+            "description": "Filter by table type"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true to proceed"
+          }
+        },
+        "required": ["confirm"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "dropped_count": { "type": "integer" },
+          "tables": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    }
+  ]
+}

@@ -7,12 +7,14 @@ on:
     paths:
       - "src/**"
       - "tests/**"
+      - "mp-mcp-server/**"
   pull_request:
     branches:
       - main
     paths:
       - "src/**"
       - "tests/**"
+      - "mp-mcp-server/**"
 
 jobs:
   test:
@@ -67,3 +69,46 @@ jobs:
       - name: Build package
         if: matrix.python-version == '3.12'
         run: uv build
+
+  test-mcp-server:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync MCP server dependencies
+        run: cd mp-mcp-server && uv sync --all-extras
+
+      - name: Lint MCP server with ruff
+        run: cd mp-mcp-server && uv run ruff check src/ tests/
+
+      - name: Type check MCP server with mypy
+        run: cd mp-mcp-server && uv run mypy src/ tests/
+
+      - name: Run MCP server tests with pytest
+        if: matrix.python-version != '3.12'
+        run: cd mp-mcp-server && uv run pytest
+
+      - name: Run MCP server tests with coverage (Python 3.12 only)
+        if: matrix.python-version == '3.12'
+        run: cd mp-mcp-server && uv run pytest --cov=src/mp_mcp_server --cov-report=term-missing --cov-fail-under=90
+
+      - name: Build MCP server package
+        if: matrix.python-version == '3.12'
+        run: cd mp-mcp-server && uv build

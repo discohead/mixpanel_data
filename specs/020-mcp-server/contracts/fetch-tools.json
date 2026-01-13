@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fetch Tools",
+  "description": "MCP tools for fetching Mixpanel data into local storage",
+  "tools": [
+    {
+      "name": "fetch_events",
+      "description": "Fetch events from Mixpanel into local DuckDB storage",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Start date (YYYY-MM-DD)"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "description": "End date (YYYY-MM-DD)"
+          },
+          "table_name": {
+            "type": "string",
+            "description": "Name for the local table (default: 'events')"
+          },
+          "events": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Filter to specific event names"
+          },
+          "where": {
+            "type": "string",
+            "description": "Property filter expression"
+          },
+          "parallel": {
+            "type": "boolean",
+            "default": false,
+            "description": "Use parallel fetching for faster downloads"
+          }
+        },
+        "required": ["from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": { "type": "string" },
+          "row_count": { "type": "integer" },
+          "date_range": {
+            "type": "object",
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" }
+            }
+          },
+          "duration_seconds": { "type": "number" }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "fetch_profiles",
+      "description": "Fetch user profiles from Mixpanel into local storage",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": {
+            "type": "string",
+            "description": "Name for the local table (default: 'profiles')"
+          },
+          "where": {
+            "type": "string",
+            "description": "Profile filter expression"
+          },
+          "output_properties": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Properties to include"
+          },
+          "parallel": {
+            "type": "boolean",
+            "default": false,
+            "description": "Use parallel fetching"
+          }
+        },
+        "required": []
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "table_name": { "type": "string" },
+          "row_count": { "type": "integer" },
+          "duration_seconds": { "type": "number" }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "stream_events",
+      "description": "Stream events for quick exploration without storing",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Start date (YYYY-MM-DD)"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "description": "End date (YYYY-MM-DD)"
+          },
+          "events": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Filter to specific events"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 100,
+            "description": "Maximum events to return"
+          }
+        },
+        "required": ["from_date", "to_date"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "event": { "type": "string" },
+            "time": { "type": "string", "format": "date-time" },
+            "distinct_id": { "type": "string" },
+            "properties": { "type": "object" }
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "fetch_status",
+      "description": "Check status of an ongoing fetch operation",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "Task ID from fetch_events or fetch_profiles"
+          }
+        },
+        "required": ["task_id"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["pending", "running", "completed", "failed"]
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "rows_fetched": { "type": "integer" },
+              "days_completed": { "type": "integer" },
+              "days_total": { "type": "integer" }
+            }
+          },
+          "error": { "type": "string" }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    }
+  ]
+}

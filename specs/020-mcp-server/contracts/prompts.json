@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP Prompts",
+  "description": "MCP prompts for guided analytics workflows",
+  "prompts": [
+    {
+      "name": "analytics_workflow",
+      "description": "Guided workflow for comprehensive analytics exploration",
+      "arguments": [],
+      "template": "You are helping the user explore their Mixpanel analytics data. Follow this workflow:\n\n## Step 1: Discovery\nFirst, let's understand what data is available:\n- Use `list_events` to see all tracked events\n- Use `list_funnels` to see saved conversion funnels\n- Use `list_cohorts` to see user segments\n\n## Step 2: Exploration\nOnce we know what's available:\n- Use `segmentation` to analyze event trends over time\n- Use `funnel` to measure conversion rates\n- Use `retention` to understand user stickiness\n\n## Step 3: Deep Dive\nFor detailed analysis:\n- Use `fetch_events` to download raw data\n- Use `sql` to run custom queries\n- Use `table_summary` to understand data distributions\n\nAsk the user what aspect of their product they'd like to analyze."
+    },
+    {
+      "name": "funnel_analysis",
+      "description": "Analyze a specific funnel's conversion performance",
+      "arguments": [
+        {
+          "name": "funnel_id",
+          "description": "ID of the funnel to analyze",
+          "required": true
+        }
+      ],
+      "template": "You are analyzing funnel {{funnel_id}} for the user.\n\n## Analysis Steps:\n\n1. **Get Funnel Definition**\n   - Query the funnel to understand its steps\n   - Note the events and any filters applied\n\n2. **Overall Conversion**\n   - Run the funnel query for the last 30 days\n   - Calculate step-by-step conversion rates\n   - Identify the biggest drop-off points\n\n3. **Segment Analysis**\n   - Break down conversion by key properties (platform, country, etc.)\n   - Identify which segments convert best/worst\n\n4. **Trend Analysis**\n   - Compare conversion rates week-over-week\n   - Identify any recent changes in performance\n\n5. **Recommendations**\n   - Suggest areas to investigate for improving conversion\n   - Identify potential quick wins\n\nStart by querying the funnel definition and recent conversion data."
+    },
+    {
+      "name": "retention_analysis",
+      "description": "Analyze user retention and engagement patterns",
+      "arguments": [
+        {
+          "name": "event",
+          "description": "The event that defines user activity",
+          "required": true
+        }
+      ],
+      "template": "You are analyzing retention for the event '{{event}}'.\n\n## Analysis Steps:\n\n1. **Cohort Setup**\n   - Define cohorts based on first '{{event}}' occurrence\n   - Set up return criteria (same event or different engagement event)\n\n2. **Retention Curves**\n   - Run retention analysis for the last 90 days\n   - Generate Day 1, Day 7, Day 14, Day 30 retention rates\n   - Compare to industry benchmarks if applicable\n\n3. **Cohort Comparison**\n   - Compare retention across time cohorts (weekly or monthly)\n   - Identify if retention is improving or declining\n\n4. **Segment Analysis**\n   - Break down retention by user properties\n   - Identify high-retention vs low-retention segments\n\n5. **Engagement Patterns**\n   - Analyze frequency of '{{event}}' among retained users\n   - Identify power user behaviors\n\nStart by running a retention analysis for the specified event."
+    },
+    {
+      "name": "data_exploration",
+      "description": "Explore and analyze locally fetched data with SQL",
+      "arguments": [
+        {
+          "name": "table_name",
+          "description": "Name of the local table to explore",
+          "required": true
+        }
+      ],
+      "template": "You are helping the user explore the local table '{{table_name}}'.\n\n## Exploration Steps:\n\n1. **Table Overview**\n   - Use `table_info` to get row count and metadata\n   - Use `table_schema` to see available columns\n   - Use `sample_rows` to preview the data\n\n2. **Data Quality**\n   - Use `table_summary` to check for nulls and data types\n   - Identify any data quality issues\n\n3. **Event Distribution** (if events table)\n   - Use `count_events_by_name` to see event breakdown\n   - Identify top events and rare events\n\n4. **Property Analysis**\n   - Use `extract_property_keys` to find available properties\n   - Use `column_stats` on interesting columns\n\n5. **Custom Analysis**\n   - Help the user write SQL queries for their specific questions\n   - Use `sql` or `sql_scalar` as appropriate\n\nStart by getting an overview of the table structure and contents."
+    }
+  ]
+}
