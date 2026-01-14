@@ -3,11 +3,15 @@
 This module provides MCP tools for fetching events and profiles from
 Mixpanel and storing them in the local DuckDB database for SQL analysis.
 
+Task-enabled versions support progress reporting and cancellation.
+
 Example:
     Ask Claude: "Fetch events from January 1-7"
     Claude uses: fetch_events(from_date="2024-01-01", to_date="2024-01-07")
 """
 
+import asyncio
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastmcp import Context
@@ -17,9 +21,31 @@ from mp_mcp_server.errors import handle_errors
 from mp_mcp_server.server import mcp
 
 
-@mcp.tool
+def _calculate_date_range(from_date: str, to_date: str) -> list[str]:
+    """Calculate list of dates in the range.
+
+    Args:
+        from_date: Start date (YYYY-MM-DD).
+        to_date: End date (YYYY-MM-DD).
+
+    Returns:
+        List of date strings in the range.
+    """
+    from_dt = datetime.fromisoformat(from_date)
+    to_dt = datetime.fromisoformat(to_date)
+
+    dates: list[str] = []
+    current = from_dt
+    while current <= to_dt:
+        dates.append(current.isoformat()[:10])
+        current += timedelta(days=1)
+
+    return dates
+
+
+@mcp.tool(task=True)
 @handle_errors
-def fetch_events(
+async def fetch_events(
     ctx: Context,
     from_date: str,
     to_date: str,
@@ -36,6 +62,9 @@ def fetch_events(
     Downloads raw event data for the specified date range and stores
     it in a DuckDB table for local SQL analysis.
 
+    Supports progress reporting and cancellation for long-running operations.
+    When cancelled, returns partial results for any completed days.
+
     Args:
         ctx: FastMCP context with workspace access.
         from_date: Start date (YYYY-MM-DD format).
@@ -47,9 +76,10 @@ def fetch_events(
         append: Append to existing table instead of creating new one.
         parallel: Use parallel fetching for large date ranges.
         workers: Number of parallel workers (if parallel=True).
+        progress: Progress reporter for task tracking.
 
     Returns:
-        Dictionary with table_name and row_count.
+        Dictionary with table_name, row_count, and status.
 
     Example:
         Ask: "Download last week's login events"
@@ -58,32 +88,107 @@ def fetch_events(
     """
     ws = get_workspace(ctx)
 
-    kwargs: dict[str, Any] = {
-        "from_date": from_date,
-        "to_date": to_date,
-    }
+    # Calculate date range for progress reporting
+    days = _calculate_date_range(from_date, to_date)
 
-    if table:
-        kwargs["name"] = table
-    if events:
-        kwargs["events"] = events
-    if where:
-        kwargs["where"] = where
-    if limit is not None:
-        kwargs["limit"] = limit
-    if append:
-        kwargs["append"] = append
-    if parallel:
-        kwargs["parallel"] = parallel
-        kwargs["max_workers"] = workers
+    # For short ranges (1-3 days) or if parallel is requested, use single fetch
+    if len(days) <= 3 or parallel:
+        # Single fetch - no day-by-day progress
+        await ctx.report_progress(0, 1, "Fetching events...")
 
-    result = ws.fetch_events(**kwargs)
-    return result.to_dict()
+        kwargs: dict[str, Any] = {
+            "from_date": from_date,
+            "to_date": to_date,
+        }
+
+        if table:
+            kwargs["name"] = table
+        if events:
+            kwargs["events"] = events
+        if where:
+            kwargs["where"] = where
+        if limit is not None:
+            kwargs["limit"] = limit
+        if append:
+            kwargs["append"] = append
+        if parallel:
+            kwargs["parallel"] = parallel
+            kwargs["max_workers"] = workers
+
+        result = ws.fetch_events(**kwargs)
+        await ctx.report_progress(1, 1, "Complete")
+
+        result_dict = result.to_dict()
+        result_dict["status"] = "completed"
+        return result_dict
+
+    # For longer ranges, fetch day by day with progress
+    total_days = len(days)
+    total_rows = 0
+    completed_days = 0
+    result_table = table
+
+    try:
+        for i, day in enumerate(days):
+            await ctx.report_progress(
+                i, total_days, f"Fetching {day} ({i + 1}/{total_days})"
+            )
+
+            day_kwargs: dict[str, Any] = {
+                "from_date": day,
+                "to_date": day,
+            }
+
+            if result_table:
+                day_kwargs["name"] = result_table
+            if events:
+                day_kwargs["events"] = events
+            if where:
+                day_kwargs["where"] = where
+            if limit is not None:
+                # Distribute limit across days
+                remaining_limit = limit - total_rows
+                if remaining_limit <= 0:
+                    break
+                day_kwargs["limit"] = remaining_limit
+
+            # Append after first day
+            if i > 0 or append:
+                day_kwargs["append"] = True
+
+            result = ws.fetch_events(**day_kwargs)
+            result_dict = result.to_dict()
+
+            # Capture table name from first result
+            if result_table is None:
+                result_table = result_dict.get("table_name")
+
+            total_rows += result_dict.get("row_count", 0)
+            completed_days += 1
+
+            await ctx.report_progress(i + 1, total_days)
+
+        return {
+            "status": "completed",
+            "table_name": result_table,
+            "row_count": total_rows,
+            "days_fetched": completed_days,
+        }
+
+    except asyncio.CancelledError:
+        # Return partial results
+        return {
+            "status": "cancelled",
+            "table_name": result_table,
+            "row_count": total_rows,
+            "days_fetched": completed_days,
+            "message": f"Cancelled after {completed_days}/{len(days)} days",
+        }
 
 
-@mcp.tool
+@mcp.tool(task=True)
 @handle_errors
-def fetch_profiles(
+async def fetch_profiles(
     ctx: Context,
     table: str | None = None,
     where: str | None = None,
@@ -104,6 +209,9 @@ def fetch_profiles(
     Downloads user profile data and stores it in a DuckDB table
     for local SQL analysis.
 
+    Supports progress reporting and cancellation for long-running operations.
+    When cancelled, returns partial results.
+
     Args:
         ctx: FastMCP context with workspace access.
         table: Optional table name (default: "profiles").
@@ -121,7 +229,7 @@ def fetch_profiles(
         workers: Number of parallel workers.
 
     Returns:
-        Dictionary with table_name and row_count.
+        Dictionary with table_name, row_count, and status.
 
     Example:
         Ask: "Download profiles from the 'Active Users' cohort"
@@ -129,36 +237,80 @@ def fetch_profiles(
     """
     ws = get_workspace(ctx)
 
-    kwargs: dict[str, Any] = {}
-
-    if table:
-        kwargs["name"] = table
-    if where:
-        kwargs["where"] = where
-    if cohort_id:
-        kwargs["cohort_id"] = cohort_id
-    if output_properties:
-        kwargs["output_properties"] = output_properties
+    # Estimate pages based on query type
     if distinct_id:
-        kwargs["distinct_id"] = distinct_id
-    if distinct_ids:
-        kwargs["distinct_ids"] = distinct_ids
-    if group_id:
-        kwargs["group_id"] = group_id
-    if behaviors:
-        kwargs["behaviors"] = behaviors
-    if as_of_timestamp is not None:
-        kwargs["as_of_timestamp"] = as_of_timestamp
-    if include_all_users:
-        kwargs["include_all_users"] = include_all_users
-    if append:
-        kwargs["append"] = append
-    if parallel:
-        kwargs["parallel"] = parallel
-        kwargs["max_workers"] = workers
+        # Single profile - one page
+        estimated_pages = 1
+    elif distinct_ids:
+        # Multiple specific IDs - estimate based on batch size
+        estimated_pages = max(1, len(distinct_ids) // 100)
+    else:
+        # Unknown size - estimate 10 pages (1000 profiles typical page size)
+        estimated_pages = 10
 
-    result = ws.fetch_profiles(**kwargs)
-    return result.to_dict()
+    await ctx.report_progress(0, estimated_pages, "Fetching profiles...")
+
+    total_profiles = 0
+    pages_fetched = 0
+    result_table = table or "profiles"
+
+    try:
+        kwargs: dict[str, Any] = {}
+
+        if table:
+            kwargs["name"] = table
+        if where:
+            kwargs["where"] = where
+        if cohort_id:
+            kwargs["cohort_id"] = cohort_id
+        if output_properties:
+            kwargs["output_properties"] = output_properties
+        if distinct_id:
+            kwargs["distinct_id"] = distinct_id
+        if distinct_ids:
+            kwargs["distinct_ids"] = distinct_ids
+        if group_id:
+            kwargs["group_id"] = group_id
+        if behaviors:
+            kwargs["behaviors"] = behaviors
+        if as_of_timestamp is not None:
+            kwargs["as_of_timestamp"] = as_of_timestamp
+        if include_all_users:
+            kwargs["include_all_users"] = include_all_users
+        if append:
+            kwargs["append"] = append
+        if parallel:
+            kwargs["parallel"] = parallel
+            kwargs["max_workers"] = workers
+
+        # The underlying workspace method handles pagination internally
+        # We update progress based on estimated pages
+        result = ws.fetch_profiles(**kwargs)
+        result_dict = result.to_dict()
+
+        total_profiles = result_dict.get("row_count", 0)
+        result_table = result_dict.get("table_name", result_table)
+
+        # Update progress to completion
+        pages_fetched = max(1, total_profiles // 1000)
+        await ctx.report_progress(pages_fetched, pages_fetched, "Complete")
+
+        return {
+            "status": "completed",
+            "table_name": result_table,
+            "row_count": total_profiles,
+            "pages_fetched": pages_fetched,
+        }
+
+    except asyncio.CancelledError:
+        # Return partial results
+        return {
+            "status": "cancelled",
+            "table_name": result_table,
+            "row_count": total_profiles,
+            "pages_fetched": pages_fetched,
+            "message": "Fetch cancelled by user",
+        }
 
 
 @mcp.tool

@@ -6,15 +6,18 @@ correct data from the Workspace.
 
 from unittest.mock import MagicMock
 
+import pytest
+
 
 class TestFetchEventsTool:
     """Tests for the fetch_events tool."""
 
-    def test_fetch_events_creates_table(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_events_creates_table(self, mock_context: MagicMock) -> None:
         """fetch_events should store events in a DuckDB table."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        result = fetch_events.fn(
+        result = await fetch_events.fn(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -22,23 +25,28 @@ class TestFetchEventsTool:
         assert "table_name" in result
         assert result["table_name"] == "events_jan"
 
-    def test_fetch_events_returns_fetch_result(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_events_returns_fetch_result(
+        self, mock_context: MagicMock
+    ) -> None:
         """fetch_events should return row count and metadata."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        result = fetch_events.fn(
+        result = await fetch_events.fn(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
         )
         assert "row_count" in result
-        assert result["row_count"] == 1000
+        # 7 days (01-01 to 01-07 inclusive) × 1000 rows per mock call = 7000
+        assert result["row_count"] == 7000
 
-    def test_fetch_events_with_date_range(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_events_with_date_range(self, mock_context: MagicMock) -> None:
         """fetch_events should accept date range parameters."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        result = fetch_events.fn(
+        result = await fetch_events.fn(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-31",
@@ -50,27 +58,32 @@ class TestFetchEventsTool:
 class TestFetchProfilesTool:
     """Tests for the fetch_profiles tool."""
 
-    def test_fetch_profiles_creates_table(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_creates_table(self, mock_context: MagicMock) -> None:
         """fetch_profiles should store profiles in a DuckDB table."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        result = fetch_profiles.fn(mock_context)
+        result = await fetch_profiles.fn(mock_context)
         assert "table_name" in result
         assert result["table_name"] == "profiles"
 
-    def test_fetch_profiles_returns_fetch_result(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_returns_fetch_result(
+        self, mock_context: MagicMock
+    ) -> None:
         """fetch_profiles should return row count."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        result = fetch_profiles.fn(mock_context)
+        result = await fetch_profiles.fn(mock_context)
         assert "row_count" in result
         assert result["row_count"] == 500
 
-    def test_fetch_profiles_with_options(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_with_options(self, mock_context: MagicMock) -> None:
         """fetch_profiles should accept optional parameters."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        result = fetch_profiles.fn(
+        result = await fetch_profiles.fn(
             mock_context,
             table="my_profiles",
             where="email is not null",
@@ -79,11 +92,12 @@ class TestFetchProfilesTool:
         )
         assert "table_name" in result
 
-    def test_fetch_events_with_parallel(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_events_with_parallel(self, mock_context: MagicMock) -> None:
         """fetch_events should accept parallel parameters."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        result = fetch_events.fn(
+        result = await fetch_events.fn(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-31",
@@ -202,13 +216,16 @@ class TestStreamProfilesTool:
 class TestFetchEventsOptionalParams:
     """Tests for fetch_events optional parameters coverage."""
 
-    def test_fetch_events_with_where_filter(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_events_with_where_filter(
+        self, mock_context: MagicMock
+    ) -> None:
         """fetch_events should pass where filter to workspace."""
         from mp_mcp_server.tools.fetch import fetch_events
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_events.fn(
+        await fetch_events.fn(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -218,13 +235,14 @@ class TestFetchEventsOptionalParams:
         call_kwargs = ws.fetch_events.call_args[1]
         assert call_kwargs["where"] == 'properties["country"] == "US"'
 
-    def test_fetch_events_with_limit(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_events_with_limit(self, mock_context: MagicMock) -> None:
         """fetch_events should pass limit to workspace."""
         from mp_mcp_server.tools.fetch import fetch_events
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_events.fn(
+        await fetch_events.fn(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -234,13 +252,14 @@ class TestFetchEventsOptionalParams:
         call_kwargs = ws.fetch_events.call_args[1]
         assert call_kwargs["limit"] == 500
 
-    def test_fetch_events_with_append(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_events_with_append(self, mock_context: MagicMock) -> None:
         """fetch_events should pass append flag to workspace."""
         from mp_mcp_server.tools.fetch import fetch_events
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_events.fn(
+        await fetch_events.fn(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -254,18 +273,22 @@ class TestFetchEventsOptionalParams:
 class TestFetchProfilesOptionalParams:
     """Tests for fetch_profiles optional parameters coverage."""
 
-    def test_fetch_profiles_with_cohort_id(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_with_cohort_id(
+        self, mock_context: MagicMock
+    ) -> None:
         """fetch_profiles should pass cohort_id to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_profiles.fn(mock_context, cohort_id="12345")
+        await fetch_profiles.fn(mock_context, cohort_id="12345")
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["cohort_id"] == "12345"
 
-    def test_fetch_profiles_with_output_properties(
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_with_output_properties(
         self, mock_context: MagicMock
     ) -> None:
         """fetch_profiles should pass output_properties to workspace."""
@@ -273,79 +296,94 @@ class TestFetchProfilesOptionalParams:
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_profiles.fn(mock_context, output_properties=["email", "name"])
+        await fetch_profiles.fn(mock_context, output_properties=["email", "name"])
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["output_properties"] == ["email", "name"]
 
-    def test_fetch_profiles_with_distinct_id(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_with_distinct_id(
+        self, mock_context: MagicMock
+    ) -> None:
         """fetch_profiles should pass distinct_id to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_profiles.fn(mock_context, distinct_id="user123")
+        await fetch_profiles.fn(mock_context, distinct_id="user123")
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["distinct_id"] == "user123"
 
-    def test_fetch_profiles_with_distinct_ids(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_with_distinct_ids(
+        self, mock_context: MagicMock
+    ) -> None:
         """fetch_profiles should pass distinct_ids list to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_profiles.fn(mock_context, distinct_ids=["user1", "user2", "user3"])
+        await fetch_profiles.fn(mock_context, distinct_ids=["user1", "user2", "user3"])
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["distinct_ids"] == ["user1", "user2", "user3"]
 
-    def test_fetch_profiles_with_group_id(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_with_group_id(self, mock_context: MagicMock) -> None:
         """fetch_profiles should pass group_id to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_profiles.fn(mock_context, group_id="company")
+        await fetch_profiles.fn(mock_context, group_id="company")
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["group_id"] == "company"
 
-    def test_fetch_profiles_with_append(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_with_append(self, mock_context: MagicMock) -> None:
         """fetch_profiles should pass append flag to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_profiles.fn(mock_context, append=True)
+        await fetch_profiles.fn(mock_context, append=True)
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["append"] is True
 
-    def test_fetch_profiles_with_behaviors(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_with_behaviors(
+        self, mock_context: MagicMock
+    ) -> None:
         """fetch_profiles should pass behaviors to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
         behaviors = [{"event": "login", "count": {"min": 1}}]
 
-        fetch_profiles.fn(mock_context, behaviors=behaviors)
+        await fetch_profiles.fn(mock_context, behaviors=behaviors)
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["behaviors"] == behaviors
 
-    def test_fetch_profiles_with_as_of_timestamp(self, mock_context: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_with_as_of_timestamp(
+        self, mock_context: MagicMock
+    ) -> None:
         """fetch_profiles should pass as_of_timestamp to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_profiles.fn(mock_context, as_of_timestamp=1704067200)
+        await fetch_profiles.fn(mock_context, as_of_timestamp=1704067200)
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["as_of_timestamp"] == 1704067200
 
-    def test_fetch_profiles_with_include_all_users(
+    @pytest.mark.asyncio
+    async def test_fetch_profiles_with_include_all_users(
         self, mock_context: MagicMock
     ) -> None:
         """fetch_profiles should pass include_all_users to workspace."""
@@ -353,7 +391,7 @@ class TestFetchProfilesOptionalParams:
 
         ws = mock_context.fastmcp._lifespan_result["workspace"]
 
-        fetch_profiles.fn(mock_context, include_all_users=True)
+        await fetch_profiles.fn(mock_context, include_all_users=True)
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["include_all_users"] is True

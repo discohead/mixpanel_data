@@ -3,6 +3,11 @@
 This module defines the MCP server that wraps mixpanel_data capabilities,
 managing a Workspace instance through the server lifespan.
 
+Includes middleware for:
+- Audit logging (timing and outcomes)
+- Rate limiting (Mixpanel API limits)
+- Response caching (discovery operations)
+
 Example:
     Run the server for Claude Desktop:
 
@@ -85,13 +90,36 @@ Capabilities:
 - Live Analytics: Run segmentation, funnel, and retention queries
 - Data Fetching: Download events and profiles to local storage
 - Local Analysis: Execute SQL queries against fetched data
+- Intelligent Analysis: AI-powered metric diagnosis and natural language queries
+- Product Health: AARRR dashboards and GQM investigations
+- Interactive Workflows: Guided analysis and safe large fetches
 
 Use the tools to help users understand their Mixpanel data.
 """,
     lifespan=lifespan,
 )
 
+# Register middleware (order: Logging -> Rate Limiting -> Caching)
+# Imports happen here to avoid circular imports
+from mp_mcp_server.middleware import (  # noqa: E402
+    MixpanelRateLimitMiddleware,
+    create_audit_middleware,
+    create_caching_middleware,
+)
+
+mcp.add_middleware(create_audit_middleware())
+mcp.add_middleware(MixpanelRateLimitMiddleware())
+mcp.add_middleware(create_caching_middleware())
+
 # Import tool modules to register them with the server
 # These imports must happen after mcp is defined
 from mp_mcp_server import prompts, resources  # noqa: E402, F401
-from mp_mcp_server.tools import discovery, fetch, live_query, local  # noqa: E402, F401
+from mp_mcp_server.tools import (  # noqa: E402, F401  # noqa: E402, F401
+    composed,
+    discovery,
+    fetch,
+    intelligent,
+    interactive,
+    live_query,
+    local,
+)

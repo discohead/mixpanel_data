@@ -6,7 +6,7 @@ including mock Workspace instances and FastMCP client fixtures.
 
 from collections.abc import AsyncIterator
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -227,6 +227,8 @@ def mock_context(mock_lifespan_state: dict[str, Any]) -> MagicMock:
     ctx = MagicMock()
     # FastMCP 2.x stores lifespan state in server._lifespan_result
     ctx.fastmcp._lifespan_result = mock_lifespan_state
+    # Make report_progress an async mock for tools that use progress reporting
+    ctx.report_progress = AsyncMock(return_value=None)
     return ctx
 
 
