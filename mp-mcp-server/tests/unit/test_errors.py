@@ -458,3 +458,35 @@ class TestFormatRichError:
         result = format_rich_error("Summary.", error)
 
         assert "Suggestions:" not in result
+
+
+class TestAsyncHandleErrors:
+    """Tests for handle_errors decorator with async functions."""
+
+    @pytest.mark.asyncio
+    async def test_async_successful_function_returns_value(self) -> None:
+        """handle_errors should work with successful async functions."""
+        from mp_mcp_server.errors import handle_errors
+
+        @handle_errors
+        async def async_successful_func() -> str:
+            return "async success"
+
+        result = await async_successful_func()
+        assert result == "async success"
+
+    @pytest.mark.asyncio
+    async def test_async_error_conversion(self) -> None:
+        """handle_errors should convert errors in async functions."""
+        from fastmcp.exceptions import ToolError
+
+        from mp_mcp_server.errors import handle_errors
+
+        @handle_errors
+        async def async_failing_func() -> None:
+            raise AuthenticationError("Async auth failed")
+
+        with pytest.raises(ToolError) as exc_info:
+            await async_failing_func()
+
+        assert "Async auth failed" in str(exc_info.value)

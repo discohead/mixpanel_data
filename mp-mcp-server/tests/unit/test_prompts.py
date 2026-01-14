@@ -85,3 +85,103 @@ class TestPromptFunctionality:
         assert "# Local Data Analysis Workflow" in result
         assert "fetch_events" in result
         assert "SQL" in result
+
+    def test_gqm_decomposition_returns_content(self) -> None:
+        """gqm_decomposition should return GQM framework content."""
+        from mp_mcp_server.prompts import gqm_decomposition
+
+        result = str(gqm_decomposition.fn(goal="improve retention"))
+        assert "# Goal-Question-Metric (GQM) Investigation Framework" in result
+        assert "improve retention" in result
+        assert "Metrics" in result
+
+    def test_gqm_decomposition_default_goal(self) -> None:
+        """gqm_decomposition should use default goal."""
+        from mp_mcp_server.prompts import gqm_decomposition
+
+        result = str(gqm_decomposition.fn())
+        assert "understand user retention" in result
+
+    def test_growth_accounting_returns_content(self) -> None:
+        """growth_accounting should return AARRR framework content."""
+        from mp_mcp_server.prompts import growth_accounting
+
+        result = str(growth_accounting.fn(acquisition_event="register"))
+        assert "# Growth Accounting: AARRR Framework Analysis" in result
+        assert "register" in result
+        assert "Acquisition" in result
+        assert "Retention" in result
+        assert "Revenue" in result
+
+    def test_growth_accounting_default_event(self) -> None:
+        """growth_accounting should use default acquisition event."""
+        from mp_mcp_server.prompts import growth_accounting
+
+        result = str(growth_accounting.fn())
+        assert "signup" in result
+
+    def test_experiment_analysis_returns_content(self) -> None:
+        """experiment_analysis should return A/B test guidance."""
+        from mp_mcp_server.prompts import experiment_analysis
+
+        result = str(experiment_analysis.fn(experiment_name="button_color_test"))
+        assert "# A/B Test Analysis: button_color_test" in result
+        assert "Statistical significance" in result
+        assert "control" in result
+        assert "treatment" in result
+
+    def test_experiment_analysis_default_name(self) -> None:
+        """experiment_analysis should use default experiment name."""
+        from mp_mcp_server.prompts import experiment_analysis
+
+        result = str(experiment_analysis.fn())
+        assert "homepage_redesign" in result
+
+    def test_data_quality_audit_returns_content(self) -> None:
+        """data_quality_audit should return audit checklist."""
+        from mp_mcp_server.prompts import data_quality_audit
+
+        result = str(data_quality_audit.fn(event="purchase"))
+        assert "# Data Quality Audit: purchase" in result
+        assert "purchase" in result
+        assert "Coverage" in result
+        assert "Completeness" in result
+
+    def test_data_quality_audit_default_event(self) -> None:
+        """data_quality_audit should use default event."""
+        from mp_mcp_server.prompts import data_quality_audit
+
+        result = str(data_quality_audit.fn())
+        assert "signup" in result
+
+
+class TestAllPromptsRegistered:
+    """Verify all prompts are registered with MCP server."""
+
+    def test_gqm_decomposition_registered(self) -> None:
+        """gqm_decomposition should be registered."""
+        from mp_mcp_server.server import mcp
+
+        prompt_names = list(mcp._prompt_manager._prompts.keys())
+        assert "gqm_decomposition" in prompt_names
+
+    def test_growth_accounting_registered(self) -> None:
+        """growth_accounting should be registered."""
+        from mp_mcp_server.server import mcp
+
+        prompt_names = list(mcp._prompt_manager._prompts.keys())
+        assert "growth_accounting" in prompt_names
+
+    def test_experiment_analysis_registered(self) -> None:
+        """experiment_analysis should be registered."""
+        from mp_mcp_server.server import mcp
+
+        prompt_names = list(mcp._prompt_manager._prompts.keys())
+        assert "experiment_analysis" in prompt_names
+
+    def test_data_quality_audit_registered(self) -> None:
+        """data_quality_audit should be registered."""
+        from mp_mcp_server.server import mcp
+
+        prompt_names = list(mcp._prompt_manager._prompts.keys())
+        assert "data_quality_audit" in prompt_names
