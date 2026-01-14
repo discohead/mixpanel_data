@@ -295,6 +295,8 @@ Skill(skill="mixpanel-data:mixpanel-analyst")  # Will fail!
 - DuckDB (existing StorageEngine) (019-parallel-profile-fetch)
 - Python 3.10+ (matches mixpanel_data requirements) (020-mcp-server)
 - DuckDB (via mixpanel_data Workspace - shared session state) (020-mcp-server)
+- Python 3.10+ + FastMCP 2.x, mixpanel_data, Pydantic v2 (021-mcp-server-v2)
+- DuckDB (via mixpanel_data.Workspace), in-memory for middleware caches (021-mcp-server-v2)
 
 ## Recent Changes
 - 017-parallel-export: Added Python 3.10+ + concurrent.futures (stdlib), threading (stdlib), queue (stdlib) - no new external dependencies
