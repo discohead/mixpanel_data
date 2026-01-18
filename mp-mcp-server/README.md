@@ -1,6 +1,6 @@
 # mp-mcp-server
 
-MCP (Model Context Protocol) server exposing mixpanel_data analytics capabilities to AI assistants like Claude Desktop.
+MCP (Model Context Protocol) server exposing mixpanel_data analytics capabilities to AI assistants like Claude Desktop. Built on **FastMCP 2.x** with tiered tools, middleware, and intelligent analytics.
 
 ## Features
 
@@ -8,7 +8,10 @@ MCP (Model Context Protocol) server exposing mixpanel_data analytics capabilitie
 - **Live Analytics**: Run segmentation, funnel, retention, and JQL queries
 - **Data Fetching**: Download events and profiles to local DuckDB storage
 - **Local Analysis**: Execute SQL queries against fetched data
-- **Guided Workflows**: Prompt templates for common analytics tasks
+- **Intelligent Tools**: AI-powered metric diagnosis and natural language queries
+- **Composed Tools**: AARRR dashboards, GQM investigations, cohort comparisons
+- **Interactive Workflows**: Guided analysis with user confirmation for large operations
+- **Middleware**: Caching, rate limiting, and audit logging
 
 ## Installation
 
@@ -78,6 +81,15 @@ mp-mcp-server --transport http --port 8000
 - "What's the conversion rate for my signup funnel?"
 - "Show day-7 retention for users who signed up last month"
 
+**Intelligent Analysis:**
+- "Why did signups drop on January 7th?"
+- "What features do our best users engage with?"
+- "Generate a funnel optimization report"
+
+**Interactive Workflows:**
+- "Help me analyze my data" (guided analysis)
+- "Safely fetch all events from the last 90 days"
+
 **Local Analysis:**
 - "Fetch events from January 1-7"
 - "Count events by name"
@@ -85,7 +97,7 @@ mp-mcp-server --transport http --port 8000
 
 ## Available Tools
 
-### Discovery (9 tools)
+### Discovery (8 tools)
 - `list_events` - List all tracked events
 - `list_properties` - Get properties for an event
 - `list_property_values` - Get sample values for a property
@@ -95,7 +107,7 @@ mp-mcp-server --transport http --port 8000
 - `top_events` - Get most active events
 - `workspace_info` - Get workspace configuration
 
-### Live Query (9 tools)
+### Live Query (8 tools)
 - `segmentation` - Time series event analysis
 - `funnel` - Conversion funnel analysis
 - `retention` - User retention analysis
@@ -106,12 +118,12 @@ mp-mcp-server --transport http --port 8000
 - `frequency` - Event frequency distribution
 
 ### Fetch (4 tools)
-- `fetch_events` - Download events to local storage
-- `fetch_profiles` - Download profiles to local storage
+- `fetch_events` - Download events to local storage (with progress reporting)
+- `fetch_profiles` - Download profiles to local storage (with progress reporting)
 - `stream_events` - Stream events without storing
 - `stream_profiles` - Stream profiles without storing
 
-### Local (12 tools)
+### Local (11 tools)
 - `sql` - Execute SQL queries
 - `sql_scalar` - Execute SQL returning single value
 - `list_tables` - List local tables
@@ -123,6 +135,30 @@ mp-mcp-server --transport http --port 8000
 - `column_stats` - Get column statistics
 - `drop_table` - Remove a table
 - `drop_all_tables` - Remove all tables
+
+### Intelligent Tools (3 tools) - Sampling-Powered
+- `diagnose_metric_drop` - Analyze metric declines with AI synthesis
+- `ask_mixpanel` - Natural language analytics queries
+- `funnel_optimization_report` - Funnel analysis with recommendations
+
+### Composed Tools (3 tools)
+- `product_health_dashboard` - AARRR metrics in one request
+- `gqm_investigation` - Goal-Question-Metric framework analysis
+- `cohort_comparison` - Compare user cohorts across dimensions
+
+### Interactive Tools (2 tools) - Elicitation-Powered
+- `safe_large_fetch` - Volume estimation with user confirmation
+- `guided_analysis` - Interactive step-by-step analysis workflow
+
+## Middleware
+
+The server includes a middleware layer for cross-cutting concerns:
+
+| Component | Description |
+|-----------|-------------|
+| **Caching** | TTL-based response caching for discovery tools (5-minute TTL) |
+| **Rate Limiting** | Query API (60/hr, 5 concurrent) and Export API limits |
+| **Audit Logging** | Tool invocation logging with timing and parameters |
 
 ## Resources
 
@@ -143,6 +179,20 @@ Guided workflow templates:
 - `funnel_analysis` - Funnel conversion analysis workflow
 - `retention_analysis` - User retention analysis workflow
 - `local_analysis_workflow` - Local SQL analysis guide
+- `gqm_framework` - Goal-Question-Metric investigation framework
+- `aarrr_analysis` - Pirate metrics (Acquisition, Activation, Retention, Revenue, Referral)
+- `experiment_analysis` - A/B test and experiment analysis guide
+
+## MCP Capabilities
+
+This server leverages advanced MCP features:
+
+| Feature | Usage |
+|---------|-------|
+| **Sampling** | `ctx.sample()` for LLM analysis of query results |
+| **Elicitation** | `ctx.elicit()` for interactive workflows |
+| **Tasks** | Progress reporting via `ctx.report_progress()` |
+| **Middleware** | Request interception for caching, rate limiting, audit |
 
 ## Development
 
@@ -156,6 +206,13 @@ pytest mp-mcp-server/tests/
 # Run with coverage
 pytest mp-mcp-server/tests/ --cov=mp_mcp_server
 ```
+
+## Technology Stack
+
+- Python 3.10+ with FastMCP 2.x
+- mixpanel_data Workspace for analytics
+- DuckDB for local storage
+- In-memory caches for middleware (no external dependencies)
 
 ## License
 

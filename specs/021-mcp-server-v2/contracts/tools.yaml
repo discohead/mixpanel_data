@@ -1,0 +1,531 @@
+# MCP Server v2 - Tool Contracts
+# OpenAPI-style schemas for new tools
+
+openapi: "3.1.0"
+info:
+  title: MCP Server v2 Tools
+  version: "2.0.0"
+  description: Intelligent analytics tools for Mixpanel MCP server
+
+tools:
+  # =============================================================================
+  # TIER 3: Intelligent Tools (Sampling-Powered)
+  # =============================================================================
+
+  diagnose_metric_drop:
+    description: |
+      Diagnose why a metric dropped on a specific date.
+
+      Performs comprehensive root cause analysis by:
+      1. Confirming the drop magnitude
+      2. Segmenting by key dimensions to find drivers
+      3. Using AI to synthesize findings and recommend actions
+
+      Note: Full synthesis requires a sampling-capable MCP client.
+      Without sampling, returns raw data for manual interpretation.
+    inputSchema:
+      type: object
+      required:
+        - event
+        - date
+      properties:
+        event:
+          type: string
+          description: Event name to analyze (e.g., "signup", "purchase")
+        date:
+          type: string
+          format: date
+          description: Date when drop occurred (YYYY-MM-DD)
+        comparison_days:
+          type: integer
+          default: 7
+          minimum: 1
+          maximum: 90
+          description: Days before drop to use as baseline
+        dimensions:
+          type: array
+          items:
+            type: string
+          default: ["platform", "country", "utm_source", "device_type"]
+          description: Properties to segment by
+    outputSchema:
+      $ref: "#/components/schemas/DiagnosisResult"
+
+  ask_mixpanel:
+    description: |
+      Answer any analytics question using natural language.
+
+      Interprets your question, executes appropriate queries,
+      and synthesizes a comprehensive answer.
+    inputSchema:
+      type: object
+      required:
+        - question
+      properties:
+        question:
+          type: string
+          description: Natural language question about your data
+        context:
+          type: string
+          description: Optional additional context about your product/metrics
+    outputSchema:
+      type: object
+      properties:
+        answer:
+          type: string
+          description: Human-readable response to your question
+        confidence:
+          type: string
+          enum: ["low", "medium", "high"]
+        queries_executed:
+          type: array
+          items:
+            type: object
+        supporting_data:
+          type: object
+        follow_up_suggestions:
+          type: array
+          items:
+            type: string
+
+  funnel_optimization_report:
+    description: |
+      Generate comprehensive funnel optimization report.
+
+      Analyzes a conversion funnel to identify:
+      - Overall conversion rates
+      - Biggest drop-off points
+      - Segment-level performance differences
+      - Actionable optimization recommendations
+    inputSchema:
+      type: object
+      required:
+        - funnel_id
+        - from_date
+        - to_date
+      properties:
+        funnel_id:
+          type: integer
+          description: Saved funnel ID from Mixpanel
+        from_date:
+          type: string
+          format: date
+          description: Analysis start date (YYYY-MM-DD)
+        to_date:
+          type: string
+          format: date
+          description: Analysis end date (YYYY-MM-DD)
+        segment_dimensions:
+          type: array
+          items:
+            type: string
+          default: ["platform", "country", "utm_source"]
+          description: Properties to segment by
+    outputSchema:
+      $ref: "#/components/schemas/FunnelOptimizationResult"
+
+  # =============================================================================
+  # TIER 2: Composed Tools
+  # =============================================================================
+
+  gqm_investigation:
+    description: |
+      Perform structured investigation using GQM (Goal-Question-Metric) framework.
+
+      Decomposes a high-level analytics goal into answerable sub-questions,
+      executes targeted queries for each, and synthesizes findings.
+
+      This is the primary tool for open-ended analytics questions like:
+      - "Why is retention down?"
+      - "What's driving revenue growth?"
+      - "Which acquisition channels are most effective?"
+    inputSchema:
+      type: object
+      required:
+        - goal
+      properties:
+        goal:
+          type: string
+          description: The analytics goal to investigate
+        category:
+          type: string
+          enum: ["acquisition", "activation", "retention", "revenue", "referral"]
+          description: Optional AARRR category to scope investigation
+        from_date:
+          type: string
+          format: date
+          description: Analysis start date (defaults to 30 days ago)
+        to_date:
+          type: string
+          format: date
+          description: Analysis end date (defaults to today)
+    outputSchema:
+      $ref: "#/components/schemas/GQMInvestigation"
+
+  product_health_dashboard:
+    description: |
+      Generate comprehensive product health dashboard using AARRR framework.
+
+      Computes all pirate metrics:
+      - Acquisition: New user signups by source
+      - Activation: Onboarding/first value completion
+      - Retention: D1/D7/D30 return rates
+      - Revenue: Conversion and monetization (if applicable)
+      - Referral: Viral coefficient (if applicable)
+    inputSchema:
+      type: object
+      properties:
+        acquisition_event:
+          type: string
+          default: "signup"
+          description: Event for new user acquisition
+        activation_event:
+          type: string
+          description: Event indicating user activation
+        retention_event:
+          type: string
+          description: Event for measuring return
+        revenue_event:
+          type: string
+          description: Purchase/subscription event
+        referral_event:
+          type: string
+          description: Invite/share event
+        from_date:
+          type: string
+          format: date
+          description: Dashboard start date
+        to_date:
+          type: string
+          format: date
+          description: Dashboard end date
+    outputSchema:
+      $ref: "#/components/schemas/ProductHealthDashboard"
+
+  cohort_comparison:
+    description: |
+      Compare two user cohorts across multiple dimensions.
+
+      Provides comprehensive comparison including:
+      - Event frequency differences
+      - Retention rate comparison
+      - Property distribution differences
+    inputSchema:
+      type: object
+      required:
+        - cohort_a_filter
+        - cohort_b_filter
+      properties:
+        cohort_a_filter:
+          type: string
+          description: "Filter expression for first cohort (e.g., 'properties[\"plan\"] == \"premium\"')"
+        cohort_b_filter:
+          type: string
+          description: "Filter expression for second cohort"
+        cohort_a_name:
+          type: string
+          default: "Cohort A"
+          description: Display name for first cohort
+        cohort_b_name:
+          type: string
+          default: "Cohort B"
+          description: Display name for second cohort
+        from_date:
+          type: string
+          format: date
+          description: Analysis start date
+        to_date:
+          type: string
+          format: date
+          description: Analysis end date
+        compare_dimensions:
+          type: array
+          items:
+            type: string
+            enum: ["event_frequency", "retention", "top_events"]
+          default: ["event_frequency", "retention", "top_events"]
+          description: Dimensions to compare
+    outputSchema:
+      $ref: "#/components/schemas/CohortComparison"
+
+  # =============================================================================
+  # ELICITATION TOOLS
+  # =============================================================================
+
+  safe_large_fetch:
+    description: |
+      Fetch events with confirmation for large datasets.
+
+      Estimates data size before fetching and asks for confirmation
+      if the fetch would be large (>100K events).
+    inputSchema:
+      type: object
+      required:
+        - from_date
+        - to_date
+      properties:
+        from_date:
+          type: string
+          format: date
+          description: Start date (YYYY-MM-DD)
+        to_date:
+          type: string
+          format: date
+          description: End date (YYYY-MM-DD)
+        table:
+          type: string
+          default: "events"
+          description: Table name for storage
+        events:
+          type: array
+          items:
+            type: string
+          description: Optional list of specific events to fetch
+    outputSchema:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: ["success", "cancelled", "reduced"]
+        table:
+          type: string
+        rows:
+          type: integer
+        estimated_events:
+          type: integer
+
+  guided_analysis:
+    description: |
+      Start an interactive guided analysis session.
+
+      Walks you through a structured analytics investigation,
+      asking for input at key decision points.
+    inputSchema:
+      type: object
+      properties:
+        goal:
+          type: string
+          description: Optional starting goal (e.g., "improve signup conversion")
+    outputSchema:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: ["complete", "partial", "cancelled"]
+        focus_area:
+          type: string
+        period:
+          type: object
+        initial_analysis:
+          type: object
+        selected_segment:
+          type: object
+        deep_dive:
+          type: object
+
+components:
+  schemas:
+    DiagnosisResult:
+      type: object
+      properties:
+        drop_confirmed:
+          type: boolean
+          description: Whether a significant drop was detected
+        drop_percentage:
+          type: number
+          description: Percentage change from baseline
+        primary_driver:
+          type: object
+          properties:
+            dimension:
+              type: string
+            segment:
+              type: string
+            contribution_pct:
+              type: number
+            description:
+              type: string
+        secondary_factors:
+          type: array
+          items:
+            type: object
+        recommendations:
+          type: array
+          items:
+            type: string
+        confidence:
+          type: string
+          enum: ["low", "medium", "high"]
+        caveats:
+          type: array
+          items:
+            type: string
+        raw_data:
+          type: object
+
+    FunnelOptimizationResult:
+      type: object
+      properties:
+        executive_summary:
+          type: string
+        overall_conversion_rate:
+          type: number
+        bottleneck:
+          type: object
+          properties:
+            step_number:
+              type: integer
+            step_name:
+              type: string
+            drop_percentage:
+              type: number
+        top_performing_segments:
+          type: array
+          items:
+            type: object
+        underperforming_segments:
+          type: array
+          items:
+            type: object
+        recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              action:
+                type: string
+              priority:
+                type: string
+                enum: ["high", "medium", "low"]
+              expected_impact:
+                type: string
+        raw_data:
+          type: object
+
+    GQMInvestigation:
+      type: object
+      properties:
+        interpreted_goal:
+          type: string
+        aarrr_category:
+          type: string
+          enum: ["acquisition", "activation", "retention", "revenue", "referral"]
+        period:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+        schema_context:
+          type: object
+        questions:
+          type: array
+          items:
+            type: object
+            properties:
+              question:
+                type: string
+              query_type:
+                type: string
+        findings:
+          type: array
+          items:
+            type: object
+            properties:
+              question:
+                type: string
+              query_type:
+                type: string
+              status:
+                type: string
+                enum: ["success", "failed"]
+              result:
+                type: object
+              error:
+                type: string
+        synthesis:
+          type: object
+        next_steps:
+          type: array
+          items:
+            type: string
+
+    ProductHealthDashboard:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+        acquisition:
+          $ref: "#/components/schemas/AARRRMetrics"
+        activation:
+          $ref: "#/components/schemas/AARRRMetrics"
+        retention:
+          $ref: "#/components/schemas/AARRRMetrics"
+        revenue:
+          $ref: "#/components/schemas/AARRRMetrics"
+        referral:
+          $ref: "#/components/schemas/AARRRMetrics"
+        health_score:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 1
+            maximum: 10
+
+    AARRRMetrics:
+      type: object
+      properties:
+        category:
+          type: string
+        primary_metric:
+          type: number
+        trend:
+          type: object
+          additionalProperties:
+            type: number
+        by_segment:
+          type: object
+
+    CohortComparison:
+      type: object
+      properties:
+        cohort_a:
+          type: object
+          properties:
+            name:
+              type: string
+            filter:
+              type: string
+            user_count:
+              type: integer
+            metrics:
+              type: object
+        cohort_b:
+          type: object
+          properties:
+            name:
+              type: string
+            filter:
+              type: string
+            user_count:
+              type: integer
+            metrics:
+              type: object
+        period:
+          type: object
+        comparisons:
+          type: object
+        statistical_significance:
+          type: object
+          additionalProperties:
+            type: boolean
