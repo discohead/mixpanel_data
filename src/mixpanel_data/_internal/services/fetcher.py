@@ -126,6 +126,7 @@ class FetcherService:
         max_workers: int | None = None,
         on_batch_complete: Callable[[BatchProgress], None] | None = None,
         chunk_days: int = 7,
+        use_internal: bool = False,
     ) -> FetchResult | ParallelFetchResult:
         """Fetch events from Mixpanel and store in local database.
 
@@ -152,6 +153,9 @@ class FetcherService:
                 Ignored when parallel=False.
             chunk_days: Days per chunk for parallel date range splitting.
                 Default: 7. Ignored when parallel=False.
+            use_internal: If True and internal DQS endpoint is configured, use the
+                internal endpoint instead of the public Export API. Bypasses public
+                API rate limits and is faster for K8s deployments. Default: False.
 
         Returns:
             FetchResult when parallel=False, ParallelFetchResult when parallel=True.
@@ -206,6 +210,7 @@ class FetcherService:
             where=where,
             limit=limit,
             on_batch=on_api_batch,
+            use_internal=use_internal,
         )
 
         # Transform events as they stream through

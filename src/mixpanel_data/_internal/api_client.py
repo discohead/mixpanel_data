@@ -80,6 +80,7 @@ def _iter_jsonl_lines(response: httpx.Response) -> Iterator[str]:
         if line_str:
             yield line_str
 
+
 # Regional endpoint configuration
 # Each region has separate URLs for query APIs and export/data APIs
 ENDPOINTS: dict[str, dict[str, str]] = {
@@ -131,6 +132,8 @@ class MixpanelAPIClient:
         timeout: float = 120.0,
         export_timeout: float = 600.0,
         max_retries: int = 3,
+        default_headers: dict[str, str] | None = None,
+        internal_endpoint: str | None = None,
         _transport: httpx.BaseTransport | None = None,
     ) -> None:
         """Initialize the API client.
@@ -140,12 +143,21 @@ class MixpanelAPIClient:
             timeout: Request timeout in seconds for regular requests.
             export_timeout: Request timeout for export operations.
             max_retries: Maximum retry attempts for rate-limited requests.
+            default_headers: Optional headers to include with all requests.
+                Useful for internal service identification (e.g., rate limit bypass).
+            internal_endpoint: Optional internal DQS endpoint URL for K8s deployments.
+                When provided and use_internal=True is passed to export_events(),
+                this endpoint is used instead of the public Export API.
+                Example: "http://dqs.arb.svc.cluster.local:8000/distributed-query"
             _transport: Internal parameter for testing with MockTransport.
         """
         self._credentials = credentials
         self._timeout = timeout
         self._export_timeout = export_timeout
         self._max_retries = max_retries
+        self._default_headers = {"Internal-Source": "mcp.server"}
+        self._default_headers.update(default_headers or {})
+        self._internal_endpoint = internal_endpoint
         self._client: httpx.Client | None = None
         self._transport = _transport
 
@@ -544,13 +556,16 @@ class MixpanelAPIClient:
             params,
         )
 
+        headers = {"Authorization": self._get_auth_header()}
+        headers.update(self._default_headers)
+
         return self._execute_with_retry(
             method,
             url,
             params=params,
             json_data=data,
             form_data=form_data,
-            headers={"Authorization": self._get_auth_header()},
+            headers=headers,
             timeout=timeout,
             script=script,
         )
@@ -598,6 +613,7 @@ class MixpanelAPIClient:
                 )
         """
         request_headers = {"Authorization": self._get_auth_header()}
+        request_headers.update(self._default_headers)
         if headers:
             request_headers.update(headers)
 
@@ -632,6 +648,15 @@ class MixpanelAPIClient:
         """
         return self._credentials.region
 
+    @property
+    def internal_endpoint(self) -> str | None:
+        """Get the configured internal DQS endpoint.
+
+        Returns:
+            The internal endpoint URL, or None if not configured.
+        """
+        return self._internal_endpoint
+
     def _parse_retry_after(self, response: httpx.Response) -> int | None:
         """Parse Retry-After header if present.
 
@@ -662,6 +687,7 @@ class MixpanelAPIClient:
         where: str | None = None,
         limit: int | None = None,
         on_batch: Callable[[int], None] | None = None,
+        use_internal: bool = False,
     ) -> Iterator[dict[str, Any]]:
         """Stream events from the Export API.
 
@@ -676,6 +702,10 @@ class MixpanelAPIClient:
             limit: Optional maximum number of events to return (max 100000).
             on_batch: Optional callback invoked with cumulative count every
                 1000 events, and once at the end for any remaining events.
+            use_internal: If True and internal_endpoint is configured, use the
+                internal DQS endpoint instead of the public Export API. This
+                bypasses public API rate limits and is faster for K8s deployments.
+                Default: False.
 
         Yields:
             Event dictionaries with 'event' and 'properties' keys.
@@ -687,13 +717,26 @@ class MixpanelAPIClient:
             QueryError: Invalid parameters.
             ServerError: Server-side errors (5xx).
         """
-        url = self._build_url("export", "/export")
+        # Use internal endpoint if configured and requested
+        if use_internal and self._internal_endpoint:
+            url = self._internal_endpoint
+            logger.debug(
+                "Using internal DQS endpoint for export: %s",
+                url,
+            )
+        else:
+            url = self._build_url("export", "/export")
 
         params: dict[str, Any] = {
             "project_id": self._credentials.project_id,
             "from_date": from_date,
             "to_date": to_date,
         }
+
+        # Internal DQS endpoint requires type=export parameter
+        if use_internal and self._internal_endpoint:
+            params["type"] = "export"
+
         if events:
             params["event"] = json.dumps(events)
         if where:
@@ -706,6 +749,7 @@ class MixpanelAPIClient:
             "Authorization": self._get_auth_header(),
             "Accept-Encoding": "gzip",
         }
+        headers.update(self._default_headers)
 
         # Stream with retry logic
         for attempt in range(self._max_retries + 1):

@@ -1,0 +1,13 @@
+#!/bin/bash
+# Wrapper script that loads OpenAI credentials before starting the MCP server
+
+# Load OpenAI credentials from GCP if not already set
+if [ -z "$OPENAI_API_KEY" ]; then
+    source /home/jared/analytics/ai/get_open_ai_key.sh 2>/dev/null || true
+fi
+
+# Ensure PYTHONPATH includes analytics root for mp_secrets
+export PYTHONPATH="${PYTHONPATH:-}:/home/jared"
+
+# Run the MCP server via uv to use the correct virtual environment
+exec uv run --directory /home/jared/analytics/mixpanel_data/mp-mcp-server mp-mcp-server "$@"

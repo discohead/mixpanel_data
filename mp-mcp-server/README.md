@@ -194,6 +194,30 @@ This server leverages advanced MCP features:
 | **Tasks** | Progress reporting via `ctx.report_progress()` |
 | **Middleware** | Request interception for caching, rate limiting, audit |
 
+### OpenAI Fallback for Intelligent Tools
+
+The intelligent tools (`ask_mixpanel`, `diagnose_metric_drop`, `funnel_optimization_report`) use MCP sampling for AI-powered analysis. If your MCP client doesn't support sampling (e.g., Claude Code with Agent SDK), the server automatically uses OpenAI as a fallback.
+
+**Setup (for local development):**
+
+```bash
+# Fetch OpenAI credentials from GCP Secret Manager
+source ai/get_open_ai_key.sh
+
+# Or set manually
+export OPENAI_API_KEY="your-key"
+export OPENAI_ORG_ID="your-org-id"  # optional
+```
+
+**Credential sources (in order of precedence):**
+1. Environment variables: `OPENAI_API_KEY`, `OPENAI_ORG_ID`
+2. Mixpanel secrets: `mp_secrets.get("openai.api-key")` (production/GCP)
+
+**Behavior:**
+- If client supports sampling: Uses client's LLM (e.g., Claude Desktop)
+- If client lacks sampling + OpenAI configured: Uses OpenAI (gpt-5)
+- If no credentials available: Returns raw data with analysis hints
+
 ## Development
 
 ```bash

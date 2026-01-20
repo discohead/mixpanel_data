@@ -84,15 +84,15 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         "--transport",
         type=str,
         default="stdio",
-        choices=["stdio", "sse"],
-        help="Transport type (default: stdio). 'sse' uses HTTP Server-Sent Events.",
+        choices=["stdio", "sse", "http"],
+        help="Transport type (default: stdio). 'sse' uses HTTP Server-Sent Events. 'http' uses Streamable HTTP.",
     )
 
     parser.add_argument(
         "--port",
         type=int,
         default=8000,
-        help="HTTP port (only used with --transport sse)",
+        help="HTTP port (only used with --transport sse or http)",
     )
 
     return parser.parse_args(args)
@@ -115,7 +115,9 @@ def main() -> None:
         set_account(args.account)
 
     # Run the server with the specified transport
-    if args.transport == "sse":
+    if args.transport == "http":
+        mcp.run(transport="http", host="0.0.0.0", port=args.port)
+    elif args.transport == "sse":
         mcp.run(transport="sse", port=args.port)
     else:
         mcp.run(transport="stdio")

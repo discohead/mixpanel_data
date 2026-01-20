@@ -116,14 +116,22 @@ class ConfigManager:
     - Adding, removing, and listing project accounts
     - Setting the default account
     - Resolving credentials from environment variables or config file
+    - Internal endpoint configuration for K8s deployments
 
     Config file location (in priority order):
     1. Explicit config_path parameter
     2. MP_CONFIG_PATH environment variable
     3. Default: ~/.mp/config.toml
+
+    Internal endpoint configuration:
+    - MP_DQS_ENDPOINT: URL of the internal DQS endpoint
+    - Auto-detected when running inside K8s cluster
     """
 
     DEFAULT_CONFIG_PATH = Path.home() / ".mp" / "config.toml"
+
+    # Default DQS endpoint for K8s clusters
+    DEFAULT_DQS_ENDPOINT = "http://dqs.arb.svc.cluster.local:8000/distributed-query"
 
     def __init__(self, config_path: Path | None = None) -> None:
         """Initialize ConfigManager.
@@ -143,6 +151,40 @@ class ConfigManager:
     def config_path(self) -> Path:
         """Return the config file path."""
         return self._config_path
+
+    @staticmethod
+    def is_running_in_kubernetes() -> bool:
+        """Detect if running inside a Kubernetes cluster.
+
+        Checks for the KUBERNETES_SERVICE_HOST environment variable,
+        which is automatically set by Kubernetes for all pods.
+
+        Returns:
+            True if running in K8s, False otherwise.
+        """
+        return "KUBERNETES_SERVICE_HOST" in os.environ
+
+    def get_dqs_endpoint(self) -> str | None:
+        """Get the internal DQS endpoint URL if configured.
+
+        Resolution order:
+        1. MP_DQS_ENDPOINT environment variable (explicit override)
+        2. Default endpoint if running inside K8s cluster
+        3. None if neither condition is met
+
+        Returns:
+            DQS endpoint URL, or None if not configured/detected.
+        """
+        # Priority 1: Explicit environment variable
+        env_endpoint = os.environ.get("MP_DQS_ENDPOINT")
+        if env_endpoint:
+            return env_endpoint
+
+        # Priority 2: Auto-detect K8s environment
+        if self.is_running_in_kubernetes():
+            return self.DEFAULT_DQS_ENDPOINT
+
+        return None
 
     def _read_config(self) -> dict[str, Any]:
         """Read and parse the config file.

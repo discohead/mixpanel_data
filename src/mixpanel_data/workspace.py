@@ -188,6 +188,7 @@ class Workspace:
         region: str | None = None,
         path: str | Path | None = None,
         read_only: bool = False,
+        api_headers: dict[str, str] | None = None,
         # Dependency injection for testing
         _config_manager: ConfigManager | None = None,
         _api_client: MixpanelAPIClient | None = None,
@@ -207,6 +208,8 @@ class Workspace:
             path: Path to database file. If None, uses default location.
             read_only: If True, open database in read-only mode allowing
                 concurrent reads. Defaults to False (write access).
+            api_headers: Optional headers to include with all API requests.
+                Useful for internal service identification (e.g., rate limit bypass).
             _config_manager: Injected ConfigManager for testing.
             _api_client: Injected MixpanelAPIClient for testing.
             _storage: Injected StorageEngine for testing.
@@ -263,6 +266,7 @@ class Workspace:
 
         # Lazy-initialized services (None until first use)
         self._api_client: MixpanelAPIClient | None = _api_client
+        self._api_headers = api_headers or {}
         self._discovery: DiscoveryService | None = None
         self._fetcher: FetcherService | None = None
         self._live_query: LiveQueryService | None = None
@@ -527,7 +531,13 @@ class Workspace:
                     "API access requires credentials. "
                     "Use Workspace() with credentials instead of Workspace.open()."
                 )
-            self._api_client = MixpanelAPIClient(self._credentials)
+            # Get internal DQS endpoint from config (if available)
+            internal_endpoint = self._config_manager.get_dqs_endpoint()
+            self._api_client = MixpanelAPIClient(
+                self._credentials,
+                default_headers=self._api_headers,
+                internal_endpoint=internal_endpoint,
+            )
         return self._api_client
 
     def _require_api_client(self) -> MixpanelAPIClient:
@@ -838,6 +848,7 @@ class Workspace:
         max_workers: int | None = None,
         on_batch_complete: Callable[[BatchProgress], None] | None = None,
         chunk_days: int = 7,
+        use_internal: bool | None = None,
     ) -> FetchResult | ParallelFetchResult:
         """Fetch events from Mixpanel and store in local database.
 
@@ -872,6 +883,11 @@ class Workspace:
                 Default: 7. Valid range: 1-100. Smaller values create more
                 parallel batches but may increase API overhead.
                 Ignored when parallel=False.
+            use_internal: If True, use the internal DQS endpoint instead of the
+                public Export API. Bypasses public API rate limits and is faster
+                for K8s deployments. If None (default), auto-detects: uses internal
+                endpoint when available (MP_DQS_ENDPOINT env var or K8s detected),
+                otherwise uses public API. Set to False to force public API usage.
 
         Returns:
             FetchResult when parallel=False, ParallelFetchResult when parallel=True.
@@ -955,6 +971,12 @@ class Workspace:
                 pass
 
         try:
+            # Auto-detect use_internal if not explicitly specified
+            resolved_use_internal = use_internal
+            if resolved_use_internal is None:
+                # Default to True if internal endpoint is available
+                resolved_use_internal = self._config_manager.get_dqs_endpoint() is not None
+
             result = self._fetcher_service.fetch_events(
                 name=name,
                 from_date=from_date,
@@ -969,6 +991,7 @@ class Workspace:
                 max_workers=max_workers,
                 on_batch_complete=on_batch_complete,
                 chunk_days=chunk_days,
+                use_internal=resolved_use_internal,
             )
         finally:
             if pbar is not None:
@@ -2216,12 +2239,16 @@ class Workspace:
                     event_name=str(event_name),
                     count=int(count),
                     unique_users=int(unique_users),
-                    first_seen=first_seen
-                    if isinstance(first_seen, datetime)
-                    else datetime.fromisoformat(str(first_seen)),
-                    last_seen=last_seen
-                    if isinstance(last_seen, datetime)
-                    else datetime.fromisoformat(str(last_seen)),
+                    first_seen=(
+                        first_seen
+                        if isinstance(first_seen, datetime)
+                        else datetime.fromisoformat(str(first_seen))
+                    ),
+                    last_seen=(
+                        last_seen
+                        if isinstance(last_seen, datetime)
+                        else datetime.fromisoformat(str(last_seen))
+                    ),
                     pct_of_total=float(pct),
                 )
             )
@@ -2231,12 +2258,16 @@ class Workspace:
             total_events=int(total_events),
             total_users=int(total_users),
             date_range=(
-                min_time
-                if isinstance(min_time, datetime)
-                else datetime.fromisoformat(str(min_time)),
-                max_time
-                if isinstance(max_time, datetime)
-                else datetime.fromisoformat(str(max_time)),
+                (
+                    min_time
+                    if isinstance(min_time, datetime)
+                    else datetime.fromisoformat(str(min_time))
+                ),
+                (
+                    max_time
+                    if isinstance(max_time, datetime)
+                    else datetime.fromisoformat(str(max_time))
+                ),
             ),
             events=events,
         )

@@ -24,6 +24,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from mixpanel_data import Workspace
+from mp_mcp_server.sampling import create_sampling_handler
 
 # Module-level account setting (set by CLI before server starts)
 _account: str | None = None
@@ -65,6 +66,13 @@ def get_rate_limiter() -> "MixpanelRateLimitMiddleware":
     return _rate_limiter
 
 
+# Rate limit bypass headers for internal MCP server requests
+_INTERNAL_API_HEADERS = {
+    "Internal-Source": "mcp.server",
+    "User-Agent": "FastMCP-Mixpanel-Client-Internal",
+}
+
+
 @asynccontextmanager
 async def lifespan(_server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     """Manage Workspace lifecycle for the MCP server session.
@@ -87,13 +95,23 @@ async def lifespan(_server: FastMCP) -> AsyncIterator[dict[str, Any]]:
         ```
     """
     account = get_account()
-    workspace = Workspace(account=account) if account else Workspace()
+    workspace = (
+        Workspace(
+            account=account,
+            api_headers=_INTERNAL_API_HEADERS,
+        )
+        if account
+        else Workspace(api_headers=_INTERNAL_API_HEADERS)
+    )
 
     try:
         yield {"workspace": workspace, "rate_limiter": get_rate_limiter()}
     finally:
         workspace.close()
 
+
+# Create sampling handler for OpenAI fallback (when client doesn't support sampling)
+_sampling_handler = create_sampling_handler()
 
 # Create the FastMCP server instance
 mcp = FastMCP(
@@ -114,6 +132,8 @@ Capabilities:
 Use the tools to help users understand their Mixpanel data.
 """,
     lifespan=lifespan,
+    sampling_handler=_sampling_handler,
+    sampling_handler_behavior="fallback",
 )
 
 # Register middleware (order: Logging -> Rate Limiting -> Caching)
