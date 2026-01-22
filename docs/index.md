@@ -7,6 +7,11 @@ A complete programmable interface to Mixpanel analytics—available as both a Py
 
     DeepWiki provides an AI-optimized view of this project—perfect for code assistants, agents, and LLM-powered workflows. Ask questions about the codebase, explore architecture, or get contextual help.
 
+!!! tip "Google Code Wiki"
+    🔍 **[Explore on Code Wiki →](https://codewiki.google/github.com/jaredmcfarland/mixpanel_data)**
+
+    Google's Code Wiki offers another AI-optimized interface for exploring this codebase—search, understand, and navigate the project with natural language queries.
+
 ## Why This Exists
 
 Mixpanel's web UI is built for interactive exploration. But many workflows need something different: scripts that run unattended, notebooks that combine Mixpanel data with other sources, agents that query analytics programmatically, or pipelines that move data between systems.

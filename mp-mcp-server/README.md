@@ -1,6 +1,19 @@
 # mp-mcp-server
 
-MCP (Model Context Protocol) server exposing mixpanel_data analytics capabilities to AI assistants like Claude Desktop. Built on **FastMCP 2.x** with tiered tools, middleware, and intelligent analytics.
+MCP (Model Context Protocol) server exposing mixpanel_data analytics capabilities to AI assistants like Claude Desktop. Built on **FastMCP 2.x** with intelligent tools, middleware, and AI-powered analytics.
+
+## What's New in v2
+
+The MCP Server v2 transforms `mp-mcp-server` from a thin API wrapper into an **intelligent analytics platform**:
+
+| Feature | Description |
+|---------|-------------|
+| **Intelligent Tools** | AI-powered analysis using `ctx.sample()` for synthesis |
+| **Composed Tools** | Multi-query orchestration (AARRR dashboards, GQM investigations) |
+| **Interactive Workflows** | User confirmation via `ctx.elicit()` for large operations |
+| **Progress Reporting** | Real-time updates for long-running fetches |
+| **Middleware Layer** | Caching, rate limiting, and audit logging |
+| **Graceful Degradation** | All tools work when sampling/elicitation unavailable |
 
 ## Features
 
@@ -81,12 +94,13 @@ mp-mcp-server --transport http --port 8000
 - "What's the conversion rate for my signup funnel?"
 - "Show day-7 retention for users who signed up last month"
 
-**Intelligent Analysis:**
+**Intelligent Analysis (v2):**
 - "Why did signups drop on January 7th?"
 - "What features do our best users engage with?"
 - "Generate a funnel optimization report"
+- "Show me a product health dashboard"
 
-**Interactive Workflows:**
+**Interactive Workflows (v2):**
 - "Help me analyze my data" (guided analysis)
 - "Safely fetch all events from the last 90 days"
 
@@ -96,6 +110,15 @@ mp-mcp-server --transport http --port 8000
 - "Find the top 10 users by event count"
 
 ## Available Tools
+
+### Tool Tiers
+
+| Tier | Description | MCP Feature |
+|------|-------------|-------------|
+| **Tier 1** | Primitive tools (direct API calls) | Standard tools |
+| **Tier 2** | Composed tools (multi-query orchestration) | Standard tools |
+| **Tier 3** | Intelligent tools (AI synthesis) | `ctx.sample()` |
+| **Interactive** | Elicitation workflows | `ctx.elicit()` |
 
 ### Discovery (8 tools)
 - `list_events` - List all tracked events
@@ -136,34 +159,61 @@ mp-mcp-server --transport http --port 8000
 - `drop_table` - Remove a table
 - `drop_all_tables` - Remove all tables
 
-### Intelligent Tools (3 tools) - Sampling-Powered
-- `diagnose_metric_drop` - Analyze metric declines with AI synthesis
-- `ask_mixpanel` - Natural language analytics queries
-- `funnel_optimization_report` - Funnel analysis with recommendations
+### Intelligent Tools (3 tools) — Tier 3, Sampling-Powered
 
-### Composed Tools (3 tools)
-- `product_health_dashboard` - AARRR metrics in one request
-- `gqm_investigation` - Goal-Question-Metric framework analysis
-- `cohort_comparison` - Compare user cohorts across dimensions
+These tools use `ctx.sample()` for LLM-powered analysis and gracefully degrade when sampling is unavailable.
 
-### Interactive Tools (2 tools) - Elicitation-Powered
-- `safe_large_fetch` - Volume estimation with user confirmation
-- `guided_analysis` - Interactive step-by-step analysis workflow
+| Tool | Description |
+|------|-------------|
+| `diagnose_metric_drop` | Analyze metric declines with AI synthesis |
+| `ask_mixpanel` | Natural language analytics queries |
+| `funnel_optimization_report` | Funnel analysis with recommendations |
+
+**Graceful Degradation**: When sampling is unavailable, these tools return raw query results with manual analysis hints instead of AI-synthesized findings.
+
+### Composed Tools (3 tools) — Tier 2
+
+These tools orchestrate multiple primitive queries into comprehensive analyses.
+
+| Tool | Description |
+|------|-------------|
+| `product_health_dashboard` | AARRR metrics (Acquisition, Activation, Retention, Revenue, Referral) in one request |
+| `gqm_investigation` | Goal-Question-Metric framework for structured investigation |
+| `cohort_comparison` | Compare user cohorts across behavioral dimensions |
+
+### Interactive Tools (2 tools) — Elicitation-Powered
+
+These tools use `ctx.elicit()` for user confirmation and multi-step workflows.
+
+| Tool | Description |
+|------|-------------|
+| `safe_large_fetch` | Volume estimation with user confirmation before large fetches |
+| `guided_analysis` | Interactive step-by-step analysis workflow |
 
 ## Middleware
 
 The server includes a middleware layer for cross-cutting concerns:
 
-| Component | Description |
-|-----------|-------------|
-| **Caching** | TTL-based response caching for discovery tools (5-minute TTL) |
-| **Rate Limiting** | Query API (60/hr, 5 concurrent) and Export API limits |
-| **Audit Logging** | Tool invocation logging with timing and parameters |
+| Component | Description | Configuration |
+|-----------|-------------|---------------|
+| **Caching** | TTL-based response caching for discovery tools | 5-minute TTL |
+| **Rate Limiting** | Respects Mixpanel API limits | Query: 60/hr, 5 concurrent; Export: 60/hr, 3/sec |
+| **Audit Logging** | Tool invocation logging with timing | All tool calls logged |
+
+### Rate Limit Details
+
+| API | Rate Limit | Concurrent Limit |
+|-----|------------|------------------|
+| Query API | 60 requests/hour | 5 concurrent |
+| Export API | 60 requests/hour, 3/second | 100 concurrent |
+
+When rate limited, the system automatically queues requests and reports wait time.
 
 ## Resources
 
-Static data accessible via MCP resources:
+Static and dynamic data accessible via MCP resources:
 
+### Static Resources
 - `workspace://info` - Workspace configuration
 - `workspace://tables` - Local table list
 - `schema://events` - Event list
@@ -171,28 +221,77 @@ Static data accessible via MCP resources:
 - `schema://cohorts` - Cohort definitions
 - `schema://bookmarks` - Saved reports
 
+### Dynamic Resource Templates (v2)
+- `analysis://retention/{event}/weekly` - 12-week retention curve
+- `analysis://trends/{event}/{days}` - Daily event counts
+- `users://{id}/journey` - User event journey
+
 ## Prompts
 
-Guided workflow templates:
+Guided workflow templates for structured analysis:
 
-- `analytics_workflow` - Complete analytics exploration guide
-- `funnel_analysis` - Funnel conversion analysis workflow
-- `retention_analysis` - User retention analysis workflow
-- `local_analysis_workflow` - Local SQL analysis guide
-- `gqm_framework` - Goal-Question-Metric investigation framework
-- `aarrr_analysis` - Pirate metrics (Acquisition, Activation, Retention, Revenue, Referral)
-- `experiment_analysis` - A/B test and experiment analysis guide
+| Prompt | Description |
+|--------|-------------|
+| `analytics_workflow` | Complete analytics exploration guide |
+| `funnel_analysis` | Funnel conversion analysis workflow |
+| `retention_analysis` | User retention analysis workflow |
+| `local_analysis_workflow` | Local SQL analysis guide |
+| `gqm_framework` | Goal-Question-Metric investigation framework |
+| `aarrr_analysis` | Pirate metrics (Acquisition, Activation, Retention, Revenue, Referral) |
+| `experiment_analysis` | A/B test and experiment analysis guide |
 
 ## MCP Capabilities
 
 This server leverages advanced MCP features:
 
-| Feature | Usage |
-|---------|-------|
-| **Sampling** | `ctx.sample()` for LLM analysis of query results |
-| **Elicitation** | `ctx.elicit()` for interactive workflows |
-| **Tasks** | Progress reporting via `ctx.report_progress()` |
-| **Middleware** | Request interception for caching, rate limiting, audit |
+| Feature | Usage | Graceful Degradation |
+|---------|-------|---------------------|
+| **Sampling** | `ctx.sample()` for LLM analysis of query results | Returns raw data with hints |
+| **Elicitation** | `ctx.elicit()` for interactive workflows | Proceeds with warning |
+| **Tasks** | Progress reporting via `ctx.report_progress()` | Synchronous execution |
+| **Middleware** | Request interception for caching, rate limiting, audit | N/A |
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    MCP Client                           │
+└────────────────────────┬────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│                   Middleware Layer                      │
+│  ┌─────────┐  ┌──────────────┐  ┌─────────────────┐    │
+│  │ Logging │→ │ Rate Limiting │→ │     Caching     │    │
+│  └─────────┘  └──────────────┘  └─────────────────┘    │
+└────────────────────────┬────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│                     Tool Tiers                          │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  Tier 3: Intelligent (sampling-powered)           │  │
+│  │  diagnose_metric_drop, ask_mixpanel, funnel_report│  │
+│  └───────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  Tier 2: Composed (multi-query orchestration)     │  │
+│  │  product_health_dashboard, gqm_investigation, ... │  │
+│  └───────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  Tier 1: Primitive (direct API calls)             │  │
+│  │  segmentation, funnel, retention, fetch_events,...│  │
+│  └───────────────────────────────────────────────────┘  │
+└────────────────────────┬────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│              mixpanel_data.Workspace                    │
+│  ┌─────────────┐  ┌────────────────┐  ┌─────────────┐  │
+│  │  Discovery  │  │  Live Queries  │  │   Storage   │  │
+│  └─────────────┘  └────────────────┘  └─────────────┘  │
+└────────────────────────┬────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│                   Mixpanel API                          │
+└─────────────────────────────────────────────────────────┘
+```
 
 ## Development
 
@@ -205,6 +304,41 @@ pytest mp-mcp-server/tests/
 
 # Run with coverage
 pytest mp-mcp-server/tests/ --cov=mp_mcp_server
+
+# Type check
+mypy mp-mcp-server/src/
+```
+
+### Project Structure
+
+```
+mp-mcp-server/src/mp_mcp_server/
+├── server.py              # FastMCP server setup
+├── context.py             # Workspace context management
+├── errors.py              # Error handling decorators
+├── types.py               # Result type definitions
+├── resources.py           # MCP resources
+├── prompts.py             # Framework prompts
+├── tools/
+│   ├── discovery.py       # Schema discovery tools
+│   ├── live.py            # Live query tools
+│   ├── fetch.py           # Data fetching tools
+│   ├── local.py           # Local SQL tools
+│   ├── intelligent/       # Tier 3 sampling-powered tools
+│   │   ├── diagnose.py
+│   │   ├── ask.py
+│   │   └── funnel_report.py
+│   ├── composed/          # Tier 2 multi-query tools
+│   │   ├── dashboard.py
+│   │   ├── gqm.py
+│   │   └── cohort.py
+│   └── interactive/       # Elicitation workflows
+│       ├── guided.py
+│       └── safe_fetch.py
+└── middleware/
+    ├── caching.py         # Response caching
+    ├── rate_limiting.py   # API rate limiting
+    └── audit.py           # Tool invocation logging
 ```
 
 ## Technology Stack
