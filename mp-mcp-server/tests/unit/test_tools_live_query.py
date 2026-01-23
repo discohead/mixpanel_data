@@ -14,7 +14,7 @@ class TestSegmentationTool:
         """Segmentation should return time series data."""
         from mp_mcp_server.tools.live_query import segmentation
 
-        result = segmentation.fn(
+        result = segmentation(  # type: ignore[operator]
             mock_context,
             event="login",
             from_date="2024-01-01",
@@ -27,7 +27,7 @@ class TestSegmentationTool:
         """Segmentation should support property segmentation."""
         from mp_mcp_server.tools.live_query import segmentation
 
-        result = segmentation.fn(
+        result = segmentation(  # type: ignore[operator]
             mock_context,
             event="login",
             from_date="2024-01-01",
@@ -44,7 +44,7 @@ class TestFunnelTool:
         """Funnel should return conversion step data."""
         from mp_mcp_server.tools.live_query import funnel
 
-        result = funnel.fn(
+        result = funnel(  # type: ignore[operator]
             mock_context,
             funnel_id=1,
             from_date="2024-01-01",
@@ -61,7 +61,7 @@ class TestRetentionTool:
         """Retention should return cohort retention data."""
         from mp_mcp_server.tools.live_query import retention
 
-        result = retention.fn(
+        result = retention(  # type: ignore[operator]
             mock_context,
             born_event="signup",
             from_date="2024-01-01",
@@ -77,7 +77,7 @@ class TestJqlTool:
         """Jql should execute JQL script and return results."""
         from mp_mcp_server.tools.live_query import jql
 
-        result = jql.fn(
+        result = jql(  # type: ignore[operator]
             mock_context,
             script="function main() { return Events({}); }",
         )
@@ -94,7 +94,7 @@ class TestEventCountsTool:
         """event_counts should return counts for multiple events."""
         from mp_mcp_server.tools.live_query import event_counts
 
-        result = event_counts.fn(
+        result = event_counts(  # type: ignore[operator]
             mock_context,
             events=["login", "signup"],
             from_date="2024-01-01",
@@ -114,7 +114,7 @@ class TestPropertyCountsTool:
         """property_counts should return property value breakdown."""
         from mp_mcp_server.tools.live_query import property_counts
 
-        result = property_counts.fn(
+        result = property_counts(  # type: ignore[operator]
             mock_context,
             event="login",
             property_name="browser",
@@ -131,7 +131,7 @@ class TestActivityFeedTool:
         """activity_feed should return events for a user."""
         from mp_mcp_server.tools.live_query import activity_feed
 
-        result = activity_feed.fn(
+        result = activity_feed(  # type: ignore[operator]
             mock_context,
             distinct_id="user123",
         )
@@ -146,7 +146,7 @@ class TestFrequencyTool:
         """Frequency should return event frequency distribution."""
         from mp_mcp_server.tools.live_query import frequency
 
-        result = frequency.fn(
+        result = frequency(  # type: ignore[operator]
             mock_context,
             event="login",
             from_date="2024-01-01",

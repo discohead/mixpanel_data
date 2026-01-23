@@ -75,3 +75,6 @@ demo/
 
 # mp credentials
 .mp/
+
+# fastmcp docs
+context/fastmcp/

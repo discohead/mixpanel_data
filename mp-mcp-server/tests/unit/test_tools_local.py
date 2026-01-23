@@ -15,7 +15,7 @@ class TestSqlTool:
         """Sql should execute SQL query and return results."""
         from mp_mcp_server.tools.local import sql
 
-        result = sql.fn(mock_context, query="SELECT * FROM events")
+        result = sql(mock_context, query="SELECT * FROM events")  # type: ignore[operator]
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["name"] == "login"
@@ -24,7 +24,7 @@ class TestSqlTool:
         """Sql should return results as list of dicts."""
         from mp_mcp_server.tools.local import sql
 
-        result = sql.fn(mock_context, query="SELECT COUNT(*) as cnt FROM events")
+        result = sql(mock_context, query="SELECT COUNT(*) as cnt FROM events")  # type: ignore[operator]
         assert isinstance(result, list)
 
 
@@ -35,7 +35,7 @@ class TestSqlScalarTool:
         """sql_scalar should return a single value."""
         from mp_mcp_server.tools.local import sql_scalar
 
-        result = sql_scalar.fn(mock_context, query="SELECT COUNT(*) FROM events")
+        result = sql_scalar(mock_context, query="SELECT COUNT(*) FROM events")  # type: ignore[operator]
         assert result == 42
 
 
@@ -46,7 +46,7 @@ class TestListTablesTool:
         """list_tables should return available tables."""
         from mp_mcp_server.tools.local import list_tables
 
-        result = list_tables.fn(mock_context)
+        result = list_tables(mock_context)  # type: ignore[operator]
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["name"] == "events_jan"
@@ -59,7 +59,7 @@ class TestTableSchemaTool:
         """table_schema should return column definitions."""
         from mp_mcp_server.tools.local import table_schema
 
-        result = table_schema.fn(mock_context, table="events_jan")
+        result = table_schema(mock_context, table="events_jan")  # type: ignore[operator]
         assert isinstance(result, list)
         assert len(result) == 2
         assert result[0]["column"] == "name"
@@ -72,7 +72,7 @@ class TestSampleTool:
         """Sample should return random rows from table."""
         from mp_mcp_server.tools.local import sample
 
-        result = sample.fn(mock_context, table="events_jan")
+        result = sample(mock_context, table="events_jan")  # type: ignore[operator]
         assert isinstance(result, list)
         assert len(result) == 1
 
@@ -84,7 +84,7 @@ class TestSummarizeTool:
         """Summarize should return table statistics."""
         from mp_mcp_server.tools.local import summarize
 
-        result = summarize.fn(mock_context, table="events_jan")
+        result = summarize(mock_context, table="events_jan")  # type: ignore[operator]
         assert "row_count" in result
         assert result["row_count"] == 1000
 
@@ -96,7 +96,7 @@ class TestEventBreakdownTool:
         """event_breakdown should return event counts."""
         from mp_mcp_server.tools.local import event_breakdown
 
-        result = event_breakdown.fn(mock_context, table="events_jan")
+        result = event_breakdown(mock_context, table="events_jan")  # type: ignore[operator]
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["name"] == "login"
@@ -109,7 +109,7 @@ class TestPropertyKeysTool:
         """property_keys should return property keys from Workspace method."""
         from mp_mcp_server.tools.local import property_keys
 
-        result = property_keys.fn(mock_context, table="events_jan")
+        result = property_keys(mock_context, table="events_jan")  # type: ignore[operator]
         assert isinstance(result, list)
         assert result == ["browser", "country", "device"]
 
@@ -117,7 +117,7 @@ class TestPropertyKeysTool:
         """property_keys should accept optional event filter."""
         from mp_mcp_server.tools.local import property_keys
 
-        result = property_keys.fn(mock_context, table="events_jan", event="login")
+        result = property_keys(mock_context, table="events_jan", event="login")  # type: ignore[operator]
         assert isinstance(result, list)
 
 
@@ -137,11 +137,11 @@ class TestColumnStatsTool:
                 "max_value": "2024-01-31",
             }
         ]
-        mock_context.fastmcp._lifespan_result[
+        mock_context.lifespan_context[
             "workspace"
         ].sql_rows.return_value = sql_rows_mock
 
-        result = column_stats.fn(mock_context, table="events_jan", column="time")
+        result = column_stats(mock_context, table="events_jan", column="time")  # type: ignore[operator]
         assert result["count"] == 1000
         assert result["distinct_count"] == 500
         assert result["min_value"] == "2024-01-01"
@@ -152,11 +152,11 @@ class TestColumnStatsTool:
 
         sql_rows_mock = MagicMock()
         sql_rows_mock.to_dicts.return_value = []
-        mock_context.fastmcp._lifespan_result[
+        mock_context.lifespan_context[
             "workspace"
         ].sql_rows.return_value = sql_rows_mock
 
-        result = column_stats.fn(mock_context, table="events_jan", column="time")
+        result = column_stats(mock_context, table="events_jan", column="time")  # type: ignore[operator]
         assert result == {
             "count": 0,
             "distinct_count": 0,
@@ -173,7 +173,7 @@ class TestDropTableTool:
         """drop_table should remove a table."""
         from mp_mcp_server.tools.local import drop_table
 
-        result = drop_table.fn(mock_context, table="events_jan")
+        result = drop_table(mock_context, table="events_jan")  # type: ignore[operator]
         assert result["success"] is True
         assert "events_jan" in result["message"]
 
@@ -185,7 +185,7 @@ class TestDropAllTablesTool:
         """drop_all_tables should remove all tables."""
         from mp_mcp_server.tools.local import drop_all_tables
 
-        result = drop_all_tables.fn(mock_context)
+        result = drop_all_tables(mock_context)  # type: ignore[operator]
         assert result["success"] is True
 
 
@@ -270,7 +270,7 @@ class TestSqlInjectionPrevention:
         from mp_mcp_server.tools.local import column_stats
 
         with pytest.raises(ToolError, match="Invalid table name"):
-            column_stats.fn(mock_context, table="events; DROP TABLE--", column="time")
+            column_stats(mock_context, table="events; DROP TABLE--", column="time")  # type: ignore[operator]
 
     def test_column_stats_validates_column_expression(
         self, mock_context: MagicMock
@@ -281,7 +281,7 @@ class TestSqlInjectionPrevention:
         from mp_mcp_server.tools.local import column_stats
 
         with pytest.raises(ToolError, match="disallowed pattern"):
-            column_stats.fn(mock_context, table="events", column="time; DROP TABLE x")
+            column_stats(mock_context, table="events", column="time; DROP TABLE x")  # type: ignore[operator]
 
     def test_event_breakdown_validates_table_name(
         self, mock_context: MagicMock
@@ -292,4 +292,4 @@ class TestSqlInjectionPrevention:
         from mp_mcp_server.tools.local import event_breakdown
 
         with pytest.raises(ToolError, match="Invalid table name"):
-            event_breakdown.fn(mock_context, table='events"; DELETE FROM users;--')
+            event_breakdown(mock_context, table='events"; DELETE FROM users;--')  # type: ignore[operator]

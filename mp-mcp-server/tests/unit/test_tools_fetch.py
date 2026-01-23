@@ -17,7 +17,7 @@ class TestFetchEventsTool:
         """fetch_events should store events in a DuckDB table."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        result = await fetch_events.fn(
+        result = await fetch_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -32,7 +32,7 @@ class TestFetchEventsTool:
         """fetch_events should return row count and metadata."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        result = await fetch_events.fn(
+        result = await fetch_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -46,7 +46,7 @@ class TestFetchEventsTool:
         """fetch_events should accept date range parameters."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        result = await fetch_events.fn(
+        result = await fetch_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-31",
@@ -63,7 +63,7 @@ class TestFetchProfilesTool:
         """fetch_profiles should store profiles in a DuckDB table."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        result = await fetch_profiles.fn(mock_context)
+        result = await fetch_profiles(mock_context)  # type: ignore[operator]
         assert "table_name" in result
         assert result["table_name"] == "profiles"
 
@@ -74,7 +74,7 @@ class TestFetchProfilesTool:
         """fetch_profiles should return row count."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        result = await fetch_profiles.fn(mock_context)
+        result = await fetch_profiles(mock_context)  # type: ignore[operator]
         assert "row_count" in result
         assert result["row_count"] == 500
 
@@ -83,7 +83,7 @@ class TestFetchProfilesTool:
         """fetch_profiles should accept optional parameters."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        result = await fetch_profiles.fn(
+        result = await fetch_profiles(  # type: ignore[operator]
             mock_context,
             table="my_profiles",
             where="email is not null",
@@ -97,7 +97,7 @@ class TestFetchProfilesTool:
         """fetch_events should accept parallel parameters."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        result = await fetch_events.fn(
+        result = await fetch_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-31",
@@ -115,7 +115,7 @@ class TestStreamEventsTool:
         """stream_events should return list of events."""
         from mp_mcp_server.tools.fetch import stream_events
 
-        result = stream_events.fn(
+        result = stream_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -129,12 +129,12 @@ class TestStreamEventsTool:
         from mp_mcp_server.tools.fetch import stream_events
 
         # Reset the mock for fresh iterator
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_events.return_value = iter(
             [{"name": "login", "distinct_id": "user1", "time": 1704067200}]
         )
 
-        result = stream_events.fn(
+        result = stream_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -147,12 +147,12 @@ class TestStreamEventsTool:
         from mp_mcp_server.tools.fetch import stream_events
 
         # Reset with events - the limit is now passed to ws.stream_events
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_events.return_value = iter(
             [{"event": f"event{i}", "properties": {}} for i in range(5)]
         )
 
-        result = stream_events.fn(
+        result = stream_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -173,7 +173,7 @@ class TestStreamProfilesTool:
         from mp_mcp_server.tools.fetch import stream_profiles
 
         # Reset mock
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_profiles.return_value = iter(
             [
                 {"$distinct_id": "user1", "$properties": {"email": "a@example.com"}},
@@ -181,7 +181,7 @@ class TestStreamProfilesTool:
             ]
         )
 
-        result = stream_profiles.fn(mock_context)
+        result = stream_profiles(mock_context)  # type: ignore[operator]
         assert isinstance(result, list)
         assert len(result) == 2
         assert result[0]["$distinct_id"] == "user1"
@@ -190,22 +190,22 @@ class TestStreamProfilesTool:
         """stream_profiles should accept where filter."""
         from mp_mcp_server.tools.fetch import stream_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_profiles.return_value = iter([{"$distinct_id": "user1"}])
 
-        result = stream_profiles.fn(mock_context, where="email is not null")
+        result = stream_profiles(mock_context, where="email is not null")  # type: ignore[operator]
         assert isinstance(result, list)
 
     def test_stream_profiles_with_distinct_id(self, mock_context: MagicMock) -> None:
         """stream_profiles should accept distinct_id parameter."""
         from mp_mcp_server.tools.fetch import stream_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_profiles.return_value = iter(
             [{"$distinct_id": "user1", "$properties": {"email": "a@example.com"}}]
         )
 
-        result = stream_profiles.fn(mock_context, distinct_id="user1")
+        result = stream_profiles(mock_context, distinct_id="user1")  # type: ignore[operator]
         assert len(result) == 1
         assert result[0]["$distinct_id"] == "user1"
         ws.stream_profiles.assert_called_once()
@@ -223,9 +223,9 @@ class TestFetchEventsOptionalParams:
         """fetch_events should pass where filter to workspace."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_events.fn(
+        await fetch_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -240,9 +240,9 @@ class TestFetchEventsOptionalParams:
         """fetch_events should pass limit to workspace."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_events.fn(
+        await fetch_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -257,9 +257,9 @@ class TestFetchEventsOptionalParams:
         """fetch_events should pass append flag to workspace."""
         from mp_mcp_server.tools.fetch import fetch_events
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_events.fn(
+        await fetch_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -280,9 +280,9 @@ class TestFetchProfilesOptionalParams:
         """fetch_profiles should pass cohort_id to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_profiles.fn(mock_context, cohort_id="12345")
+        await fetch_profiles(mock_context, cohort_id="12345")  # type: ignore[operator]
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["cohort_id"] == "12345"
@@ -294,9 +294,9 @@ class TestFetchProfilesOptionalParams:
         """fetch_profiles should pass output_properties to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_profiles.fn(mock_context, output_properties=["email", "name"])
+        await fetch_profiles(mock_context, output_properties=["email", "name"])  # type: ignore[operator]
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["output_properties"] == ["email", "name"]
@@ -308,9 +308,9 @@ class TestFetchProfilesOptionalParams:
         """fetch_profiles should pass distinct_id to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_profiles.fn(mock_context, distinct_id="user123")
+        await fetch_profiles(mock_context, distinct_id="user123")  # type: ignore[operator]
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["distinct_id"] == "user123"
@@ -322,9 +322,9 @@ class TestFetchProfilesOptionalParams:
         """fetch_profiles should pass distinct_ids list to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_profiles.fn(mock_context, distinct_ids=["user1", "user2", "user3"])
+        await fetch_profiles(mock_context, distinct_ids=["user1", "user2", "user3"])  # type: ignore[operator]
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["distinct_ids"] == ["user1", "user2", "user3"]
@@ -334,9 +334,9 @@ class TestFetchProfilesOptionalParams:
         """fetch_profiles should pass group_id to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_profiles.fn(mock_context, group_id="company")
+        await fetch_profiles(mock_context, group_id="company")  # type: ignore[operator]
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["group_id"] == "company"
@@ -346,9 +346,9 @@ class TestFetchProfilesOptionalParams:
         """fetch_profiles should pass append flag to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_profiles.fn(mock_context, append=True)
+        await fetch_profiles(mock_context, append=True)  # type: ignore[operator]
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["append"] is True
@@ -360,10 +360,10 @@ class TestFetchProfilesOptionalParams:
         """fetch_profiles should pass behaviors to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         behaviors = [{"event": "login", "count": {"min": 1}}]
 
-        await fetch_profiles.fn(mock_context, behaviors=behaviors)
+        await fetch_profiles(mock_context, behaviors=behaviors)  # type: ignore[operator]
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["behaviors"] == behaviors
@@ -375,9 +375,9 @@ class TestFetchProfilesOptionalParams:
         """fetch_profiles should pass as_of_timestamp to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_profiles.fn(mock_context, as_of_timestamp=1704067200)
+        await fetch_profiles(mock_context, as_of_timestamp=1704067200)  # type: ignore[operator]
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["as_of_timestamp"] == 1704067200
@@ -389,9 +389,9 @@ class TestFetchProfilesOptionalParams:
         """fetch_profiles should pass include_all_users to workspace."""
         from mp_mcp_server.tools.fetch import fetch_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
 
-        await fetch_profiles.fn(mock_context, include_all_users=True)
+        await fetch_profiles(mock_context, include_all_users=True)  # type: ignore[operator]
 
         call_kwargs = ws.fetch_profiles.call_args[1]
         assert call_kwargs["include_all_users"] is True
@@ -404,10 +404,10 @@ class TestStreamEventsOptionalParams:
         """stream_events should pass where filter to workspace."""
         from mp_mcp_server.tools.fetch import stream_events
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_events.return_value = iter([{"name": "login"}])
 
-        stream_events.fn(
+        stream_events(  # type: ignore[operator]
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -425,10 +425,10 @@ class TestStreamProfilesOptionalParams:
         """stream_profiles should pass cohort_id to workspace."""
         from mp_mcp_server.tools.fetch import stream_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_profiles.return_value = iter([{"$distinct_id": "user1"}])
 
-        stream_profiles.fn(mock_context, cohort_id="12345")
+        stream_profiles(mock_context, cohort_id="12345")  # type: ignore[operator]
 
         call_kwargs = ws.stream_profiles.call_args[1]
         assert call_kwargs["cohort_id"] == "12345"
@@ -439,10 +439,10 @@ class TestStreamProfilesOptionalParams:
         """stream_profiles should pass output_properties to workspace."""
         from mp_mcp_server.tools.fetch import stream_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_profiles.return_value = iter([{"$distinct_id": "user1"}])
 
-        stream_profiles.fn(mock_context, output_properties=["email"])
+        stream_profiles(mock_context, output_properties=["email"])  # type: ignore[operator]
 
         call_kwargs = ws.stream_profiles.call_args[1]
         assert call_kwargs["output_properties"] == ["email"]
@@ -451,10 +451,10 @@ class TestStreamProfilesOptionalParams:
         """stream_profiles should pass distinct_ids list to workspace."""
         from mp_mcp_server.tools.fetch import stream_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_profiles.return_value = iter([{"$distinct_id": "user1"}])
 
-        stream_profiles.fn(mock_context, distinct_ids=["user1", "user2"])
+        stream_profiles(mock_context, distinct_ids=["user1", "user2"])  # type: ignore[operator]
 
         call_kwargs = ws.stream_profiles.call_args[1]
         assert call_kwargs["distinct_ids"] == ["user1", "user2"]
@@ -463,10 +463,10 @@ class TestStreamProfilesOptionalParams:
         """stream_profiles should pass group_id to workspace."""
         from mp_mcp_server.tools.fetch import stream_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_profiles.return_value = iter([{"$distinct_id": "company1"}])
 
-        stream_profiles.fn(mock_context, group_id="company")
+        stream_profiles(mock_context, group_id="company")  # type: ignore[operator]
 
         call_kwargs = ws.stream_profiles.call_args[1]
         assert call_kwargs["group_id"] == "company"
@@ -475,11 +475,11 @@ class TestStreamProfilesOptionalParams:
         """stream_profiles should pass behaviors to workspace."""
         from mp_mcp_server.tools.fetch import stream_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_profiles.return_value = iter([{"$distinct_id": "user1"}])
         behaviors = [{"event": "purchase", "count": {"min": 5}}]
 
-        stream_profiles.fn(mock_context, behaviors=behaviors)
+        stream_profiles(mock_context, behaviors=behaviors)  # type: ignore[operator]
 
         call_kwargs = ws.stream_profiles.call_args[1]
         assert call_kwargs["behaviors"] == behaviors
@@ -490,10 +490,10 @@ class TestStreamProfilesOptionalParams:
         """stream_profiles should pass as_of_timestamp to workspace."""
         from mp_mcp_server.tools.fetch import stream_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_profiles.return_value = iter([{"$distinct_id": "user1"}])
 
-        stream_profiles.fn(mock_context, as_of_timestamp=1704067200)
+        stream_profiles(mock_context, as_of_timestamp=1704067200)  # type: ignore[operator]
 
         call_kwargs = ws.stream_profiles.call_args[1]
         assert call_kwargs["as_of_timestamp"] == 1704067200
@@ -504,10 +504,10 @@ class TestStreamProfilesOptionalParams:
         """stream_profiles should pass include_all_users to workspace."""
         from mp_mcp_server.tools.fetch import stream_profiles
 
-        ws = mock_context.fastmcp._lifespan_result["workspace"]
+        ws = mock_context.lifespan_context["workspace"]
         ws.stream_profiles.return_value = iter([{"$distinct_id": "user1"}])
 
-        stream_profiles.fn(mock_context, include_all_users=True)
+        stream_profiles(mock_context, include_all_users=True)  # type: ignore[operator]
 
         call_kwargs = ws.stream_profiles.call_args[1]
         assert call_kwargs["include_all_users"] is True

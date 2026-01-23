@@ -54,114 +54,106 @@ class TestDateRangeHelper:
 class TestResourceTemplateRegistration:
     """Tests for dynamic resource template registration."""
 
-    def test_retention_weekly_registered(self) -> None:
+    def test_retention_weekly_registered(
+        self, registered_resource_template_uris: list[str]
+    ) -> None:
         """Retention weekly resource template should be registered."""
-        from mp_mcp_server.server import mcp
+        assert any("retention" in uri for uri in registered_resource_template_uris)
 
-        template_keys = list(mcp._resource_manager._templates)
-        assert any("retention" in str(k) for k in template_keys)
-
-    def test_trends_registered(self) -> None:
+    def test_trends_registered(
+        self, registered_resource_template_uris: list[str]
+    ) -> None:
         """Trends resource template should be registered."""
-        from mp_mcp_server.server import mcp
+        assert any("trends" in uri for uri in registered_resource_template_uris)
 
-        template_keys = list(mcp._resource_manager._templates)
-        assert any("trends" in str(k) for k in template_keys)
-
-    def test_user_journey_registered(self) -> None:
+    def test_user_journey_registered(
+        self, registered_resource_template_uris: list[str]
+    ) -> None:
         """User journey resource template should be registered."""
-        from mp_mcp_server.server import mcp
+        assert any("journey" in uri for uri in registered_resource_template_uris)
 
-        template_keys = list(mcp._resource_manager._templates)
-        assert any("journey" in str(k) for k in template_keys)
-
-    def test_weekly_review_registered(self) -> None:
+    def test_weekly_review_registered(
+        self, registered_resource_uris: list[str]
+    ) -> None:
         """Weekly review recipe should be registered."""
-        from mp_mcp_server.server import mcp
+        assert any("weekly-review" in uri for uri in registered_resource_uris)
 
-        resource_keys = list(mcp._resource_manager._resources.keys())
-        assert any("weekly-review" in str(k) for k in resource_keys)
-
-    def test_churn_investigation_registered(self) -> None:
+    def test_churn_investigation_registered(
+        self, registered_resource_uris: list[str]
+    ) -> None:
         """Churn investigation recipe should be registered."""
-        from mp_mcp_server.server import mcp
-
-        resource_keys = list(mcp._resource_manager._resources.keys())
-        assert any("churn-investigation" in str(k) for k in resource_keys)
+        assert any("churn-investigation" in uri for uri in registered_resource_uris)
 
 
 class TestStaticResourceRegistration:
     """Tests for static resource registration."""
 
-    def test_workspace_info_registered(self) -> None:
+    def test_workspace_info_registered(
+        self, registered_resource_uris: list[str]
+    ) -> None:
         """workspace://info resource should be registered."""
-        from mp_mcp_server.server import mcp
+        assert "workspace://info" in registered_resource_uris
 
-        resource_keys = list(mcp._resource_manager._resources.keys())
-        assert "workspace://info" in resource_keys
-
-    def test_tables_registered(self) -> None:
+    def test_tables_registered(
+        self, registered_resource_uris: list[str]
+    ) -> None:
         """workspace://tables resource should be registered."""
-        from mp_mcp_server.server import mcp
+        assert "workspace://tables" in registered_resource_uris
 
-        resource_keys = list(mcp._resource_manager._resources.keys())
-        assert "workspace://tables" in resource_keys
-
-    def test_events_registered(self) -> None:
+    def test_events_registered(
+        self, registered_resource_uris: list[str]
+    ) -> None:
         """schema://events resource should be registered."""
-        from mp_mcp_server.server import mcp
+        assert "schema://events" in registered_resource_uris
 
-        resource_keys = list(mcp._resource_manager._resources.keys())
-        assert "schema://events" in resource_keys
-
-    def test_funnels_registered(self) -> None:
+    def test_funnels_registered(
+        self, registered_resource_uris: list[str]
+    ) -> None:
         """schema://funnels resource should be registered."""
-        from mp_mcp_server.server import mcp
+        assert "schema://funnels" in registered_resource_uris
 
-        resource_keys = list(mcp._resource_manager._resources.keys())
-        assert "schema://funnels" in resource_keys
-
-    def test_cohorts_registered(self) -> None:
+    def test_cohorts_registered(
+        self, registered_resource_uris: list[str]
+    ) -> None:
         """schema://cohorts resource should be registered."""
-        from mp_mcp_server.server import mcp
+        assert "schema://cohorts" in registered_resource_uris
 
-        resource_keys = list(mcp._resource_manager._resources.keys())
-        assert "schema://cohorts" in resource_keys
-
-    def test_bookmarks_registered(self) -> None:
+    def test_bookmarks_registered(
+        self, registered_resource_uris: list[str]
+    ) -> None:
         """schema://bookmarks resource should be registered."""
-        from mp_mcp_server.server import mcp
-
-        resource_keys = list(mcp._resource_manager._resources.keys())
-        assert "schema://bookmarks" in resource_keys
+        assert "schema://bookmarks" in registered_resource_uris
 
 
 class TestResourceTemplatePatterns:
     """Tests for resource template URI patterns."""
 
-    def test_retention_template_has_event_param(self) -> None:
+    def test_retention_template_has_event_param(
+        self, registered_resource_template_uris: list[str]
+    ) -> None:
         """Retention template should have event parameter."""
-        from mp_mcp_server.server import mcp
+        retention_templates = [
+            uri for uri in registered_resource_template_uris if "retention" in uri
+        ]
+        assert any("{event}" in uri for uri in retention_templates)
 
-        template_keys = [str(k) for k in mcp._resource_manager._templates]
-        retention_templates = [k for k in template_keys if "retention" in k]
-        assert any("{event}" in k for k in retention_templates)
-
-    def test_trends_template_has_event_and_days(self) -> None:
+    def test_trends_template_has_event_and_days(
+        self, registered_resource_template_uris: list[str]
+    ) -> None:
         """Trends template should have event and days parameters."""
-        from mp_mcp_server.server import mcp
+        trends_templates = [
+            uri for uri in registered_resource_template_uris if "trends" in uri
+        ]
+        assert any("{event}" in uri and "{days}" in uri for uri in trends_templates)
 
-        template_keys = [str(k) for k in mcp._resource_manager._templates]
-        trends_templates = [k for k in template_keys if "trends" in k]
-        assert any("{event}" in k and "{days}" in k for k in trends_templates)
-
-    def test_user_journey_template_has_id(self) -> None:
+    def test_user_journey_template_has_id(
+        self, registered_resource_template_uris: list[str]
+    ) -> None:
         """User journey template should have id parameter."""
-        from mp_mcp_server.server import mcp
-
-        template_keys = [str(k) for k in mcp._resource_manager._templates]
-        journey_templates = [k for k in template_keys if "journey" in k]
-        assert any("{id}" in k for k in journey_templates)
+        journey_templates = [
+            uri for uri in registered_resource_template_uris if "journey" in uri
+        ]
+        assert any("{id}" in uri for uri in journey_templates)
 
 
 class TestResourceModuleExports:

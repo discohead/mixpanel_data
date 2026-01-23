@@ -7,45 +7,41 @@ These tests verify the MCP prompts are registered correctly.
 class TestAnalyticsWorkflowPrompt:
     """Tests for the analytics_workflow prompt."""
 
-    def test_analytics_workflow_prompt_registered(self) -> None:
+    def test_analytics_workflow_prompt_registered(
+        self, registered_prompt_names: list[str]
+    ) -> None:
         """analytics_workflow prompt should be registered."""
-        from mp_mcp_server.server import mcp
-
-        prompt_names = list(mcp._prompt_manager._prompts.keys())
-        assert "analytics_workflow" in prompt_names
+        assert "analytics_workflow" in registered_prompt_names
 
 
 class TestFunnelAnalysisPrompt:
     """Tests for the funnel_analysis prompt."""
 
-    def test_funnel_analysis_prompt_registered(self) -> None:
+    def test_funnel_analysis_prompt_registered(
+        self, registered_prompt_names: list[str]
+    ) -> None:
         """funnel_analysis prompt should be registered."""
-        from mp_mcp_server.server import mcp
-
-        prompt_names = list(mcp._prompt_manager._prompts.keys())
-        assert "funnel_analysis" in prompt_names
+        assert "funnel_analysis" in registered_prompt_names
 
 
 class TestRetentionAnalysisPrompt:
     """Tests for the retention_analysis prompt."""
 
-    def test_retention_analysis_prompt_registered(self) -> None:
+    def test_retention_analysis_prompt_registered(
+        self, registered_prompt_names: list[str]
+    ) -> None:
         """retention_analysis prompt should be registered."""
-        from mp_mcp_server.server import mcp
-
-        prompt_names = list(mcp._prompt_manager._prompts.keys())
-        assert "retention_analysis" in prompt_names
+        assert "retention_analysis" in registered_prompt_names
 
 
 class TestLocalAnalysisWorkflowPrompt:
     """Tests for the local_analysis_workflow prompt."""
 
-    def test_local_analysis_workflow_prompt_registered(self) -> None:
+    def test_local_analysis_workflow_prompt_registered(
+        self, registered_prompt_names: list[str]
+    ) -> None:
         """local_analysis_workflow prompt should be registered."""
-        from mp_mcp_server.server import mcp
-
-        prompt_names = list(mcp._prompt_manager._prompts.keys())
-        assert "local_analysis_workflow" in prompt_names
+        assert "local_analysis_workflow" in registered_prompt_names
 
 
 class TestPromptFunctionality:
@@ -55,7 +51,7 @@ class TestPromptFunctionality:
         """analytics_workflow should return workflow guide content."""
         from mp_mcp_server.prompts import analytics_workflow
 
-        result = str(analytics_workflow.fn())
+        result = str(analytics_workflow())  # type: ignore[operator]
         assert "# Mixpanel Analytics Workflow" in result
         assert "list_events" in result
         assert "segmentation" in result
@@ -64,7 +60,7 @@ class TestPromptFunctionality:
         """funnel_analysis should return funnel-specific content."""
         from mp_mcp_server.prompts import funnel_analysis
 
-        result = str(funnel_analysis.fn(funnel_name="checkout"))
+        result = str(funnel_analysis(funnel_name="checkout"))  # type: ignore[operator]
         assert "checkout" in result
         assert "funnel_id" in result
 
@@ -72,7 +68,7 @@ class TestPromptFunctionality:
         """retention_analysis should return retention-specific content."""
         from mp_mcp_server.prompts import retention_analysis
 
-        result = str(retention_analysis.fn(event="login"))
+        result = str(retention_analysis(event="login"))  # type: ignore[operator]
         assert "login" in result
         assert "born_event" in result
         assert "Day 7 retention" in result
@@ -81,7 +77,7 @@ class TestPromptFunctionality:
         """local_analysis_workflow should return SQL analysis guide."""
         from mp_mcp_server.prompts import local_analysis_workflow
 
-        result = str(local_analysis_workflow.fn())
+        result = str(local_analysis_workflow())  # type: ignore[operator]
         assert "# Local Data Analysis Workflow" in result
         assert "fetch_events" in result
         assert "SQL" in result
@@ -90,7 +86,7 @@ class TestPromptFunctionality:
         """gqm_decomposition should return GQM framework content."""
         from mp_mcp_server.prompts import gqm_decomposition
 
-        result = str(gqm_decomposition.fn(goal="improve retention"))
+        result = str(gqm_decomposition(goal="improve retention"))  # type: ignore[operator]
         assert "# Goal-Question-Metric (GQM) Investigation Framework" in result
         assert "improve retention" in result
         assert "Metrics" in result
@@ -99,14 +95,14 @@ class TestPromptFunctionality:
         """gqm_decomposition should use default goal."""
         from mp_mcp_server.prompts import gqm_decomposition
 
-        result = str(gqm_decomposition.fn())
+        result = str(gqm_decomposition())  # type: ignore[operator]
         assert "understand user retention" in result
 
     def test_growth_accounting_returns_content(self) -> None:
         """growth_accounting should return AARRR framework content."""
         from mp_mcp_server.prompts import growth_accounting
 
-        result = str(growth_accounting.fn(acquisition_event="register"))
+        result = str(growth_accounting(acquisition_event="register"))  # type: ignore[operator]
         assert "# Growth Accounting: AARRR Framework Analysis" in result
         assert "register" in result
         assert "Acquisition" in result
@@ -117,14 +113,14 @@ class TestPromptFunctionality:
         """growth_accounting should use default acquisition event."""
         from mp_mcp_server.prompts import growth_accounting
 
-        result = str(growth_accounting.fn())
+        result = str(growth_accounting())  # type: ignore[operator]
         assert "signup" in result
 
     def test_experiment_analysis_returns_content(self) -> None:
         """experiment_analysis should return A/B test guidance."""
         from mp_mcp_server.prompts import experiment_analysis
 
-        result = str(experiment_analysis.fn(experiment_name="button_color_test"))
+        result = str(experiment_analysis(experiment_name="button_color_test"))  # type: ignore[operator]
         assert "# A/B Test Analysis: button_color_test" in result
         assert "Statistical significance" in result
         assert "control" in result
@@ -134,14 +130,14 @@ class TestPromptFunctionality:
         """experiment_analysis should use default experiment name."""
         from mp_mcp_server.prompts import experiment_analysis
 
-        result = str(experiment_analysis.fn())
+        result = str(experiment_analysis())  # type: ignore[operator]
         assert "homepage_redesign" in result
 
     def test_data_quality_audit_returns_content(self) -> None:
         """data_quality_audit should return audit checklist."""
         from mp_mcp_server.prompts import data_quality_audit
 
-        result = str(data_quality_audit.fn(event="purchase"))
+        result = str(data_quality_audit(event="purchase"))  # type: ignore[operator]
         assert "# Data Quality Audit: purchase" in result
         assert "purchase" in result
         assert "Coverage" in result
@@ -151,37 +147,33 @@ class TestPromptFunctionality:
         """data_quality_audit should use default event."""
         from mp_mcp_server.prompts import data_quality_audit
 
-        result = str(data_quality_audit.fn())
+        result = str(data_quality_audit())  # type: ignore[operator]
         assert "signup" in result
 
 
 class TestAllPromptsRegistered:
     """Verify all prompts are registered with MCP server."""
 
-    def test_gqm_decomposition_registered(self) -> None:
+    def test_gqm_decomposition_registered(
+        self, registered_prompt_names: list[str]
+    ) -> None:
         """gqm_decomposition should be registered."""
-        from mp_mcp_server.server import mcp
+        assert "gqm_decomposition" in registered_prompt_names
 
-        prompt_names = list(mcp._prompt_manager._prompts.keys())
-        assert "gqm_decomposition" in prompt_names
-
-    def test_growth_accounting_registered(self) -> None:
+    def test_growth_accounting_registered(
+        self, registered_prompt_names: list[str]
+    ) -> None:
         """growth_accounting should be registered."""
-        from mp_mcp_server.server import mcp
+        assert "growth_accounting" in registered_prompt_names
 
-        prompt_names = list(mcp._prompt_manager._prompts.keys())
-        assert "growth_accounting" in prompt_names
-
-    def test_experiment_analysis_registered(self) -> None:
+    def test_experiment_analysis_registered(
+        self, registered_prompt_names: list[str]
+    ) -> None:
         """experiment_analysis should be registered."""
-        from mp_mcp_server.server import mcp
+        assert "experiment_analysis" in registered_prompt_names
 
-        prompt_names = list(mcp._prompt_manager._prompts.keys())
-        assert "experiment_analysis" in prompt_names
-
-    def test_data_quality_audit_registered(self) -> None:
+    def test_data_quality_audit_registered(
+        self, registered_prompt_names: list[str]
+    ) -> None:
         """data_quality_audit should be registered."""
-        from mp_mcp_server.server import mcp
-
-        prompt_names = list(mcp._prompt_manager._prompts.keys())
-        assert "data_quality_audit" in prompt_names
+        assert "data_quality_audit" in registered_prompt_names

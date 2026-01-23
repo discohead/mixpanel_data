@@ -4,8 +4,9 @@ This module provides common fixtures used across unit and integration tests,
 including mock Workspace instances and FastMCP client fixtures.
 """
 
-from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from typing import TYPE_CHECKING, Any, TypeVar
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -244,8 +245,8 @@ def mock_context(mock_lifespan_state: dict[str, Any]) -> MagicMock:
         MagicMock configured as a FastMCP Context.
     """
     ctx = MagicMock()
-    # FastMCP 2.x stores lifespan state in server._lifespan_result
-    ctx.fastmcp._lifespan_result = mock_lifespan_state
+    # FastMCP 3.0 uses public lifespan_context property
+    ctx.lifespan_context = mock_lifespan_state
     # Make report_progress an async mock for tools that use progress reporting
     ctx.report_progress = AsyncMock(return_value=None)
     return ctx
@@ -265,3 +266,78 @@ async def mcp_client() -> AsyncIterator[Any]:
 
     async with Client(mcp) as client:
         yield client
+
+
+# ============================================================================
+# FastMCP v3 Registration Check Helpers
+# ============================================================================
+
+T = TypeVar("T")
+
+
+def _get_mcp_items(
+    list_func: Callable[[], Awaitable[Sequence[T]]], extractor: Callable[[T], str]
+) -> list[str]:
+    """Run an async MCP list function and extract item properties.
+
+    Args:
+        list_func: Async function that returns a sequence of MCP items.
+        extractor: Function to extract a string property from each item.
+
+    Returns:
+        List of extracted string values.
+    """
+
+    async def get_items() -> list[str]:
+        items = await list_func()
+        return [extractor(item) for item in items]
+
+    return asyncio.run(get_items())
+
+
+@pytest.fixture
+def registered_tool_names() -> list[str]:
+    """Get list of registered tool names using FastMCP v3 API.
+
+    Returns:
+        List of tool names registered with the MCP server.
+    """
+    from mp_mcp_server.server import mcp
+
+    return _get_mcp_items(mcp.list_tools, lambda t: t.name)
+
+
+@pytest.fixture
+def registered_resource_uris() -> list[str]:
+    """Get list of registered resource URIs using FastMCP v3 API.
+
+    Returns:
+        List of resource URIs registered with the MCP server.
+    """
+    from mp_mcp_server.server import mcp
+
+    return _get_mcp_items(mcp.list_resources, lambda r: str(r.uri))
+
+
+@pytest.fixture
+def registered_prompt_names() -> list[str]:
+    """Get list of registered prompt names using FastMCP v3 API.
+
+    Returns:
+        List of prompt names registered with the MCP server.
+    """
+    from mp_mcp_server.server import mcp
+
+    return _get_mcp_items(mcp.list_prompts, lambda p: p.name)
+
+
+@pytest.fixture
+def registered_resource_template_uris() -> list[str]:
+    """Get list of registered resource template URIs using FastMCP v3 API.
+
+    Returns:
+        List of resource template URIs registered with the MCP server.
+    """
+    from mp_mcp_server.server import mcp
+
+    return _get_mcp_items(mcp.list_resource_templates, lambda t: str(t.uri_template))
