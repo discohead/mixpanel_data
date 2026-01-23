@@ -91,12 +91,9 @@ class TestCohortHelpers:
 class TestCohortComparisonTool:
     """Tests for the cohort_comparison tool."""
 
-    def test_tool_registered(self) -> None:
+    def test_tool_registered(self, registered_tool_names: list[str]) -> None:
         """cohort_comparison tool should be registered."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "cohort_comparison" in tool_names
+        assert "cohort_comparison" in registered_tool_names
 
     def test_cohort_comparison_basic(self, mock_context: MagicMock) -> None:
         """cohort_comparison should return comparison results."""
@@ -108,9 +105,9 @@ class TestCohortComparisonTool:
             {"key": ["login", "cohort_a"], "value": 100},
             {"key": ["login", "cohort_b"], "value": 50},
         ]
-        mock_context.fastmcp._lifespan_result["workspace"].jql.return_value = jql_result
+        mock_context.lifespan_context["workspace"].jql.return_value = jql_result
 
-        result = cohort_comparison.fn(
+        result = cohort_comparison(
             mock_context,
             cohort_a_filter='properties["sessions"] >= 10',
             cohort_b_filter='properties["sessions"] < 3',
@@ -187,18 +184,15 @@ class TestDashboardHelpers:
 class TestProductHealthDashboardTool:
     """Tests for the product_health_dashboard tool."""
 
-    def test_tool_registered(self) -> None:
+    def test_tool_registered(self, registered_tool_names: list[str]) -> None:
         """product_health_dashboard tool should be registered."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "product_health_dashboard" in tool_names
+        assert "product_health_dashboard" in registered_tool_names
 
     def test_dashboard_basic(self, mock_context: MagicMock) -> None:
         """product_health_dashboard should return AARRR metrics."""
         from mp_mcp_server.tools.composed.dashboard import product_health_dashboard
 
-        result = product_health_dashboard.fn(mock_context)
+        result = product_health_dashboard(mock_context)
 
         assert "period" in result
         assert "acquisition" in result
@@ -209,7 +203,7 @@ class TestProductHealthDashboardTool:
         """product_health_dashboard should accept custom events."""
         from mp_mcp_server.tools.composed.dashboard import product_health_dashboard
 
-        result = product_health_dashboard.fn(
+        result = product_health_dashboard(
             mock_context,
             acquisition_event="register",
             revenue_event="purchase",
@@ -262,18 +256,15 @@ class TestGQMHelpers:
 class TestGQMInvestigationTool:
     """Tests for the gqm_investigation tool."""
 
-    def test_tool_registered(self) -> None:
+    def test_tool_registered(self, registered_tool_names: list[str]) -> None:
         """gqm_investigation tool should be registered."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "gqm_investigation" in tool_names
+        assert "gqm_investigation" in registered_tool_names
 
     def test_investigation_basic(self, mock_context: MagicMock) -> None:
         """gqm_investigation should return investigation results."""
         from mp_mcp_server.tools.composed.gqm import gqm_investigation
 
-        result = gqm_investigation.fn(
+        result = gqm_investigation(
             mock_context,
             goal="understand why retention is declining",
         )
@@ -290,7 +281,7 @@ class TestGQMInvestigationTool:
         """gqm_investigation should classify the goal."""
         from mp_mcp_server.tools.composed.gqm import gqm_investigation
 
-        result = gqm_investigation.fn(
+        result = gqm_investigation(
             mock_context,
             goal="analyze signup performance",
         )
@@ -301,7 +292,7 @@ class TestGQMInvestigationTool:
         """gqm_investigation should accept custom dates."""
         from mp_mcp_server.tools.composed.gqm import gqm_investigation
 
-        result = gqm_investigation.fn(
+        result = gqm_investigation(
             mock_context,
             goal="retention analysis",
             from_date="2024-01-01",
@@ -320,7 +311,7 @@ class TestDashboardComputeFunctions:
         from mp_mcp_server.tools.composed.dashboard import _compute_acquisition
 
         # Set up mock segmentation response with series data
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.return_value = (
+        mock_context.lifespan_context["workspace"].segmentation.return_value = (
             MagicMock(
                 to_dict=lambda: {
                     "total": 1500,
@@ -343,7 +334,7 @@ class TestDashboardComputeFunctions:
         """_compute_acquisition should support segmentation."""
         from mp_mcp_server.tools.composed.dashboard import _compute_acquisition
 
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.return_value = (
+        mock_context.lifespan_context["workspace"].segmentation.return_value = (
             MagicMock(
                 to_dict=lambda: {
                     "total": 1500,
@@ -370,7 +361,7 @@ class TestDashboardComputeFunctions:
         """_compute_acquisition should handle errors gracefully."""
         from mp_mcp_server.tools.composed.dashboard import _compute_acquisition
 
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.side_effect = (
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
             Exception("API error")
         )
 
@@ -390,7 +381,7 @@ class TestDashboardComputeFunctions:
         """_compute_activation should compute activation rate."""
         from mp_mcp_server.tools.composed.dashboard import _compute_activation
 
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.return_value = (
+        mock_context.lifespan_context["workspace"].segmentation.return_value = (
             MagicMock(
                 to_dict=lambda: {
                     "total": 1000,
@@ -415,7 +406,7 @@ class TestDashboardComputeFunctions:
         """_compute_activation should handle errors gracefully."""
         from mp_mcp_server.tools.composed.dashboard import _compute_activation
 
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.side_effect = (
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
             Exception("API error")
         )
 
@@ -434,7 +425,7 @@ class TestDashboardComputeFunctions:
         """_compute_retention should compute retention metrics."""
         from mp_mcp_server.tools.composed.dashboard import _compute_retention
 
-        mock_context.fastmcp._lifespan_result["workspace"].retention.return_value = (
+        mock_context.lifespan_context["workspace"].retention.return_value = (
             MagicMock(
                 to_dict=lambda: {
                     "data": {
@@ -457,7 +448,7 @@ class TestDashboardComputeFunctions:
         """_compute_retention should handle errors gracefully."""
         from mp_mcp_server.tools.composed.dashboard import _compute_retention
 
-        mock_context.fastmcp._lifespan_result["workspace"].retention.side_effect = (
+        mock_context.lifespan_context["workspace"].retention.side_effect = (
             Exception("API error")
         )
 
@@ -474,7 +465,7 @@ class TestDashboardComputeFunctions:
         """_compute_revenue should compute revenue metrics."""
         from mp_mcp_server.tools.composed.dashboard import _compute_revenue
 
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.return_value = (
+        mock_context.lifespan_context["workspace"].segmentation.return_value = (
             MagicMock(
                 to_dict=lambda: {
                     "total": 5000,
@@ -511,7 +502,7 @@ class TestDashboardComputeFunctions:
         """_compute_revenue should handle errors gracefully."""
         from mp_mcp_server.tools.composed.dashboard import _compute_revenue
 
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.side_effect = (
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
             Exception("API error")
         )
 
@@ -529,7 +520,7 @@ class TestDashboardComputeFunctions:
         """_compute_referral should compute referral metrics."""
         from mp_mcp_server.tools.composed.dashboard import _compute_referral
 
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.return_value = (
+        mock_context.lifespan_context["workspace"].segmentation.return_value = (
             MagicMock(
                 to_dict=lambda: {
                     "total": 200,
@@ -566,7 +557,7 @@ class TestDashboardComputeFunctions:
         """_compute_referral should handle errors gracefully."""
         from mp_mcp_server.tools.composed.dashboard import _compute_referral
 
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.side_effect = (
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
             Exception("API error")
         )
 
@@ -882,12 +873,11 @@ class TestCohortHelpersExtended:
 class TestCohortComparison:
     """Tests for cohort_comparison tool."""
 
-    def test_cohort_comparison_tool_registered(self) -> None:
+    def test_cohort_comparison_tool_registered(
+        self, registered_tool_names: list[str]
+    ) -> None:
         """cohort_comparison tool should be registered."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "cohort_comparison" in tool_names
+        assert "cohort_comparison" in registered_tool_names
 
     def test_cohort_comparison_with_mock(self, mock_context: MagicMock) -> None:
         """cohort_comparison should call JQL with proper scripts."""
@@ -899,9 +889,9 @@ class TestCohortComparison:
             {"key": ["login", "cohort_a"], "value": 100},
             {"key": ["login", "cohort_b"], "value": 50},
         ]
-        mock_context.fastmcp._lifespan_result["workspace"].jql.return_value = jql_mock
+        mock_context.lifespan_context["workspace"].jql.return_value = jql_mock
 
-        result = cohort_comparison.fn(
+        result = cohort_comparison(
             mock_context,
             cohort_a_filter='properties["sessions"] >= 10',
             cohort_b_filter='properties["sessions"] < 3',
@@ -917,11 +907,11 @@ class TestCohortComparison:
         """cohort_comparison should handle JQL errors."""
         from mp_mcp_server.tools.composed.cohort import cohort_comparison
 
-        mock_context.fastmcp._lifespan_result["workspace"].jql.side_effect = (
+        mock_context.lifespan_context["workspace"].jql.side_effect = (
             Exception("JQL error")
         )
 
-        result = cohort_comparison.fn(
+        result = cohort_comparison(
             mock_context,
             cohort_a_filter='properties["country"] == "US"',
             cohort_b_filter='properties["country"] == "UK"',
@@ -940,9 +930,9 @@ class TestCohortComparison:
         # Return an object that is neither a list nor has .raw attribute
         jql_mock = MagicMock(spec=[])  # Empty spec = no attributes
         del jql_mock.raw  # Ensure .raw doesn't exist
-        mock_context.fastmcp._lifespan_result["workspace"].jql.return_value = jql_mock
+        mock_context.lifespan_context["workspace"].jql.return_value = jql_mock
 
-        result = cohort_comparison.fn(
+        result = cohort_comparison(
             mock_context,
             cohort_a_filter='properties["sessions"] >= 10',
             cohort_b_filter='properties["sessions"] < 3',
@@ -965,9 +955,9 @@ class TestCohortComparison:
             {"key": ["login", "cohort_a"], "value": 100},
             {"key": ["login", "cohort_b"], "value": 50},
         ]
-        mock_context.fastmcp._lifespan_result["workspace"].jql.return_value = jql_result
+        mock_context.lifespan_context["workspace"].jql.return_value = jql_result
 
-        result = cohort_comparison.fn(
+        result = cohort_comparison(
             mock_context,
             cohort_a_filter='properties["sessions"] >= 10',
             cohort_b_filter='properties["sessions"] < 3',

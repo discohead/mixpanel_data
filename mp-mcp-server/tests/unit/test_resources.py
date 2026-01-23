@@ -419,30 +419,24 @@ class TestChurnInvestigationRecipeLogic:
 class TestResourceRegistration:
     """Tests for resource registration with MCP server."""
 
-    def test_resources_are_registered(self) -> None:
+    def test_resources_are_registered(
+        self, registered_resource_uris: list[str]
+    ) -> None:
         """All resources should be registered with MCP server."""
-        from mp_mcp_server.server import mcp
-
-        # Check resources are registered
-        resources = list(mcp._resource_manager._resources.keys())
-
         # Static resources
-        assert "workspace://info" in resources
-        assert "workspace://tables" in resources
-        assert "schema://events" in resources
-        assert "schema://funnels" in resources
-        assert "schema://cohorts" in resources
-        assert "schema://bookmarks" in resources
-        assert "recipes://weekly-review" in resources
-        assert "recipes://churn-investigation" in resources
+        assert "workspace://info" in registered_resource_uris
+        assert "workspace://tables" in registered_resource_uris
+        assert "schema://events" in registered_resource_uris
+        assert "schema://funnels" in registered_resource_uris
+        assert "schema://cohorts" in registered_resource_uris
+        assert "schema://bookmarks" in registered_resource_uris
+        assert "recipes://weekly-review" in registered_resource_uris
+        assert "recipes://churn-investigation" in registered_resource_uris
 
-    def test_resource_templates_are_registered(self) -> None:
+    def test_resource_templates_are_registered(
+        self, registered_resource_template_uris: list[str]
+    ) -> None:
         """Resource templates should be registered with MCP server."""
-        from mp_mcp_server.server import mcp
-
-        # Check templates are registered
-        templates = list(mcp._resource_manager._templates.keys())
-
-        assert "analysis://retention/{event}/weekly" in templates
-        assert "analysis://trends/{event}/{days}" in templates
-        assert "users://{id}/journey" in templates
+        assert "analysis://retention/{event}/weekly" in registered_resource_template_uris
+        assert "analysis://trends/{event}/{days}" in registered_resource_template_uris
+        assert "users://{id}/journey" in registered_resource_template_uris

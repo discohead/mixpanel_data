@@ -110,12 +110,9 @@ class TestGuidedAnalysisHelpers:
 class TestGuidedAnalysisTool:
     """Tests for the guided_analysis tool."""
 
-    def test_tool_registered(self) -> None:
+    def test_tool_registered(self, registered_tool_names: list[str]) -> None:
         """guided_analysis tool should be registered."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "guided_analysis" in tool_names
+        assert "guided_analysis" in registered_tool_names
 
     @pytest.mark.asyncio
     async def test_guided_analysis_with_preset_focus(
@@ -124,7 +121,7 @@ class TestGuidedAnalysisTool:
         """guided_analysis should work with pre-selected focus area."""
         from mp_mcp_server.tools.interactive.guided import guided_analysis
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="retention",
         )
@@ -143,7 +140,7 @@ class TestGuidedAnalysisTool:
             side_effect=Exception("Elicitation not supported")
         )
 
-        result = await guided_analysis.fn(mock_context)
+        result = await guided_analysis(mock_context)
 
         assert "status" in result
         # When elicitation fails and no focus_area provided, returns guidance message
@@ -158,7 +155,7 @@ class TestGuidedAnalysisTool:
         """guided_analysis should accept custom date range."""
         from mp_mcp_server.tools.interactive.guided import guided_analysis
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="engagement",
             time_period="custom",
@@ -213,12 +210,9 @@ class TestSafeFetchHelpers:
 class TestSafeLargeFetchTool:
     """Tests for the safe_large_fetch tool."""
 
-    def test_tool_registered(self) -> None:
+    def test_tool_registered(self, registered_tool_names: list[str]) -> None:
         """safe_large_fetch tool should be registered."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "safe_large_fetch" in tool_names
+        assert "safe_large_fetch" in registered_tool_names
 
     @pytest.mark.asyncio
     async def test_safe_fetch_small_dataset(self, mock_context: MagicMock) -> None:
@@ -226,11 +220,11 @@ class TestSafeLargeFetchTool:
         from mp_mcp_server.tools.interactive.safe_fetch import safe_large_fetch
 
         # Mock top_events to return small counts
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = [
+        mock_context.lifespan_context["workspace"].top_events.return_value = [
             MagicMock(to_dict=lambda: {"event": "login", "count": 100}),
         ]
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",  # Short range
@@ -250,11 +244,11 @@ class TestSafeLargeFetchTool:
         )
 
         # Mock to simulate large dataset
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = [
+        mock_context.lifespan_context["workspace"].top_events.return_value = [
             MagicMock(to_dict=lambda: {"event": "login", "count": 10000000}),
         ]
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-12-31",  # Long range
@@ -269,7 +263,7 @@ class TestSafeLargeFetchTool:
         """safe_large_fetch should accept event filter."""
         from mp_mcp_server.tools.interactive.safe_fetch import safe_large_fetch
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-31",
@@ -283,7 +277,7 @@ class TestSafeLargeFetchTool:
         """safe_large_fetch should accept custom table name."""
         from mp_mcp_server.tools.interactive.safe_fetch import safe_large_fetch
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -392,7 +386,7 @@ class TestEstimateEventCountEdgeCases:
         """estimate_event_count should handle API exceptions."""
         from mp_mcp_server.tools.interactive.safe_fetch import estimate_event_count
 
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.side_effect = (
+        mock_context.lifespan_context["workspace"].top_events.side_effect = (
             Exception("API error")
         )
 
@@ -415,7 +409,7 @@ class TestEstimateEventCountEdgeCases:
         # Mock top_events to return dict with data key
         mock_result = MagicMock()
         mock_result.to_dict.return_value = {"data": {"login": 5000, "signup": 1000}}
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = (
+        mock_context.lifespan_context["workspace"].top_events.return_value = (
             mock_result
         )
 
@@ -438,7 +432,7 @@ class TestEstimateEventCountEdgeCases:
         mock_result.to_dict.return_value = {
             "events": [{"name": "login", "count": 5000}, {"name": "signup", "count": 1000}]
         }
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = (
+        mock_context.lifespan_context["workspace"].top_events.return_value = (
             mock_result
         )
 
@@ -458,7 +452,7 @@ class TestEstimateEventCountEdgeCases:
 
         # Mock many events as dicts (code checks isinstance(event, dict))
         events_list = [{"event": f"event_{i}", "count": 1000} for i in range(15)]
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = (
+        mock_context.lifespan_context["workspace"].top_events.return_value = (
             events_list
         )
 
@@ -485,11 +479,11 @@ class TestSafeFetchElicitation:
         mock_context.elicit = AsyncMock(return_value=DeclinedElicitation())
 
         # Mock large dataset to trigger elicitation
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = [
+        mock_context.lifespan_context["workspace"].top_events.return_value = [
             MagicMock(to_dict=lambda: {"event": "login", "count": 10000000}),
         ]
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-12-31",
@@ -507,11 +501,11 @@ class TestSafeFetchElicitation:
         mock_context.elicit = AsyncMock(return_value=CancelledElicitation())
 
         # Mock large dataset to trigger elicitation
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = [
+        mock_context.lifespan_context["workspace"].top_events.return_value = [
             MagicMock(to_dict=lambda: {"event": "login", "count": 10000000}),
         ]
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-12-31",
@@ -535,11 +529,11 @@ class TestSafeFetchElicitation:
         )
 
         # Mock large dataset to trigger elicitation
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = [
+        mock_context.lifespan_context["workspace"].top_events.return_value = [
             MagicMock(to_dict=lambda: {"event": "login", "count": 10000000}),
         ]
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-12-31",
@@ -561,11 +555,11 @@ class TestSafeFetchElicitation:
         )
 
         # Mock large dataset to trigger elicitation
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = [
+        mock_context.lifespan_context["workspace"].top_events.return_value = [
             MagicMock(to_dict=lambda: {"event": "login", "count": 10000000}),
         ]
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-12-31",
@@ -579,16 +573,16 @@ class TestSafeFetchElicitation:
         from mp_mcp_server.tools.interactive.safe_fetch import safe_large_fetch
 
         # Small dataset, no elicitation needed
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = [
+        mock_context.lifespan_context["workspace"].top_events.return_value = [
             MagicMock(to_dict=lambda: {"event": "login", "count": 100}),
         ]
 
         # Make fetch_events fail
-        mock_context.fastmcp._lifespan_result["workspace"].fetch_events.side_effect = (
+        mock_context.lifespan_context["workspace"].fetch_events.side_effect = (
             Exception("Fetch failed")
         )
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -605,7 +599,7 @@ class TestGuidedAnalysisEdgeCases:
         """run_initial_analysis should handle query errors."""
         from mp_mcp_server.tools.interactive.guided import run_initial_analysis
 
-        mock_context.fastmcp._lifespan_result["workspace"].funnel.side_effect = (
+        mock_context.lifespan_context["workspace"].funnel.side_effect = (
             Exception("API error")
         )
 
@@ -626,7 +620,7 @@ class TestGuidedAnalysisEdgeCases:
         """guided_analysis should accept time_period parameter."""
         from mp_mcp_server.tools.interactive.guided import guided_analysis
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="retention",
             time_period="last_7_days",
@@ -641,7 +635,7 @@ class TestGuidedAnalysisEdgeCases:
         """guided_analysis should use default dates when not provided."""
         from mp_mcp_server.tools.interactive.guided import guided_analysis
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="engagement",
         )
@@ -669,7 +663,7 @@ class TestGuidedAnalysisEdgeCases:
         """run_initial_analysis should handle retention query errors."""
         from mp_mcp_server.tools.interactive.guided import run_initial_analysis
 
-        mock_context.fastmcp._lifespan_result["workspace"].retention.side_effect = (
+        mock_context.lifespan_context["workspace"].retention.side_effect = (
             Exception("Retention API error")
         )
 
@@ -703,7 +697,7 @@ class TestGuidedAnalysisEdgeCases:
         """run_initial_analysis should handle engagement errors."""
         from mp_mcp_server.tools.interactive.guided import run_initial_analysis
 
-        mock_context.fastmcp._lifespan_result["workspace"].event_counts.side_effect = (
+        mock_context.lifespan_context["workspace"].event_counts.side_effect = (
             Exception("Event counts error")
         )
 
@@ -722,7 +716,7 @@ class TestGuidedAnalysisEdgeCases:
         from mp_mcp_server.tools.interactive.guided import run_initial_analysis
 
         # Mock events with a purchase event
-        mock_context.fastmcp._lifespan_result["workspace"].events.return_value = [
+        mock_context.lifespan_context["workspace"].events.return_value = [
             "purchase",
             "signup",
             "login",
@@ -745,7 +739,7 @@ class TestGuidedAnalysisEdgeCases:
         from mp_mcp_server.tools.interactive.guided import run_initial_analysis
 
         # Mock events without revenue events
-        mock_context.fastmcp._lifespan_result["workspace"].events.return_value = [
+        mock_context.lifespan_context["workspace"].events.return_value = [
             "signup",
             "login",
             "view_page",
@@ -795,7 +789,7 @@ class TestGuidedAnalysisEdgeCases:
         """run_segment_analysis should handle errors."""
         from mp_mcp_server.tools.interactive.guided import run_segment_analysis
 
-        mock_context.fastmcp._lifespan_result["workspace"].property_counts.side_effect = (
+        mock_context.lifespan_context["workspace"].property_counts.side_effect = (
             Exception("Property counts error")
         )
 
@@ -814,12 +808,12 @@ class TestGuidedAnalysisEdgeCases:
         """guided_analysis should handle revenue focus area."""
         from mp_mcp_server.tools.interactive.guided import guided_analysis
 
-        mock_context.fastmcp._lifespan_result["workspace"].events.return_value = [
+        mock_context.lifespan_context["workspace"].events.return_value = [
             "purchase",
             "signup",
         ]
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="revenue",
             time_period="last_30_days",
@@ -832,7 +826,7 @@ class TestGuidedAnalysisEdgeCases:
         """guided_analysis should handle last_90_days time period."""
         from mp_mcp_server.tools.interactive.guided import guided_analysis
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="conversion",
             time_period="last_90_days",
@@ -846,7 +840,7 @@ class TestGuidedAnalysisEdgeCases:
         """guided_analysis should accept custom date range."""
         from mp_mcp_server.tools.interactive.guided import guided_analysis
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="retention",
             time_period="custom",
@@ -1066,7 +1060,7 @@ class TestRunInitialAnalysisErrors:
         """run_initial_analysis should handle events() exception."""
         from mp_mcp_server.tools.interactive.guided import run_initial_analysis
 
-        mock_context.fastmcp._lifespan_result["workspace"].events.side_effect = (
+        mock_context.lifespan_context["workspace"].events.side_effect = (
             Exception("Events API error")
         )
 
@@ -1089,12 +1083,12 @@ class TestRunInitialAnalysisErrors:
         from mp_mcp_server.tools.interactive.guided import run_initial_analysis
 
         # Mock events with purchase event
-        mock_context.fastmcp._lifespan_result["workspace"].events.return_value = [
+        mock_context.lifespan_context["workspace"].events.return_value = [
             "purchase",
             "login",
         ]
         # Make segmentation fail
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.side_effect = (
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
             Exception("Segmentation API error")
         )
 
@@ -1114,10 +1108,10 @@ class TestRunInitialAnalysisErrors:
         """run_initial_analysis should handle funnels() exception."""
         from mp_mcp_server.tools.interactive.guided import run_initial_analysis
 
-        mock_context.fastmcp._lifespan_result["workspace"].funnels.side_effect = (
+        mock_context.lifespan_context["workspace"].funnels.side_effect = (
             Exception("Funnels API error")
         )
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.side_effect = (
+        mock_context.lifespan_context["workspace"].top_events.side_effect = (
             Exception("Top events API error")
         )
 
@@ -1155,7 +1149,7 @@ class TestGuidedAnalysisElicitationFlows:
             )
         )
 
-        result = await guided_analysis.fn(mock_context)
+        result = await guided_analysis(mock_context)
 
         assert result["focus_area"] == "engagement"
         assert "User selected focus via elicitation" in result["workflow_steps"]
@@ -1176,7 +1170,7 @@ class TestGuidedAnalysisElicitationFlows:
             )
         )
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="conversion",
         )
@@ -1201,7 +1195,7 @@ class TestGuidedAnalysisElicitationFlows:
             )
         )
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="conversion",
         )
@@ -1225,7 +1219,7 @@ class TestGuidedAnalysisElicitationFlows:
             )
         )
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="retention",
         )
@@ -1241,7 +1235,7 @@ class TestGuidedAnalysisElicitationFlows:
         """guided_analysis should provide conversion-specific suggestions."""
         from mp_mcp_server.tools.interactive.guided import guided_analysis
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="conversion",
         )
@@ -1256,7 +1250,7 @@ class TestGuidedAnalysisElicitationFlows:
         """guided_analysis should provide engagement-specific suggestions."""
         from mp_mcp_server.tools.interactive.guided import guided_analysis
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="engagement",
         )
@@ -1271,12 +1265,12 @@ class TestGuidedAnalysisElicitationFlows:
         """guided_analysis should provide revenue-specific suggestions."""
         from mp_mcp_server.tools.interactive.guided import guided_analysis
 
-        mock_context.fastmcp._lifespan_result["workspace"].events.return_value = [
+        mock_context.lifespan_context["workspace"].events.return_value = [
             "purchase",
             "signup",
         ]
 
-        result = await guided_analysis.fn(
+        result = await guided_analysis(
             mock_context,
             focus_area="revenue",
         )
@@ -1296,16 +1290,16 @@ class TestSafeFetchWithFetchResultVariations:
         from mp_mcp_server.tools.interactive.safe_fetch import safe_large_fetch
 
         # Small dataset, no elicitation needed
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = []
+        mock_context.lifespan_context["workspace"].top_events.return_value = []
 
         # Mock fetch result with to_dict
         fetch_result = MagicMock()
         fetch_result.to_dict.return_value = {"table_name": "events", "row_count": 1000}
-        mock_context.fastmcp._lifespan_result["workspace"].fetch_events.return_value = (
+        mock_context.lifespan_context["workspace"].fetch_events.return_value = (
             fetch_result
         )
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -1323,18 +1317,18 @@ class TestSafeFetchWithFetchResultVariations:
         from mp_mcp_server.tools.interactive.safe_fetch import safe_large_fetch
 
         # Small dataset, no elicitation needed
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = []
+        mock_context.lifespan_context["workspace"].top_events.return_value = []
 
         # Mock fetch result with attributes but no to_dict
         fetch_result = MagicMock(spec=["table_name", "row_count"])
         fetch_result.table_name = "my_table"
         fetch_result.row_count = 500
         del fetch_result.to_dict  # Remove to_dict
-        mock_context.fastmcp._lifespan_result["workspace"].fetch_events.return_value = (
+        mock_context.lifespan_context["workspace"].fetch_events.return_value = (
             fetch_result
         )
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -1349,15 +1343,15 @@ class TestSafeFetchWithFetchResultVariations:
         from mp_mcp_server.tools.interactive.safe_fetch import safe_large_fetch
 
         # Small dataset, no elicitation needed
-        mock_context.fastmcp._lifespan_result["workspace"].top_events.return_value = []
+        mock_context.lifespan_context["workspace"].top_events.return_value = []
 
         # Mock fetch result as plain dict
-        mock_context.fastmcp._lifespan_result["workspace"].fetch_events.return_value = {
+        mock_context.lifespan_context["workspace"].fetch_events.return_value = {
             "table_name": "raw_events",
             "row_count": 200,
         }
 
-        result = await safe_large_fetch.fn(
+        result = await safe_large_fetch(
             mock_context,
             from_date="2024-01-01",
             to_date="2024-01-07",
@@ -1373,7 +1367,7 @@ class TestSafeFetchWithFetchResultVariations:
         """safe_large_fetch should use default dates when not provided."""
         from mp_mcp_server.tools.interactive.safe_fetch import safe_large_fetch
 
-        result = await safe_large_fetch.fn(mock_context)
+        result = await safe_large_fetch(mock_context)
 
         assert result["status"] == "completed"
         assert "estimation" in result

@@ -10,30 +10,28 @@ from unittest.mock import MagicMock
 class TestListEventsTools:
     """Tests for the list_events tool."""
 
-    def test_list_events_tool_registered(self) -> None:
+    def test_list_events_tool_registered(
+        self, registered_tool_names: list[str]
+    ) -> None:
         """list_events tool should be registered with the MCP server."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "list_events" in tool_names
+        assert "list_events" in registered_tool_names
 
     def test_list_events_returns_event_names(self, mock_context: MagicMock) -> None:
         """list_events should return event names from Workspace."""
         from mp_mcp_server.tools.discovery import list_events
 
-        result = list_events.fn(mock_context)
+        result = list_events(mock_context)
         assert result == ["signup", "login", "purchase"]
 
 
 class TestListPropertiesTools:
     """Tests for the list_properties tool."""
 
-    def test_list_properties_tool_registered(self) -> None:
+    def test_list_properties_tool_registered(
+        self, registered_tool_names: list[str]
+    ) -> None:
         """list_properties tool should be registered with the MCP server."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "list_properties" in tool_names
+        assert "list_properties" in registered_tool_names
 
     def test_list_properties_returns_property_names(
         self, mock_context: MagicMock
@@ -41,7 +39,7 @@ class TestListPropertiesTools:
         """list_properties should return property info from Workspace."""
         from mp_mcp_server.tools.discovery import list_properties
 
-        result = list_properties.fn(mock_context, event="signup")
+        result = list_properties(mock_context, event="signup")
         assert len(result) == 2
         assert result[0]["name"] == "browser"
 
@@ -53,7 +51,7 @@ class TestListPropertyValuesTools:
         """list_property_values should return sample values."""
         from mp_mcp_server.tools.discovery import list_property_values
 
-        result = list_property_values.fn(
+        result = list_property_values(
             mock_context, event="signup", property_name="browser"
         )
         assert result == ["Chrome", "Firefox", "Safari"]
@@ -66,7 +64,7 @@ class TestListFunnelsTools:
         """list_funnels should return funnel metadata."""
         from mp_mcp_server.tools.discovery import list_funnels
 
-        result = list_funnels.fn(mock_context)
+        result = list_funnels(mock_context)
         assert len(result) == 1
         assert result[0]["name"] == "Signup Funnel"
 
@@ -78,7 +76,7 @@ class TestListCohortsTools:
         """list_cohorts should return cohort metadata."""
         from mp_mcp_server.tools.discovery import list_cohorts
 
-        result = list_cohorts.fn(mock_context)
+        result = list_cohorts(mock_context)
         assert len(result) == 1
         assert result[0]["name"] == "Active Users"
 
@@ -92,7 +90,7 @@ class TestListBookmarksTools:
         """list_bookmarks should return saved report metadata with pagination info."""
         from mp_mcp_server.tools.discovery import list_bookmarks
 
-        result = list_bookmarks.fn(mock_context)
+        result = list_bookmarks(mock_context)
         # New format returns dict with bookmarks list and pagination metadata
         assert "bookmarks" in result
         assert "truncated" in result
@@ -110,7 +108,7 @@ class TestTopEventsTools:
         """top_events should return events ranked by activity."""
         from mp_mcp_server.tools.discovery import top_events
 
-        result = top_events.fn(mock_context)
+        result = top_events(mock_context)
         assert len(result) == 2
         assert result[0]["event"] == "login"
         assert result[0]["count"] == 5000
@@ -123,6 +121,6 @@ class TestWorkspaceInfoTools:
         """workspace_info should return current workspace state."""
         from mp_mcp_server.tools.discovery import workspace_info
 
-        result = workspace_info.fn(mock_context)
+        result = workspace_info(mock_context)
         assert result["project_id"] == 123456
         assert result["region"] == "us"

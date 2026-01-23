@@ -53,8 +53,8 @@ def get_workspace(ctx: "Context") -> RateLimitedWorkspace:
             return ws.events()
         ```
     """
-    # FastMCP 2.x stores lifespan state in server._lifespan_result
-    lifespan_state = ctx.fastmcp._lifespan_result
+    # FastMCP 3.0 uses public lifespan_context property
+    lifespan_state = ctx.lifespan_context
 
     if lifespan_state is None or "workspace" not in lifespan_state:
         raise RuntimeError(

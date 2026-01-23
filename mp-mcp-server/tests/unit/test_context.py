@@ -35,8 +35,8 @@ class TestGetWorkspace:
         from mp_mcp_server.context import get_workspace
 
         ctx = MagicMock()
-        # FastMCP 2.x stores lifespan state in server._lifespan_result
-        ctx.fastmcp._lifespan_result = None
+        # FastMCP 3.0 uses public lifespan_context property
+        ctx.lifespan_context = None
 
         with pytest.raises(RuntimeError, match="Workspace not initialized"):
             get_workspace(ctx)
@@ -46,8 +46,8 @@ class TestGetWorkspace:
         from mp_mcp_server.context import get_workspace
 
         ctx = MagicMock()
-        # FastMCP 2.x stores lifespan state in server._lifespan_result
-        ctx.fastmcp._lifespan_result = {}
+        # FastMCP 3.0 uses public lifespan_context property
+        ctx.lifespan_context = {}
 
         with pytest.raises(RuntimeError, match="Workspace not initialized"):
             get_workspace(ctx)
@@ -60,7 +60,7 @@ class TestGetWorkspace:
 
         ctx = MagicMock()
         # Has workspace but no rate_limiter
-        ctx.fastmcp._lifespan_result = {"workspace": mock_workspace}
+        ctx.lifespan_context = {"workspace": mock_workspace}
 
         with pytest.raises(RuntimeError, match="Rate limiter not initialized"):
             get_workspace(ctx)

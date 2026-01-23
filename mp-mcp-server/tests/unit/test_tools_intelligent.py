@@ -71,7 +71,7 @@ class TestAskMixpanelHelpers:
         from mp_mcp_server.types import ExecutionPlan, QuerySpec
 
         # Make segmentation raise an error
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.side_effect = (
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
             ValueError("Query failed")
         )
 
@@ -94,12 +94,9 @@ class TestAskMixpanelHelpers:
 class TestAskMixpanelTool:
     """Tests for the ask_mixpanel tool."""
 
-    def test_tool_registered(self) -> None:
+    def test_tool_registered(self, registered_tool_names: list[str]) -> None:
         """ask_mixpanel tool should be registered."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "ask_mixpanel" in tool_names
+        assert "ask_mixpanel" in registered_tool_names
 
     @pytest.mark.asyncio
     async def test_ask_mixpanel_sampling_unavailable(self, mock_context: MagicMock) -> None:
@@ -111,7 +108,7 @@ class TestAskMixpanelTool:
             side_effect=Exception("Sampling not supported")
         )
 
-        result = await ask_mixpanel.fn(
+        result = await ask_mixpanel(
             mock_context,
             question="What events are most popular?",
         )
@@ -217,12 +214,9 @@ class TestDiagnoseHelpers:
 class TestDiagnoseMetricDropTool:
     """Tests for the diagnose_metric_drop tool."""
 
-    def test_tool_registered(self) -> None:
+    def test_tool_registered(self, registered_tool_names: list[str]) -> None:
         """diagnose_metric_drop tool should be registered."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "diagnose_metric_drop" in tool_names
+        assert "diagnose_metric_drop" in registered_tool_names
 
     @pytest.mark.asyncio
     async def test_diagnose_sampling_unavailable(self, mock_context: MagicMock) -> None:
@@ -233,7 +227,7 @@ class TestDiagnoseMetricDropTool:
             side_effect=Exception("Sampling not supported")
         )
 
-        result = await diagnose_metric_drop.fn(
+        result = await diagnose_metric_drop(
             mock_context,
             event="signup",
             date="2024-01-10",
@@ -261,7 +255,7 @@ class TestFunnelReportHelpers:
         from mp_mcp_server.tools.intelligent.funnel_report import analyze_funnel_steps
 
         # Set up mock funnel response
-        mock_context.fastmcp._lifespan_result["workspace"].funnel.return_value = MagicMock(
+        mock_context.lifespan_context["workspace"].funnel.return_value = MagicMock(
             to_dict=lambda: {
                 "data": {
                     "steps": [
@@ -289,12 +283,9 @@ class TestFunnelReportHelpers:
 class TestFunnelOptimizationReportTool:
     """Tests for the funnel_optimization_report tool."""
 
-    def test_tool_registered(self) -> None:
+    def test_tool_registered(self, registered_tool_names: list[str]) -> None:
         """funnel_optimization_report tool should be registered."""
-        from mp_mcp_server.server import mcp
-
-        tool_names = list(mcp._tool_manager._tools.keys())
-        assert "funnel_optimization_report" in tool_names
+        assert "funnel_optimization_report" in registered_tool_names
 
     @pytest.mark.asyncio
     async def test_funnel_report_sampling_unavailable(
@@ -310,7 +301,7 @@ class TestFunnelOptimizationReportTool:
         )
 
         # Set up mock funnel response
-        mock_context.fastmcp._lifespan_result["workspace"].funnel.return_value = MagicMock(
+        mock_context.lifespan_context["workspace"].funnel.return_value = MagicMock(
             to_dict=lambda: {
                 "data": {
                     "steps": [
@@ -321,7 +312,7 @@ class TestFunnelOptimizationReportTool:
             }
         )
 
-        result = await funnel_optimization_report.fn(
+        result = await funnel_optimization_report(
             mock_context,
             funnel_id=123,
         )
@@ -340,7 +331,7 @@ class TestAskMixpanelExecutionPlan:
         from mp_mcp_server.types import ExecutionPlan, QuerySpec
 
         # Configure workspace to return None for unknown method (not default MagicMock)
-        mock_context.fastmcp._lifespan_result["workspace"].unknown_method = None
+        mock_context.lifespan_context["workspace"].unknown_method = None
 
         plan = ExecutionPlan(
             intent="Test",
@@ -367,7 +358,7 @@ class TestAskMixpanelExecutionPlan:
         raw_result = MagicMock()
         raw_result.raw = [{"user": "test", "count": 5}]
         del raw_result.to_dict  # Remove to_dict so it uses raw
-        mock_context.fastmcp._lifespan_result["workspace"].jql.return_value = raw_result
+        mock_context.lifespan_context["workspace"].jql.return_value = raw_result
 
         plan = ExecutionPlan(
             intent="Test",
@@ -388,7 +379,7 @@ class TestAskMixpanelExecutionPlan:
         """_get_available_events should return empty list on error."""
         from mp_mcp_server.tools.intelligent.ask import _get_available_events
 
-        mock_context.fastmcp._lifespan_result["workspace"].events.side_effect = Exception(
+        mock_context.lifespan_context["workspace"].events.side_effect = Exception(
             "API error"
         )
 
@@ -411,7 +402,7 @@ class TestAskMixpanelSynthesis:
             side_effect=ValueError("Plan generation failed")
         )
 
-        result = await ask_mixpanel.fn(
+        result = await ask_mixpanel(
             mock_context,
             question="What events are most popular?",
         )
@@ -439,7 +430,7 @@ class TestAskMixpanelSynthesis:
         synthesis_error = ValueError("Synthesis failed")
         mock_context.sample = AsyncMock(side_effect=[plan_result, synthesis_error])
 
-        result = await ask_mixpanel.fn(
+        result = await ask_mixpanel(
             mock_context,
             question="What events are most popular?",
         )
@@ -535,7 +526,7 @@ class TestDiagnoseSegmentData:
         """_gather_diagnosis_data should handle query errors gracefully."""
         from mp_mcp_server.tools.intelligent.diagnose import _gather_diagnosis_data
 
-        mock_context.fastmcp._lifespan_result["workspace"].segmentation.side_effect = (
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
             Exception("API error")
         )
 
@@ -555,7 +546,7 @@ class TestDiagnoseSegmentData:
         from mp_mcp_server.tools.intelligent.diagnose import _gather_diagnosis_data
 
         # Segmentation works but property_counts fails
-        mock_context.fastmcp._lifespan_result[
+        mock_context.lifespan_context[
             "workspace"
         ].property_counts.side_effect = Exception("Property not found")
 
@@ -648,7 +639,7 @@ class TestFunnelReportSegmentation:
         )
 
         # Set up mock segmented funnel response
-        mock_context.fastmcp._lifespan_result["workspace"].funnel.return_value = (
+        mock_context.lifespan_context["workspace"].funnel.return_value = (
             MagicMock(
                 to_dict=lambda: {
                     "data": {
@@ -688,7 +679,7 @@ class TestFunnelReportSegmentation:
             segment_funnel_performance,
         )
 
-        mock_context.fastmcp._lifespan_result["workspace"].funnel.side_effect = (
+        mock_context.lifespan_context["workspace"].funnel.side_effect = (
             Exception("API error")
         )
 
@@ -753,7 +744,7 @@ class TestFunnelAnalysisFormats:
         from mp_mcp_server.tools.intelligent.funnel_report import analyze_funnel_steps
 
         # Mock funnel response with alternative "analysis" format
-        mock_context.fastmcp._lifespan_result["workspace"].funnel.return_value = (
+        mock_context.lifespan_context["workspace"].funnel.return_value = (
             MagicMock(
                 to_dict=lambda: {
                     "data": {
@@ -784,7 +775,7 @@ class TestFunnelAnalysisFormats:
         """analyze_funnel_steps should handle empty steps gracefully."""
         from mp_mcp_server.tools.intelligent.funnel_report import analyze_funnel_steps
 
-        mock_context.fastmcp._lifespan_result["workspace"].funnel.return_value = (
+        mock_context.lifespan_context["workspace"].funnel.return_value = (
             MagicMock(to_dict=lambda: {"data": {"steps": []}})
         )
 
@@ -803,7 +794,7 @@ class TestFunnelAnalysisFormats:
         from mp_mcp_server.tools.intelligent.funnel_report import analyze_funnel_steps
 
         # Mock funnel response with standard "data.steps" format
-        mock_context.fastmcp._lifespan_result["workspace"].funnel.return_value = (
+        mock_context.lifespan_context["workspace"].funnel.return_value = (
             MagicMock(
                 to_dict=lambda: {
                     "data": {

@@ -244,8 +244,8 @@ def mock_context(mock_lifespan_state: dict[str, Any]) -> MagicMock:
         MagicMock configured as a FastMCP Context.
     """
     ctx = MagicMock()
-    # FastMCP 2.x stores lifespan state in server._lifespan_result
-    ctx.fastmcp._lifespan_result = mock_lifespan_state
+    # FastMCP 3.0 uses public lifespan_context property
+    ctx.lifespan_context = mock_lifespan_state
     # Make report_progress an async mock for tools that use progress reporting
     ctx.report_progress = AsyncMock(return_value=None)
     return ctx
@@ -265,3 +265,80 @@ async def mcp_client() -> AsyncIterator[Any]:
 
     async with Client(mcp) as client:
         yield client
+
+
+# ============================================================================
+# FastMCP v3 Registration Check Helpers
+# ============================================================================
+
+
+@pytest.fixture
+def registered_tool_names() -> list[str]:
+    """Get list of registered tool names using FastMCP v3 API.
+
+    Returns:
+        List of tool names registered with the MCP server.
+    """
+    import asyncio
+
+    from mp_mcp_server.server import mcp
+
+    async def get_tools() -> list[str]:
+        tools = await mcp.list_tools()
+        return [t.name for t in tools]
+
+    return asyncio.run(get_tools())
+
+
+@pytest.fixture
+def registered_resource_uris() -> list[str]:
+    """Get list of registered resource URIs using FastMCP v3 API.
+
+    Returns:
+        List of resource URIs registered with the MCP server.
+    """
+    import asyncio
+
+    from mp_mcp_server.server import mcp
+
+    async def get_resources() -> list[str]:
+        resources = await mcp.list_resources()
+        return [str(r.uri) for r in resources]
+
+    return asyncio.run(get_resources())
+
+
+@pytest.fixture
+def registered_prompt_names() -> list[str]:
+    """Get list of registered prompt names using FastMCP v3 API.
+
+    Returns:
+        List of prompt names registered with the MCP server.
+    """
+    import asyncio
+
+    from mp_mcp_server.server import mcp
+
+    async def get_prompts() -> list[str]:
+        prompts = await mcp.list_prompts()
+        return [p.name for p in prompts]
+
+    return asyncio.run(get_prompts())
+
+
+@pytest.fixture
+def registered_resource_template_uris() -> list[str]:
+    """Get list of registered resource template URIs using FastMCP v3 API.
+
+    Returns:
+        List of resource template URIs registered with the MCP server.
+    """
+    import asyncio
+
+    from mp_mcp_server.server import mcp
+
+    async def get_templates() -> list[str]:
+        templates = await mcp.list_resource_templates()
+        return [str(t.uri_template) for t in templates]
+
+    return asyncio.run(get_templates())

@@ -22,7 +22,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "fastmcp>=2.0,<3",
+    "fastmcp[tasks]>=3.0.0b1",
     "mixpanel_data",
 ]
 
