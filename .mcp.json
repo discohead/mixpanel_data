@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "fastmcp": {
-      "type": "http",
-      "url": "https://gofastmcp.com/mcp"
-    }
-  }
-}

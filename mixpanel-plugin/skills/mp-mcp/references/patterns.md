@@ -86,9 +86,9 @@ SELECT properties->>'$.country' as country FROM events
 -- Extract nested property
 SELECT properties->>'$.user.plan' as plan FROM events
 
--- Filter by property value
+-- Filter by numeric property (use CAST for correct comparison)
 SELECT * FROM events
-WHERE properties->>'$.amount' > '100'
+WHERE CAST(properties->>'$.amount' AS INTEGER) > 100
 ```
 
 ### Type Casting
