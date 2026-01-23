@@ -19,11 +19,18 @@ Example:
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
 
 from mixpanel_data import Workspace
+
+# Skills directory path - resolved to absolute for reliability
+# _SERVER_DIR = mp_mcp_server/ (server.py's parent)
+# .parent = src/, .parent.parent = mp-mcp-server/, .parent.parent.parent = mixpanel_data/
+_SERVER_DIR = Path(__file__).resolve().parent
+_SKILLS_DIR = _SERVER_DIR.parent.parent.parent / "mixpanel-plugin" / "skills"
 
 # Module-level account setting (set by CLI before server starts)
 _account: str | None = None
@@ -130,6 +137,17 @@ _rate_limiter = MixpanelRateLimitMiddleware()
 mcp.add_middleware(create_audit_middleware())
 mcp.add_middleware(_rate_limiter)
 mcp.add_middleware(create_caching_middleware())
+
+# Add skills provider (guarded to work outside monorepo context)
+if _SKILLS_DIR.exists():
+    from fastmcp.server.providers.skills import SkillsDirectoryProvider  # noqa: E402
+
+    mcp.add_provider(
+        SkillsDirectoryProvider(
+            roots=_SKILLS_DIR,
+            supporting_files="resources",  # Expose all reference files directly
+        )
+    )
 
 # Import tool modules to register them with the server
 # These imports must happen after mcp is defined
