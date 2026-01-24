@@ -20,6 +20,7 @@ from mp_mcp.server import mcp
 UnitType = Literal["day", "week", "month"]
 CountType = Literal["general", "unique", "average"]
 AddictionUnitType = Literal["hour", "day"]
+NumericUnitType = Literal["hour", "day"]
 
 
 @mcp.tool
@@ -383,5 +384,434 @@ def frequency(
         addiction_unit=addiction_unit,
         event=event,
         where=where,
+    )
+    return result.to_dict()
+
+
+# =============================================================================
+# SAVED REPORT TOOLS
+# =============================================================================
+
+
+@mcp.tool
+@handle_errors
+def query_saved_report(
+    ctx: Context,
+    bookmark_id: int,
+) -> dict[str, Any]:
+    """Execute a saved Insights, Retention, or Funnel report.
+
+    Runs a saved report by its bookmark ID. The report type is
+    automatically detected from the response. Use list_bookmarks()
+    to find available report IDs.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        bookmark_id: ID of saved report (from list_bookmarks or Mixpanel URL).
+
+    Returns:
+        Dictionary with report data and report_type property.
+
+    Raises:
+        QueryError: If bookmark_id is invalid or report not found.
+
+    Example:
+        Ask: "Run my saved conversion report (ID 12345)"
+        Uses: query_saved_report(bookmark_id=12345)
+
+        Ask: "Execute the report from this Mixpanel URL"
+        Uses: query_saved_report(bookmark_id=<extracted_id>)
+    """
+    ws = get_workspace(ctx)
+    result = ws.query_saved_report(bookmark_id=bookmark_id)
+    return result.to_dict()
+
+
+@mcp.tool
+@handle_errors
+def query_flows(
+    ctx: Context,
+    bookmark_id: int,
+) -> dict[str, Any]:
+    """Execute a saved Flows report.
+
+    Runs a saved Flows report by its bookmark ID, returning step data,
+    breakdowns, and conversion rates. Use list_bookmarks(bookmark_type="flows")
+    to find available Flows reports.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        bookmark_id: ID of saved Flows report.
+
+    Returns:
+        Dictionary with steps, breakdowns, and conversion rate.
+
+    Raises:
+        QueryError: If bookmark_id is invalid or report not found.
+
+    Example:
+        Ask: "Run my saved user flow analysis (ID 67890)"
+        Uses: query_flows(bookmark_id=67890)
+    """
+    ws = get_workspace(ctx)
+    result = ws.query_flows(bookmark_id=bookmark_id)
+    return result.to_dict()
+
+
+# =============================================================================
+# NUMERIC SEGMENTATION TOOLS
+# =============================================================================
+
+
+@mcp.tool
+@handle_errors
+def segmentation_numeric(
+    ctx: Context,
+    event: str,
+    from_date: str,
+    to_date: str,
+    on: str,
+    unit: NumericUnitType = "day",
+    where: str | None = None,
+    type: CountType = "general",
+) -> dict[str, Any]:
+    """Bucket events by numeric property ranges.
+
+    Groups events into numeric buckets based on a property value,
+    useful for analyzing distributions of values like purchase amounts,
+    session durations, or page load times.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        event: Event name to analyze.
+        from_date: Start date (YYYY-MM-DD format).
+        to_date: End date (YYYY-MM-DD format).
+        on: Numeric property expression to bucket by.
+        unit: Time unit for aggregation (hour or day).
+        where: Optional filter expression.
+        type: Count type - general (total), unique, or average.
+
+    Returns:
+        Dictionary with bucketed data.
+
+    Example:
+        Ask: "How are purchase amounts distributed?"
+        Uses: segmentation_numeric(event="purchase", on='properties["amount"]',
+                                   from_date="2024-01-01", to_date="2024-01-31")
+    """
+    ws = get_workspace(ctx)
+    result = ws.segmentation_numeric(
+        event=event,
+        from_date=from_date,
+        to_date=to_date,
+        on=on,
+        unit=unit,
+        where=where,
+        type=type,
+    )
+    return result.to_dict()
+
+
+@mcp.tool
+@handle_errors
+def segmentation_sum(
+    ctx: Context,
+    event: str,
+    from_date: str,
+    to_date: str,
+    on: str,
+    unit: NumericUnitType = "day",
+    where: str | None = None,
+) -> dict[str, Any]:
+    """Calculate sum of numeric property over time.
+
+    Aggregates a numeric property value across events, useful for
+    tracking total revenue, total time spent, or cumulative metrics.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        event: Event name to analyze.
+        from_date: Start date (YYYY-MM-DD format).
+        to_date: End date (YYYY-MM-DD format).
+        on: Numeric property expression to sum.
+        unit: Time unit for aggregation (hour or day).
+        where: Optional filter expression.
+
+    Returns:
+        Dictionary with sum values per period.
+
+    Example:
+        Ask: "What was total revenue per day last month?"
+        Uses: segmentation_sum(event="purchase", on='properties["revenue"]',
+                              from_date="2024-01-01", to_date="2024-01-31")
+    """
+    ws = get_workspace(ctx)
+    result = ws.segmentation_sum(
+        event=event,
+        from_date=from_date,
+        to_date=to_date,
+        on=on,
+        unit=unit,
+        where=where,
+    )
+    return result.to_dict()
+
+
+@mcp.tool
+@handle_errors
+def segmentation_average(
+    ctx: Context,
+    event: str,
+    from_date: str,
+    to_date: str,
+    on: str,
+    unit: NumericUnitType = "day",
+    where: str | None = None,
+) -> dict[str, Any]:
+    """Calculate average of numeric property over time.
+
+    Computes the mean of a numeric property value across events,
+    useful for tracking average order value, average session duration,
+    or mean response times.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        event: Event name to analyze.
+        from_date: Start date (YYYY-MM-DD format).
+        to_date: End date (YYYY-MM-DD format).
+        on: Numeric property expression to average.
+        unit: Time unit for aggregation (hour or day).
+        where: Optional filter expression.
+
+    Returns:
+        Dictionary with average values per period.
+
+    Example:
+        Ask: "What was average order value per day?"
+        Uses: segmentation_average(event="purchase", on='properties["amount"]',
+                                  from_date="2024-01-01", to_date="2024-01-31")
+    """
+    ws = get_workspace(ctx)
+    result = ws.segmentation_average(
+        event=event,
+        from_date=from_date,
+        to_date=to_date,
+        on=on,
+        unit=unit,
+        where=where,
+    )
+    return result.to_dict()
+
+
+# =============================================================================
+# JQL-BASED DISCOVERY TOOLS
+# =============================================================================
+
+
+@mcp.tool
+@handle_errors
+def property_distribution(
+    ctx: Context,
+    event: str,
+    property_name: str,
+    from_date: str,
+    to_date: str,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Get distribution of values for a property.
+
+    Uses JQL to count occurrences of each property value, returning
+    counts and percentages sorted by frequency. Useful for understanding
+    the breakdown of categorical properties.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        event: Event name to analyze.
+        property_name: Property name to get distribution for.
+        from_date: Start date (YYYY-MM-DD format).
+        to_date: End date (YYYY-MM-DD format).
+        limit: Maximum number of values to return (default: 20).
+
+    Returns:
+        Dictionary with value counts and percentages.
+
+    Example:
+        Ask: "What's the country distribution for purchases?"
+        Uses: property_distribution(event="purchase", property_name="country",
+                                   from_date="2024-01-01", to_date="2024-01-31")
+    """
+    ws = get_workspace(ctx)
+    result = ws.property_distribution(
+        event=event,
+        property=property_name,
+        from_date=from_date,
+        to_date=to_date,
+        limit=limit,
+    )
+    return result.to_dict()
+
+
+@mcp.tool
+@handle_errors
+def numeric_summary(
+    ctx: Context,
+    event: str,
+    property_name: str,
+    from_date: str,
+    to_date: str,
+    percentiles: list[int] | None = None,
+) -> dict[str, Any]:
+    """Get statistical summary for a numeric property.
+
+    Uses JQL to compute count, min, max, avg, stddev, and percentiles
+    for a numeric property. Useful for understanding the distribution
+    of values like amounts, durations, or scores.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        event: Event name to analyze.
+        property_name: Numeric property name.
+        from_date: Start date (YYYY-MM-DD format).
+        to_date: End date (YYYY-MM-DD format).
+        percentiles: Percentiles to compute. Default: [25, 50, 75, 90, 95, 99].
+
+    Returns:
+        Dictionary with count, min, max, avg, stddev, and percentiles.
+
+    Example:
+        Ask: "What are the statistics for purchase amounts?"
+        Uses: numeric_summary(event="purchase", property_name="amount",
+                             from_date="2024-01-01", to_date="2024-01-31")
+    """
+    ws = get_workspace(ctx)
+    result = ws.numeric_summary(
+        event=event,
+        property=property_name,
+        from_date=from_date,
+        to_date=to_date,
+        percentiles=percentiles,
+    )
+    return result.to_dict()
+
+
+@mcp.tool
+@handle_errors
+def daily_counts(
+    ctx: Context,
+    from_date: str,
+    to_date: str,
+    events: list[str] | None = None,
+) -> dict[str, Any]:
+    """Get daily event counts via JQL.
+
+    Uses JQL to count events by day, optionally filtered to specific
+    event types. Provides a quick overview of event volume over time.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        from_date: Start date (YYYY-MM-DD format).
+        to_date: End date (YYYY-MM-DD format).
+        events: Optional list of events to count. None = all events.
+
+    Returns:
+        Dictionary with date/event/count entries.
+
+    Example:
+        Ask: "How many signups and purchases per day this week?"
+        Uses: daily_counts(from_date="2024-01-01", to_date="2024-01-07",
+                          events=["signup", "purchase"])
+
+        Ask: "What's the daily event volume?"
+        Uses: daily_counts(from_date="2024-01-01", to_date="2024-01-31")
+    """
+    ws = get_workspace(ctx)
+    result = ws.daily_counts(
+        from_date=from_date,
+        to_date=to_date,
+        events=events,
+    )
+    return result.to_dict()
+
+
+@mcp.tool
+@handle_errors
+def engagement_distribution(
+    ctx: Context,
+    from_date: str,
+    to_date: str,
+    events: list[str] | None = None,
+    buckets: list[int] | None = None,
+) -> dict[str, Any]:
+    """Get user engagement distribution.
+
+    Uses JQL to bucket users by their event count, showing how many
+    users performed N events. Useful for understanding user engagement
+    levels and power user distribution.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        from_date: Start date (YYYY-MM-DD format).
+        to_date: End date (YYYY-MM-DD format).
+        events: Optional list of events to count. None = all events.
+        buckets: Bucket boundaries. Default: [1, 2, 5, 10, 25, 50, 100].
+
+    Returns:
+        Dictionary with user counts per bucket.
+
+    Example:
+        Ask: "How are users distributed by number of purchases?"
+        Uses: engagement_distribution(from_date="2024-01-01", to_date="2024-01-31",
+                                     events=["purchase"])
+
+        Ask: "Show me user engagement levels"
+        Uses: engagement_distribution(from_date="2024-01-01", to_date="2024-01-31")
+    """
+    ws = get_workspace(ctx)
+    result = ws.engagement_distribution(
+        from_date=from_date,
+        to_date=to_date,
+        events=events,
+        buckets=buckets,
+    )
+    return result.to_dict()
+
+
+@mcp.tool
+@handle_errors
+def property_coverage(
+    ctx: Context,
+    event: str,
+    properties: list[str],
+    from_date: str,
+    to_date: str,
+) -> dict[str, Any]:
+    """Get property coverage statistics.
+
+    Uses JQL to count how often each property is defined (non-null)
+    vs undefined for the specified event. Useful for data quality
+    checks and understanding property completeness.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        event: Event name to analyze.
+        properties: List of property names to check.
+        from_date: Start date (YYYY-MM-DD format).
+        to_date: End date (YYYY-MM-DD format).
+
+    Returns:
+        Dictionary with coverage statistics per property.
+
+    Example:
+        Ask: "How complete are the coupon_code and referrer properties?"
+        Uses: property_coverage(event="purchase",
+                               properties=["coupon_code", "referrer"],
+                               from_date="2024-01-01", to_date="2024-01-31")
+    """
+    ws = get_workspace(ctx)
+    result = ws.property_coverage(
+        event=event,
+        properties=properties,
+        from_date=from_date,
+        to_date=to_date,
     )
     return result.to_dict()

@@ -202,6 +202,107 @@ def mock_workspace() -> MagicMock:
     # Add property_keys() method for extracting unique property keys
     workspace.property_keys.return_value = ["browser", "country", "device"]
 
+    # Lexicon schema methods
+    lexicon_schema_mock = MagicMock()
+    lexicon_schema_mock.to_dict.return_value = {
+        "name": "signup",
+        "entity_type": "event",
+        "description": "User signed up",
+    }
+    workspace.lexicon_schemas.return_value = [lexicon_schema_mock]
+    workspace.lexicon_schema.return_value = lexicon_schema_mock
+
+    # Clear cache method
+    workspace.clear_discovery_cache.return_value = None
+
+    # Saved report methods
+    workspace.query_saved_report.return_value = MagicMock(
+        to_dict=lambda: {
+            "bookmark_id": 12345,
+            "report_type": "insights",
+            "data": {"values": {"2024-01-01": 100}},
+        }
+    )
+    workspace.query_flows.return_value = MagicMock(
+        to_dict=lambda: {
+            "bookmark_id": 67890,
+            "steps": [{"count": 100}, {"count": 50}],
+            "conversion_rate": 0.5,
+        }
+    )
+
+    # Numeric segmentation methods
+    workspace.segmentation_numeric.return_value = MagicMock(
+        to_dict=lambda: {
+            "event": "purchase",
+            "buckets": [
+                {"range": "0-100", "count": 50},
+                {"range": "100-200", "count": 30},
+            ],
+        }
+    )
+    workspace.segmentation_sum.return_value = MagicMock(
+        to_dict=lambda: {
+            "event": "purchase",
+            "data": {"2024-01-01": 5000.0, "2024-01-02": 6000.0},
+        }
+    )
+    workspace.segmentation_average.return_value = MagicMock(
+        to_dict=lambda: {
+            "event": "purchase",
+            "data": {"2024-01-01": 50.0, "2024-01-02": 60.0},
+        }
+    )
+
+    # JQL-based discovery methods
+    workspace.property_distribution.return_value = MagicMock(
+        to_dict=lambda: {
+            "event": "purchase",
+            "property": "country",
+            "values": [
+                {"value": "US", "count": 100, "percentage": 50.0},
+                {"value": "UK", "count": 60, "percentage": 30.0},
+            ],
+        }
+    )
+    workspace.numeric_summary.return_value = MagicMock(
+        to_dict=lambda: {
+            "event": "purchase",
+            "property": "amount",
+            "count": 1000,
+            "min": 10.0,
+            "max": 500.0,
+            "avg": 75.5,
+            "stddev": 25.0,
+            "percentiles": {25: 40.0, 50: 70.0, 75: 100.0},
+        }
+    )
+    workspace.daily_counts.return_value = MagicMock(
+        to_dict=lambda: {
+            "counts": [
+                {"date": "2024-01-01", "event": "signup", "count": 100},
+                {"date": "2024-01-02", "event": "signup", "count": 120},
+            ],
+        }
+    )
+    workspace.engagement_distribution.return_value = MagicMock(
+        to_dict=lambda: {
+            "buckets": [
+                {"bucket_label": "1", "user_count": 500, "percentage": 50.0},
+                {"bucket_label": "2-5", "user_count": 300, "percentage": 30.0},
+            ],
+        }
+    )
+    workspace.property_coverage.return_value = MagicMock(
+        to_dict=lambda: {
+            "event": "purchase",
+            "coverage": [
+                {"property": "coupon_code", "coverage_percentage": 25.0},
+                {"property": "referrer", "coverage_percentage": 80.0},
+            ],
+        }
+    )
+
     return workspace
 
 
