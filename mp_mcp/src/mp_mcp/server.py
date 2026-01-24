@@ -27,7 +27,7 @@ from fastmcp import FastMCP
 from mixpanel_data import Workspace
 
 # Skills directory path - resolved to absolute for reliability
-# Path: server.py → mp_mcp/ → src/ → mp_mcp/ → mixpanel_data/ (repo root)
+# Path: server.py → mp_mcp/ → src/ → mp_mcp/ → repo root
 _SERVER_DIR = Path(__file__).resolve().parent
 _SKILLS_DIR = _SERVER_DIR.parent.parent.parent / "mixpanel-plugin" / "skills"
 
