@@ -1,6 +1,6 @@
 # mp-mcp-server
 
-MCP (Model Context Protocol) server exposing mixpanel_data analytics capabilities to AI assistants like Claude Desktop. Built on **FastMCP 2.x** with intelligent tools, middleware, and AI-powered analytics.
+MCP (Model Context Protocol) server exposing mixpanel_data analytics capabilities to AI assistants like Claude Desktop. Built on **FastMCP 3.x** with intelligent tools, middleware, skills integration, and AI-powered analytics.
 
 ## What's New in v2
 
@@ -14,6 +14,7 @@ The MCP Server v2 transforms `mp-mcp-server` from a thin API wrapper into an **i
 | **Progress Reporting**    | Real-time updates for long-running fetches                       |
 | **Middleware Layer**      | Caching, rate limiting, and audit logging                        |
 | **Graceful Degradation**  | All tools work when sampling/elicitation unavailable             |
+| **Skills Provider**       | FastMCP v3 skills integration for dynamic tool loading           |
 
 ## Features
 
@@ -255,12 +256,13 @@ Guided workflow templates for structured analysis:
 
 This server leverages advanced MCP features:
 
-| Feature         | Usage                                                  | Graceful Degradation        |
-| --------------- | ------------------------------------------------------ | --------------------------- |
-| **Sampling**    | `ctx.sample()` for LLM analysis of query results       | Returns raw data with hints |
-| **Elicitation** | `ctx.elicit()` for interactive workflows               | Proceeds with warning       |
-| **Tasks**       | Progress reporting via `ctx.report_progress()`         | Synchronous execution       |
-| **Middleware**  | Request interception for caching, rate limiting, audit | N/A                         |
+| Feature            | Usage                                                  | Graceful Degradation        |
+| ------------------ | ------------------------------------------------------ | --------------------------- |
+| **Sampling**       | `ctx.sample()` for LLM analysis of query results       | Returns raw data with hints |
+| **Elicitation**    | `ctx.elicit()` for interactive workflows               | Proceeds with warning       |
+| **Tasks**          | Progress reporting via `ctx.report_progress()`         | Synchronous execution       |
+| **Middleware**     | Request interception for caching, rate limiting, audit | N/A                         |
+| **Skills Provider**| FastMCP v3 SkillsDirectoryProvider for dynamic skills  | Server runs without skills  |
 
 ## Architecture
 
@@ -324,7 +326,8 @@ mypy mp-mcp-server/src/
 
 ```
 mp-mcp-server/src/mp_mcp_server/
-├── server.py              # FastMCP server setup
+├── server.py              # FastMCP 3.x server setup with lifespan
+├── cli.py                 # CLI entry point (mp-mcp-server command)
 ├── context.py             # Workspace context management
 ├── errors.py              # Error handling decorators
 ├── types.py               # Result type definitions
@@ -332,7 +335,7 @@ mp-mcp-server/src/mp_mcp_server/
 ├── prompts.py             # Framework prompts
 ├── tools/
 │   ├── discovery.py       # Schema discovery tools
-│   ├── live.py            # Live query tools
+│   ├── live_query.py      # Live query tools
 │   ├── fetch.py           # Data fetching tools
 │   ├── local.py           # Local SQL tools
 │   ├── intelligent/       # Tier 3 sampling-powered tools
@@ -354,7 +357,8 @@ mp-mcp-server/src/mp_mcp_server/
 
 ## Technology Stack
 
-- Python 3.10+ with FastMCP 2.x
+- Python 3.10+ with FastMCP 3.x (including tasks support)
+- FastMCP Skills Provider for dynamic skill loading
 - mixpanel_data Workspace for analytics
 - DuckDB for local storage
 - In-memory caches for middleware (no external dependencies)
