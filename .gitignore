@@ -78,3 +78,6 @@ demo/
 
 # fastmcp docs
 context/fastmcp/
+
+# MCP client configuration (local dev only)
+.mcp.json
