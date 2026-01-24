@@ -3,11 +3,11 @@
 **Feature Branch**: `021-mcp-server-v2`
 **Created**: 2026-01-13
 **Status**: Draft
-**Input**: Transform mp-mcp-server from thin API wrapper into intelligent analytics platform with sampling-powered tools, elicitation workflows, composed tools, enhanced resources, framework prompts, middleware, and task-enabled operations.
+**Input**: Transform mp_mcp from thin API wrapper into intelligent analytics platform with sampling-powered tools, elicitation workflows, composed tools, enhanced resources, framework prompts, middleware, and task-enabled operations.
 
 ---
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Diagnose Metric Drop with AI Synthesis (Priority: P1)
 
@@ -213,7 +213,7 @@ A user wants quick access to pre-computed analytics views like weekly retention 
 
 ---
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -280,7 +280,7 @@ A user wants quick access to pre-computed analytics views like weekly retention 
 
 ---
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 
@@ -311,7 +311,7 @@ A user wants quick access to pre-computed analytics views like weekly retention 
 ## Dependencies
 
 - FastMCP library with sampling, elicitation, task, and middleware support.
-- Existing `mp-mcp-server` codebase with 27 primitive tools.
+- Existing `mp_mcp` codebase with 27 primitive tools.
 - `mixpanel_data` Python library for Workspace operations.
 - Mixpanel API access with valid credentials.
 

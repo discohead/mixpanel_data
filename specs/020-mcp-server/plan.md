@@ -12,18 +12,21 @@ Create a production-ready MCP (Model Context Protocol) server that exposes `mixp
 
 **Language/Version**: Python 3.10+ (matches mixpanel_data requirements)
 **Primary Dependencies**:
+
 - `fastmcp>=2.0,<3` - MCP server framework
 - `mixpanel_data>=0.1.0` - Analytics library (local dependency)
 
 **Storage**: DuckDB (via mixpanel_data Workspace - shared session state)
 **Testing**: pytest with FastMCP in-memory Client for integration tests
 **Target Platform**:
+
 - Local: stdio transport (Claude Desktop, subprocess-based clients)
 - Remote: HTTP transport (web service deployments)
 
 **Project Type**: Single package (sibling to mixpanel_data)
 **Performance Goals**: Tool responses within Mixpanel API latency bounds
 **Constraints**:
+
 - No new external dependencies beyond FastMCP
 - Must follow mixpanel_data quality standards (90% coverage, mypy --strict)
 - MCP protocol compliance for all transports
@@ -32,28 +35,28 @@ Create a production-ready MCP (Model Context Protocol) server that exposes `mixp
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+_GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
-| Principle | Compliance | Notes |
-|-----------|------------|-------|
-| I. Library-First | ✅ PASS | MCP server wraps Workspace methods directly; all logic in library |
-| II. Agent-Native Design | ✅ PASS | MCP protocol is inherently structured; JSON outputs from `.to_dict()` |
-| III. Context Window Efficiency | ✅ PASS | Resources for cacheable schema; tools for on-demand queries |
-| IV. Two Data Paths | ✅ PASS | Live query tools + fetch/SQL tools both exposed |
-| V. Explicit Over Implicit | ✅ PASS | TableExistsError preserved; no implicit overwrites |
-| VI. Unix Philosophy | ✅ PASS | Tools do one thing; composable via MCP protocol |
-| VII. Secure by Default | ✅ PASS | Credentials resolved at server startup via env/config; not in protocol |
+| Principle                      | Compliance | Notes                                                                  |
+| ------------------------------ | ---------- | ---------------------------------------------------------------------- |
+| I. Library-First               | ✅ PASS    | MCP server wraps Workspace methods directly; all logic in library      |
+| II. Agent-Native Design        | ✅ PASS    | MCP protocol is inherently structured; JSON outputs from `.to_dict()`  |
+| III. Context Window Efficiency | ✅ PASS    | Resources for cacheable schema; tools for on-demand queries            |
+| IV. Two Data Paths             | ✅ PASS    | Live query tools + fetch/SQL tools both exposed                        |
+| V. Explicit Over Implicit      | ✅ PASS    | TableExistsError preserved; no implicit overwrites                     |
+| VI. Unix Philosophy            | ✅ PASS    | Tools do one thing; composable via MCP protocol                        |
+| VII. Secure by Default         | ✅ PASS    | Credentials resolved at server startup via env/config; not in protocol |
 
 **Technology Stack Compliance**:
 | Component | Constitution | This Feature | Status |
 |-----------|--------------|--------------|--------|
 | Language | Python 3.10+ | Python 3.10+ | ✅ |
-| CLI Framework | Typer | argparse (for mp-mcp-server only) | ⚠️ See note |
+| CLI Framework | Typer | argparse (for mp_mcp only) | ⚠️ See note |
 | Validation | Pydantic v2 | FastMCP handles | ✅ |
 | Database | DuckDB | Via mixpanel_data | ✅ |
 | HTTP Client | httpx | Via mixpanel_data | ✅ |
 
-**Note on CLI**: The `mp-mcp-server` command uses `argparse` as it's a simple entry point (3 flags), not a full CLI experience. Typer overhead not justified for `--account`, `--transport`, `--port`.
+**Note on CLI**: The `mp_mcp` command uses `argparse` as it's a simple entry point (3 flags), not a full CLI experience. Typer overhead not justified for `--account`, `--transport`, `--port`.
 
 ## Project Structure
 
@@ -72,11 +75,11 @@ specs/020-mcp-server/
 ### Source Code (repository root)
 
 ```text
-mp-mcp-server/
+mp_mcp/
 ├── pyproject.toml                    # Package configuration
 ├── README.md                         # User documentation
 ├── claude_desktop_config.json        # Example configuration
-├── src/mp_mcp_server/
+├── src/mp_mcp/
 │   ├── __init__.py                   # Package initialization
 │   ├── server.py                     # FastMCP server + lifespan
 │   ├── context.py                    # get_workspace() helper
@@ -104,12 +107,12 @@ mp-mcp-server/
         └── test_server_integration.py
 ```
 
-**Structure Decision**: Separate `mp-mcp-server` package at repository root, sibling to `src/mixpanel_data`. This keeps MCP concerns isolated while depending on the library. Installation: `pip install ./mp-mcp-server` (or publish to PyPI separately).
+**Structure Decision**: Separate `mp_mcp` package at repository root, sibling to `src/mixpanel_data`. This keeps MCP concerns isolated while depending on the library. Installation: `pip install ./mp_mcp` (or publish to PyPI separately).
 
 ## Complexity Tracking
 
 > No constitution violations requiring justification.
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| argparse instead of Typer | mp-mcp-server CLI has only 3 flags | Typer adds dependencies for trivial use case |
+| Violation                 | Why Needed                  | Simpler Alternative Rejected Because         |
+| ------------------------- | --------------------------- | -------------------------------------------- |
+| argparse instead of Typer | mp_mcp CLI has only 3 flags | Typer adds dependencies for trivial use case |

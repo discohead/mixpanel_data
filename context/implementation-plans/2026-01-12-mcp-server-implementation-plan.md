@@ -7,6 +7,7 @@ Expose `mixpanel_data` library capabilities as an MCP (Model Context Protocol) s
 ## Goal
 
 Create a production-ready MCP server that:
+
 1. Exposes all `Workspace` methods as MCP tools and resources
 2. Maintains session state for multi-step analytics workflows
 3. Provides structured, LLM-friendly outputs
@@ -22,7 +23,7 @@ Create a production-ready MCP server that:
                                        │
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        FastMCP Server (mp-mcp-server)                       │
+│                        FastMCP Server (mp_mcp)                       │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │                           MCP Tools                                    │  │
 │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────────┐  │  │
@@ -67,35 +68,41 @@ Create a production-ready MCP server that:
 
 ## Design Decisions
 
-### 1. Package Structure: **Separate `mp-mcp-server` Package**
-- New package `mp-mcp-server` in repository root (sibling to `src/mixpanel_data`)
+### 1. Package Structure: **Separate `mp_mcp` Package**
+
+- New package `mp_mcp` in repository root (sibling to `src/mixpanel_data`)
 - Depends on `mixpanel_data` as a library
-- Separate installation: `pip install mp-mcp-server`
-- Entry point: `mp-mcp-server` command
+- Separate installation: `pip install mp_mcp`
+- Entry point: `mp_mcp` command
 
 ### 2. Session Management: **Server-Level Workspace Singleton**
+
 - Single `Workspace` instance per server session (lifespan pattern)
 - Workspace created on server start, closed on server stop
 - Session state persists across tool calls (DuckDB tables, caches)
 - Context object provides access to workspace in tools/resources
 
 ### 3. Tool Design: **One Tool Per Workspace Method**
+
 - Direct 1:1 mapping between Workspace methods and MCP tools
 - Preserves library semantics (no abstraction leakage)
 - Docstrings become tool descriptions
 - Type hints become JSON schema
 
 ### 4. Resource Design: **Read-Only Schema/State Resources**
+
 - Resources for cacheable/static data (events, funnels, cohorts)
 - Dynamic resource templates for parameterized queries
 - Resource URIs follow `{category}://{identifier}` pattern
 
 ### 5. Error Handling: **Structured Error Responses**
+
 - All `MixpanelDataError` exceptions converted to structured tool errors
 - Include error code, message, and details for LLM recovery
 - Rate limit errors include retry guidance
 
 ### 6. Authentication: **Environment/Config Resolution**
+
 - Server uses same credential resolution as library (env → config → default)
 - Optional `--account` CLI flag to specify named account
 - No credentials in MCP protocol (resolved at server startup)
@@ -106,30 +113,30 @@ Create a production-ready MCP server that:
 
 ### New Files to Create
 
-| File | Purpose |
-|------|---------|
-| `mp-mcp-server/src/mp_mcp_server/__init__.py` | Package initialization |
-| `mp-mcp-server/src/mp_mcp_server/server.py` | FastMCP server definition |
-| `mp-mcp-server/src/mp_mcp_server/tools/discovery.py` | Discovery tools (events, properties, funnels, cohorts) |
-| `mp-mcp-server/src/mp_mcp_server/tools/live_query.py` | Live query tools (segmentation, funnel, retention, jql) |
-| `mp-mcp-server/src/mp_mcp_server/tools/fetch.py` | Data fetching tools |
-| `mp-mcp-server/src/mp_mcp_server/tools/local.py` | Local SQL and introspection tools |
-| `mp-mcp-server/src/mp_mcp_server/resources.py` | MCP resources |
-| `mp-mcp-server/src/mp_mcp_server/prompts.py` | MCP prompts |
-| `mp-mcp-server/src/mp_mcp_server/context.py` | Context and state management |
-| `mp-mcp-server/src/mp_mcp_server/errors.py` | Error handling and conversion |
-| `mp-mcp-server/src/mp_mcp_server/cli.py` | CLI entry point |
-| `mp-mcp-server/pyproject.toml` | Package configuration |
-| `mp-mcp-server/tests/` | Test directory |
+| File                                    | Purpose                                                 |
+| --------------------------------------- | ------------------------------------------------------- |
+| `mp_mcp/src/mp_mcp/__init__.py`         | Package initialization                                  |
+| `mp_mcp/src/mp_mcp/server.py`           | FastMCP server definition                               |
+| `mp_mcp/src/mp_mcp/tools/discovery.py`  | Discovery tools (events, properties, funnels, cohorts)  |
+| `mp_mcp/src/mp_mcp/tools/live_query.py` | Live query tools (segmentation, funnel, retention, jql) |
+| `mp_mcp/src/mp_mcp/tools/fetch.py`      | Data fetching tools                                     |
+| `mp_mcp/src/mp_mcp/tools/local.py`      | Local SQL and introspection tools                       |
+| `mp_mcp/src/mp_mcp/resources.py`        | MCP resources                                           |
+| `mp_mcp/src/mp_mcp/prompts.py`          | MCP prompts                                             |
+| `mp_mcp/src/mp_mcp/context.py`          | Context and state management                            |
+| `mp_mcp/src/mp_mcp/errors.py`           | Error handling and conversion                           |
+| `mp_mcp/src/mp_mcp/cli.py`              | CLI entry point                                         |
+| `mp_mcp/pyproject.toml`                 | Package configuration                                   |
+| `mp_mcp/tests/`                         | Test directory                                          |
 
 ### Existing Files Referenced
 
-| File | Purpose |
-|------|---------|
-| [workspace.py](src/mixpanel_data/workspace.py) | Workspace facade (all public methods) |
-| [types.py](src/mixpanel_data/types.py) | Result types with `.to_dict()` |
+| File                                             | Purpose                               |
+| ------------------------------------------------ | ------------------------------------- |
+| [workspace.py](src/mixpanel_data/workspace.py)   | Workspace facade (all public methods) |
+| [types.py](src/mixpanel_data/types.py)           | Result types with `.to_dict()`        |
 | [exceptions.py](src/mixpanel_data/exceptions.py) | Exception hierarchy with `.to_dict()` |
-| [auth.py](src/mixpanel_data/auth.py) | ConfigManager for credentials |
+| [auth.py](src/mixpanel_data/auth.py)             | ConfigManager for credentials         |
 
 ---
 
@@ -145,10 +152,11 @@ Each phase follows strict TDD: **Write tests FIRST, then implement until tests p
 
 #### 1.1 Package Setup
 
-Create `mp-mcp-server/pyproject.toml`:
+Create `mp_mcp/pyproject.toml`:
+
 ```toml
 [project]
-name = "mp-mcp-server"
+name = "mp_mcp"
 version = "0.1.0"
 description = "MCP server for Mixpanel analytics via mixpanel_data"
 requires-python = ">=3.10"
@@ -158,12 +166,13 @@ dependencies = [
 ]
 
 [project.scripts]
-mp-mcp-server = "mp_mcp_server.cli:main"
+mp_mcp = "mp_mcp.cli:main"
 ```
 
 #### 1.2 Tests First
 
-**Create:** `mp-mcp-server/tests/unit/test_server.py`
+**Create:** `mp_mcp/tests/unit/test_server.py`
+
 ```python
 # Test server creation
 def test_server_has_name():
@@ -183,7 +192,8 @@ async def test_lifespan_workspace_available_in_context():
     """Context.workspace returns lifespan-created Workspace."""
 ```
 
-**Create:** `mp-mcp-server/tests/unit/test_context.py`
+**Create:** `mp_mcp/tests/unit/test_context.py`
+
 ```python
 def test_get_workspace_returns_workspace():
     """get_workspace() returns Workspace from context."""
@@ -194,7 +204,8 @@ def test_get_workspace_raises_without_lifespan():
 
 #### 1.3 Implementation
 
-**Create:** `mp-mcp-server/src/mp_mcp_server/server.py`
+**Create:** `mp_mcp/src/mp_mcp/server.py`
+
 ```python
 from contextlib import asynccontextmanager
 from fastmcp import FastMCP, Context
@@ -217,7 +228,8 @@ mcp = FastMCP(
 )
 ```
 
-**Create:** `mp-mcp-server/src/mp_mcp_server/context.py`
+**Create:** `mp_mcp/src/mp_mcp/context.py`
+
 ```python
 from fastmcp import Context
 from mixpanel_data import Workspace
@@ -231,6 +243,7 @@ def get_workspace(ctx: Context) -> Workspace:
 ```
 
 #### 1.4 Verification
+
 ```bash
 just test -k test_server
 just test -k test_context
@@ -245,7 +258,8 @@ just typecheck
 
 #### 2.1 Tests First
 
-**Create:** `mp-mcp-server/tests/unit/test_tools_discovery.py`
+**Create:** `mp_mcp/tests/unit/test_tools_discovery.py`
+
 ```python
 # Test tool registration
 def test_list_events_tool_registered():
@@ -285,11 +299,12 @@ async def test_lexicon_schemas_returns_entity_types():
 
 #### 2.2 Implementation
 
-**Create:** `mp-mcp-server/src/mp_mcp_server/tools/discovery.py`
+**Create:** `mp_mcp/src/mp_mcp/tools/discovery.py`
+
 ```python
 from fastmcp import Context
-from mp_mcp_server.context import get_workspace
-from mp_mcp_server.server import mcp
+from mp_mcp.context import get_workspace
+from mp_mcp.server import mcp
 
 @mcp.tool
 def list_events(ctx: Context) -> list[str]:
@@ -407,6 +422,7 @@ def lexicon_schema(entity_type: str, ctx: Context) -> dict:
 ```
 
 #### 2.3 Verification
+
 ```bash
 just test -k test_tools_discovery
 just typecheck
@@ -420,7 +436,8 @@ just typecheck
 
 #### 3.1 Tests First
 
-**Create:** `mp-mcp-server/tests/unit/test_tools_live_query.py`
+**Create:** `mp_mcp/tests/unit/test_tools_live_query.py`
+
 ```python
 # Core analytics
 async def test_segmentation_returns_time_series():
@@ -471,12 +488,13 @@ async def test_query_saved_report_executes_insight():
 
 #### 3.2 Implementation
 
-**Create:** `mp-mcp-server/src/mp_mcp_server/tools/live_query.py`
+**Create:** `mp_mcp/src/mp_mcp/tools/live_query.py`
+
 ```python
 from typing import Literal
 from fastmcp import Context
-from mp_mcp_server.context import get_workspace
-from mp_mcp_server.server import mcp
+from mp_mcp.context import get_workspace
+from mp_mcp.server import mcp
 
 @mcp.tool
 def segmentation(
@@ -775,6 +793,7 @@ def query_saved_report(bookmark_id: int, ctx: Context) -> dict:
 ```
 
 #### 3.3 Verification
+
 ```bash
 just test -k test_tools_live_query
 just typecheck
@@ -788,7 +807,8 @@ just typecheck
 
 #### 4.1 Tests First
 
-**Create:** `mp-mcp-server/tests/unit/test_tools_fetch.py`
+**Create:** `mp_mcp/tests/unit/test_tools_fetch.py`
+
 ```python
 async def test_fetch_events_creates_table():
     """fetch_events creates DuckDB table with events."""
@@ -814,11 +834,12 @@ async def test_fetch_events_parallel_uses_workers():
 
 #### 4.2 Implementation
 
-**Create:** `mp-mcp-server/src/mp_mcp_server/tools/fetch.py`
+**Create:** `mp_mcp/src/mp_mcp/tools/fetch.py`
+
 ```python
 from fastmcp import Context
-from mp_mcp_server.context import get_workspace
-from mp_mcp_server.server import mcp
+from mp_mcp.context import get_workspace
+from mp_mcp.server import mcp
 
 @mcp.tool
 def fetch_events(
@@ -933,6 +954,7 @@ def stream_profiles(
 ```
 
 #### 4.3 Verification
+
 ```bash
 just test -k test_tools_fetch
 just typecheck
@@ -946,7 +968,8 @@ just typecheck
 
 #### 5.1 Tests First
 
-**Create:** `mp-mcp-server/tests/unit/test_tools_local.py`
+**Create:** `mp_mcp/tests/unit/test_tools_local.py`
+
 ```python
 # SQL tools
 async def test_sql_executes_query():
@@ -993,12 +1016,13 @@ async def test_drop_all_removes_all_tables():
 
 #### 5.2 Implementation
 
-**Create:** `mp-mcp-server/src/mp_mcp_server/tools/local.py`
+**Create:** `mp_mcp/src/mp_mcp/tools/local.py`
+
 ```python
 from typing import Any, Literal
 from fastmcp import Context
-from mp_mcp_server.context import get_workspace
-from mp_mcp_server.server import mcp
+from mp_mcp.context import get_workspace
+from mp_mcp.server import mcp
 
 # === SQL Query Tools ===
 
@@ -1194,6 +1218,7 @@ def drop_all_tables(
 ```
 
 #### 5.3 Verification
+
 ```bash
 just test -k test_tools_local
 just typecheck
@@ -1207,7 +1232,8 @@ just typecheck
 
 #### 6.1 Tests First
 
-**Create:** `mp-mcp-server/tests/unit/test_resources.py`
+**Create:** `mp_mcp/tests/unit/test_resources.py`
+
 ```python
 # Static resources
 async def test_workspace_info_resource():
@@ -1236,11 +1262,12 @@ async def test_table_schema_resource_template():
 
 #### 6.2 Implementation
 
-**Create:** `mp-mcp-server/src/mp_mcp_server/resources.py`
+**Create:** `mp_mcp/src/mp_mcp/resources.py`
+
 ```python
 from fastmcp import Context
-from mp_mcp_server.context import get_workspace
-from mp_mcp_server.server import mcp
+from mp_mcp.context import get_workspace
+from mp_mcp.server import mcp
 import json
 
 # === Workspace State Resources ===
@@ -1309,6 +1336,7 @@ def table_sample_resource(table: str, ctx: Context) -> str:
 ```
 
 #### 6.3 Verification
+
 ```bash
 just test -k test_resources
 just typecheck
@@ -1322,7 +1350,8 @@ just typecheck
 
 #### 7.1 Tests First
 
-**Create:** `mp-mcp-server/tests/unit/test_prompts.py`
+**Create:** `mp_mcp/tests/unit/test_prompts.py`
+
 ```python
 def test_analytics_workflow_prompt_registered():
     """analytics_workflow prompt is registered."""
@@ -1339,10 +1368,11 @@ def test_analytics_workflow_returns_messages():
 
 #### 7.2 Implementation
 
-**Create:** `mp-mcp-server/src/mp_mcp_server/prompts.py`
+**Create:** `mp_mcp/src/mp_mcp/prompts.py`
+
 ```python
 from fastmcp import Context
-from mp_mcp_server.server import mcp
+from mp_mcp.server import mcp
 
 @mcp.prompt
 def analytics_workflow() -> str:
@@ -1445,6 +1475,7 @@ Explore the data and surface interesting insights."""
 ```
 
 #### 7.3 Verification
+
 ```bash
 just test -k test_prompts
 just typecheck
@@ -1458,7 +1489,8 @@ just typecheck
 
 #### 8.1 Tests First
 
-**Create:** `mp-mcp-server/tests/unit/test_errors.py`
+**Create:** `mp_mcp/tests/unit/test_errors.py`
+
 ```python
 def test_authentication_error_converted():
     """AuthenticationError becomes structured error."""
@@ -1478,7 +1510,8 @@ def test_unknown_error_wrapped():
 
 #### 8.2 Implementation
 
-**Create:** `mp-mcp-server/src/mp_mcp_server/errors.py`
+**Create:** `mp_mcp/src/mp_mcp/errors.py`
+
 ```python
 from functools import wraps
 from typing import Any, Callable, TypeVar
@@ -1551,6 +1584,7 @@ def handle_errors(func: Callable[..., T]) -> Callable[..., T]:
 Apply decorator to all tools in previous phases.
 
 #### 8.3 Verification
+
 ```bash
 just test -k test_errors
 just typecheck
@@ -1564,7 +1598,8 @@ just typecheck
 
 #### 9.1 Tests First
 
-**Create:** `mp-mcp-server/tests/unit/test_cli.py`
+**Create:** `mp_mcp/tests/unit/test_cli.py`
+
 ```python
 def test_cli_runs_server():
     """CLI main() runs FastMCP server."""
@@ -1581,11 +1616,12 @@ def test_cli_accepts_port_option():
 
 #### 9.2 Implementation
 
-**Create:** `mp-mcp-server/src/mp_mcp_server/cli.py`
+**Create:** `mp_mcp/src/mp_mcp/cli.py`
+
 ```python
 import argparse
 import os
-from mp_mcp_server.server import mcp
+from mp_mcp.server import mcp
 
 def main() -> None:
     """Run the Mixpanel MCP server."""
@@ -1634,6 +1670,7 @@ if __name__ == "__main__":
 ```
 
 #### 9.3 Verification
+
 ```bash
 just test -k test_cli
 just typecheck
@@ -1647,11 +1684,12 @@ just typecheck
 
 #### 10.1 Integration Tests
 
-**Create:** `mp-mcp-server/tests/integration/test_server_integration.py`
+**Create:** `mp_mcp/tests/integration/test_server_integration.py`
+
 ```python
 import pytest
 from fastmcp import Client
-from mp_mcp_server.server import mcp
+from mp_mcp.server import mcp
 
 @pytest.fixture
 async def client():
@@ -1712,6 +1750,7 @@ async def test_resource_access(client):
 ```
 
 #### 10.2 Verification
+
 ```bash
 just test -k test_server_integration
 just check
@@ -1725,16 +1764,17 @@ just check
 
 #### 11.1 README
 
-**Create:** `mp-mcp-server/README.md`
+**Create:** `mp_mcp/README.md`
 
 #### 11.2 Claude Desktop Configuration
 
-**Create:** `mp-mcp-server/claude_desktop_config.json` (example)
+**Create:** `mp_mcp/claude_desktop_config.json` (example)
+
 ```json
 {
   "mcpServers": {
     "mixpanel": {
-      "command": "mp-mcp-server",
+      "command": "mp_mcp",
       "args": ["--account", "production"]
     }
   }
@@ -1745,46 +1785,46 @@ just check
 
 ## Tool Summary
 
-| Category | Tool | Workspace Method |
-|----------|------|------------------|
-| **Discovery** | `list_events` | `events()` |
-| | `list_properties` | `properties(event)` |
-| | `list_property_values` | `property_values(prop, event, limit)` |
-| | `list_funnels` | `funnels()` |
-| | `list_cohorts` | `cohorts()` |
-| | `list_bookmarks` | `list_bookmarks(type)` |
-| | `top_events` | `top_events(limit)` |
-| | `lexicon_schemas` | `lexicon_schemas()` |
-| | `lexicon_schema` | `lexicon_schema(entity_type)` |
-| **Live Query** | `segmentation` | `segmentation(...)` |
-| | `funnel` | `funnel(funnel_id, ...)` |
-| | `retention` | `retention(...)` |
-| | `jql` | `jql(script, params)` |
-| | `event_counts` | `event_counts(events, ...)` |
-| | `property_counts` | `property_counts(...)` |
-| | `activity_feed` | `activity_feed(distinct_id, limit)` |
-| | `frequency` | `frequency(...)` |
-| | `segmentation_numeric` | `segmentation_numeric(...)` |
-| | `segmentation_sum` | `segmentation_sum(...)` |
-| | `segmentation_average` | `segmentation_average(...)` |
-| | `query_flows` | `query_flows(bookmark_id)` |
-| | `query_saved_report` | `query_saved_report(bookmark_id)` |
-| **Fetch** | `fetch_events` | `fetch_events(...)` / `fetch_events_parallel(...)` |
-| | `fetch_profiles` | `fetch_profiles(...)` / `fetch_profiles_parallel(...)` |
-| | `stream_events` | `stream_events(...)` |
-| | `stream_profiles` | `stream_profiles(...)` |
-| **Local** | `sql` | `sql_rows(query)` |
-| | `sql_scalar` | `sql_scalar(query)` |
-| | `workspace_info` | `info()` |
-| | `list_tables` | `tables()` |
-| | `table_schema` | `table_schema(table)` |
-| | `sample` | `sample(table, n)` |
-| | `summarize` | `summarize(table)` |
-| | `event_breakdown` | `event_breakdown(table)` |
-| | `property_keys` | `property_keys(table, column)` |
-| | `column_stats` | `column_stats(table, column, top_n)` |
-| | `drop_table` | `drop(table)` |
-| | `drop_all_tables` | `drop_all(type)` |
+| Category       | Tool                   | Workspace Method                                       |
+| -------------- | ---------------------- | ------------------------------------------------------ |
+| **Discovery**  | `list_events`          | `events()`                                             |
+|                | `list_properties`      | `properties(event)`                                    |
+|                | `list_property_values` | `property_values(prop, event, limit)`                  |
+|                | `list_funnels`         | `funnels()`                                            |
+|                | `list_cohorts`         | `cohorts()`                                            |
+|                | `list_bookmarks`       | `list_bookmarks(type)`                                 |
+|                | `top_events`           | `top_events(limit)`                                    |
+|                | `lexicon_schemas`      | `lexicon_schemas()`                                    |
+|                | `lexicon_schema`       | `lexicon_schema(entity_type)`                          |
+| **Live Query** | `segmentation`         | `segmentation(...)`                                    |
+|                | `funnel`               | `funnel(funnel_id, ...)`                               |
+|                | `retention`            | `retention(...)`                                       |
+|                | `jql`                  | `jql(script, params)`                                  |
+|                | `event_counts`         | `event_counts(events, ...)`                            |
+|                | `property_counts`      | `property_counts(...)`                                 |
+|                | `activity_feed`        | `activity_feed(distinct_id, limit)`                    |
+|                | `frequency`            | `frequency(...)`                                       |
+|                | `segmentation_numeric` | `segmentation_numeric(...)`                            |
+|                | `segmentation_sum`     | `segmentation_sum(...)`                                |
+|                | `segmentation_average` | `segmentation_average(...)`                            |
+|                | `query_flows`          | `query_flows(bookmark_id)`                             |
+|                | `query_saved_report`   | `query_saved_report(bookmark_id)`                      |
+| **Fetch**      | `fetch_events`         | `fetch_events(...)` / `fetch_events_parallel(...)`     |
+|                | `fetch_profiles`       | `fetch_profiles(...)` / `fetch_profiles_parallel(...)` |
+|                | `stream_events`        | `stream_events(...)`                                   |
+|                | `stream_profiles`      | `stream_profiles(...)`                                 |
+| **Local**      | `sql`                  | `sql_rows(query)`                                      |
+|                | `sql_scalar`           | `sql_scalar(query)`                                    |
+|                | `workspace_info`       | `info()`                                               |
+|                | `list_tables`          | `tables()`                                             |
+|                | `table_schema`         | `table_schema(table)`                                  |
+|                | `sample`               | `sample(table, n)`                                     |
+|                | `summarize`            | `summarize(table)`                                     |
+|                | `event_breakdown`      | `event_breakdown(table)`                               |
+|                | `property_keys`        | `property_keys(table, column)`                         |
+|                | `column_stats`         | `column_stats(table, column, top_n)`                   |
+|                | `drop_table`           | `drop(table)`                                          |
+|                | `drop_all_tables`      | `drop_all(type)`                                       |
 
 **Total: 35 tools**
 
@@ -1792,23 +1832,24 @@ just check
 
 ## Resource Summary
 
-| URI | Type | Description |
-|-----|------|-------------|
-| `workspace://info` | Static | Workspace state |
-| `workspace://tables` | Static | Table list |
-| `schema://events` | Static | Event names (cached) |
-| `schema://funnels` | Static | Saved funnels (cached) |
-| `schema://cohorts` | Static | Saved cohorts (cached) |
-| `schema://bookmarks` | Static | Saved reports (cached) |
-| `schema://properties/{event}` | Template | Properties for event |
-| `workspace://schema/{table}` | Template | Table schema |
-| `workspace://sample/{table}` | Template | Sample rows |
+| URI                           | Type     | Description            |
+| ----------------------------- | -------- | ---------------------- |
+| `workspace://info`            | Static   | Workspace state        |
+| `workspace://tables`          | Static   | Table list             |
+| `schema://events`             | Static   | Event names (cached)   |
+| `schema://funnels`            | Static   | Saved funnels (cached) |
+| `schema://cohorts`            | Static   | Saved cohorts (cached) |
+| `schema://bookmarks`          | Static   | Saved reports (cached) |
+| `schema://properties/{event}` | Template | Properties for event   |
+| `workspace://schema/{table}`  | Template | Table schema           |
+| `workspace://sample/{table}`  | Template | Sample rows            |
 
 ---
 
 ## Validation Requirements
 
 Each phase must pass:
+
 1. `just check` - All linting, type checking, and tests pass
 2. Coverage maintained at 90%+
 3. All new code has complete docstrings
@@ -1818,28 +1859,28 @@ Each phase must pass:
 
 ## Dependencies
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `fastmcp` | `>=2.0,<3` | MCP server framework |
-| `mixpanel_data` | `>=0.1.0` | Analytics library |
+| Package         | Version    | Purpose              |
+| --------------- | ---------- | -------------------- |
+| `fastmcp`       | `>=2.0,<3` | MCP server framework |
+| `mixpanel_data` | `>=0.1.0`  | Analytics library    |
 
 ---
 
 ## Estimated Complexity
 
-| Phase | Effort | Notes |
-|-------|--------|-------|
-| 1. Scaffolding | Low | Package setup, lifespan |
-| 2. Discovery Tools | Medium | 9 tools, straightforward mapping |
-| 3. Live Query Tools | High | 14 tools, type handling |
-| 4. Fetch Tools | Medium | 4 tools, parallel options |
-| 5. Local Tools | Medium | 12 tools, SQL execution |
-| 6. Resources | Low | 9 resources, JSON serialization |
-| 7. Prompts | Low | 4 prompts, templates |
-| 8. Error Handling | Medium | Exception mapping |
-| 9. CLI | Low | argparse entry point |
-| 10. Integration Tests | Medium | End-to-end validation |
-| 11. Documentation | Low | README, examples |
+| Phase                 | Effort | Notes                            |
+| --------------------- | ------ | -------------------------------- |
+| 1. Scaffolding        | Low    | Package setup, lifespan          |
+| 2. Discovery Tools    | Medium | 9 tools, straightforward mapping |
+| 3. Live Query Tools   | High   | 14 tools, type handling          |
+| 4. Fetch Tools        | Medium | 4 tools, parallel options        |
+| 5. Local Tools        | Medium | 12 tools, SQL execution          |
+| 6. Resources          | Low    | 9 resources, JSON serialization  |
+| 7. Prompts            | Low    | 4 prompts, templates             |
+| 8. Error Handling     | Medium | Exception mapping                |
+| 9. CLI                | Low    | argparse entry point             |
+| 10. Integration Tests | Medium | End-to-end validation            |
+| 11. Documentation     | Low    | README, examples                 |
 
 ---
 

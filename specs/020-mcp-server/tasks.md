@@ -5,10 +5,11 @@
 **Status**: All 11 phases implemented successfully
 **Tests**: 68 passing (64 unit + 4 integration)
 **Components**: 31 tools, 6 resources, 4 prompts
-**CLI**: `mp-mcp-server --help` verified working
+**CLI**: `mp_mcp --help` verified working
 
 ### Remaining Tasks
-- T149: Verify 90% coverage threshold (`just test-cov mp-mcp-server/tests/`)
+
+- T149: Verify 90% coverage threshold (`just test-cov mp_mcp/tests/`)
 
 ---
 
@@ -26,8 +27,8 @@
 
 ## Path Conventions
 
-- **Source**: `mp-mcp-server/src/mp_mcp_server/`
-- **Tests**: `mp-mcp-server/tests/`
+- **Source**: `mp_mcp/src/mp_mcp/`
+- **Tests**: `mp_mcp/tests/`
 
 ---
 
@@ -35,13 +36,13 @@
 
 **Purpose**: Create package structure and FastMCP server foundation
 
-- [x] T001 Create mp-mcp-server package directory structure per plan.md
-- [x] T002 Create pyproject.toml with fastmcp>=2.0 and mixpanel_data dependencies in mp-mcp-server/pyproject.toml
-- [x] T003 [P] Create package __init__.py in mp-mcp-server/src/mp_mcp_server/__init__.py
-- [x] T004 [P] Create tools package __init__.py in mp-mcp-server/src/mp_mcp_server/tools/__init__.py
-- [x] T005 [P] Create tests conftest.py with shared fixtures in mp-mcp-server/tests/conftest.py
-- [x] T006 [P] Create unit tests directory structure in mp-mcp-server/tests/unit/
-- [x] T007 [P] Create integration tests directory in mp-mcp-server/tests/integration/
+- [x] T001 Create mp_mcp package directory structure per plan.md
+- [x] T002 Create pyproject.toml with fastmcp>=2.0 and mixpanel_data dependencies in mp_mcp/pyproject.toml
+- [x] T003 [P] Create package **init**.py in mp_mcp/src/mp_mcp/**init**.py
+- [x] T004 [P] Create tools package **init**.py in mp_mcp/src/mp_mcp/tools/**init**.py
+- [x] T005 [P] Create tests conftest.py with shared fixtures in mp_mcp/tests/conftest.py
+- [x] T006 [P] Create unit tests directory structure in mp_mcp/tests/unit/
+- [x] T007 [P] Create integration tests directory in mp_mcp/tests/integration/
 
 **Checkpoint**: Package structure ready for development ✅
 
@@ -55,16 +56,16 @@
 
 ### Tests for Foundational
 
-- [x] T008 [P] Write test_server.py: test_server_has_name, test_server_has_instructions in mp-mcp-server/tests/unit/test_server.py
-- [x] T009 [P] Write test_server.py: test_lifespan_creates_workspace, test_lifespan_closes_workspace in mp-mcp-server/tests/unit/test_server.py
-- [x] T010 [P] Write test_context.py: test_get_workspace_returns_workspace, test_get_workspace_raises_without_lifespan in mp-mcp-server/tests/unit/test_context.py
-- [x] T011 [P] Write test_errors.py: test exception conversion for AuthenticationError, RateLimitError (with retry_after), TableExistsError, TableNotFoundError, QueryError, ConfigError, and generic MixpanelDataError in mp-mcp-server/tests/unit/test_errors.py
+- [x] T008 [P] Write test_server.py: test_server_has_name, test_server_has_instructions in mp_mcp/tests/unit/test_server.py
+- [x] T009 [P] Write test_server.py: test_lifespan_creates_workspace, test_lifespan_closes_workspace in mp_mcp/tests/unit/test_server.py
+- [x] T010 [P] Write test_context.py: test_get_workspace_returns_workspace, test_get_workspace_raises_without_lifespan in mp_mcp/tests/unit/test_context.py
+- [x] T011 [P] Write test_errors.py: test exception conversion for AuthenticationError, RateLimitError (with retry_after), TableExistsError, TableNotFoundError, QueryError, ConfigError, and generic MixpanelDataError in mp_mcp/tests/unit/test_errors.py
 
 ### Implementation for Foundational
 
-- [x] T012 Implement FastMCP server with lifespan pattern in mp-mcp-server/src/mp_mcp_server/server.py
-- [x] T013 Implement get_workspace context helper in mp-mcp-server/src/mp_mcp_server/context.py
-- [x] T014 Implement handle_errors decorator for exception conversion in mp-mcp-server/src/mp_mcp_server/errors.py
+- [x] T012 Implement FastMCP server with lifespan pattern in mp_mcp/src/mp_mcp/server.py
+- [x] T013 Implement get_workspace context helper in mp_mcp/src/mp_mcp/context.py
+- [x] T014 Implement handle_errors decorator for exception conversion in mp_mcp/src/mp_mcp/errors.py
 - [x] T015 Run tests and verify all pass: just test -k "test_server or test_context or test_errors"
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel ✅
@@ -81,28 +82,28 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [x] T016 [P] [US1] Write test_list_events_tool_registered in mp-mcp-server/tests/unit/test_tools_discovery.py
-- [x] T017 [P] [US1] Write test_list_events_returns_event_names in mp-mcp-server/tests/unit/test_tools_discovery.py
-- [x] T018 [P] [US1] Write test_list_properties_tool_registered in mp-mcp-server/tests/unit/test_tools_discovery.py
-- [x] T019 [P] [US1] Write test_list_properties_returns_property_names in mp-mcp-server/tests/unit/test_tools_discovery.py
-- [x] T020 [P] [US1] Write test_list_property_values_returns_values in mp-mcp-server/tests/unit/test_tools_discovery.py
-- [x] T021 [P] [US1] Write test_list_funnels_returns_funnel_info in mp-mcp-server/tests/unit/test_tools_discovery.py
-- [x] T022 [P] [US1] Write test_list_cohorts_returns_cohort_info in mp-mcp-server/tests/unit/test_tools_discovery.py
-- [x] T023 [P] [US1] Write test_list_bookmarks_returns_bookmark_info in mp-mcp-server/tests/unit/test_tools_discovery.py
-- [x] T024 [P] [US1] Write test_top_events_returns_event_activity in mp-mcp-server/tests/unit/test_tools_discovery.py
-- [x] T025 [P] [US1] Write test_workspace_info_returns_state in mp-mcp-server/tests/unit/test_tools_discovery.py
+- [x] T016 [P] [US1] Write test_list_events_tool_registered in mp_mcp/tests/unit/test_tools_discovery.py
+- [x] T017 [P] [US1] Write test_list_events_returns_event_names in mp_mcp/tests/unit/test_tools_discovery.py
+- [x] T018 [P] [US1] Write test_list_properties_tool_registered in mp_mcp/tests/unit/test_tools_discovery.py
+- [x] T019 [P] [US1] Write test_list_properties_returns_property_names in mp_mcp/tests/unit/test_tools_discovery.py
+- [x] T020 [P] [US1] Write test_list_property_values_returns_values in mp_mcp/tests/unit/test_tools_discovery.py
+- [x] T021 [P] [US1] Write test_list_funnels_returns_funnel_info in mp_mcp/tests/unit/test_tools_discovery.py
+- [x] T022 [P] [US1] Write test_list_cohorts_returns_cohort_info in mp_mcp/tests/unit/test_tools_discovery.py
+- [x] T023 [P] [US1] Write test_list_bookmarks_returns_bookmark_info in mp_mcp/tests/unit/test_tools_discovery.py
+- [x] T024 [P] [US1] Write test_top_events_returns_event_activity in mp_mcp/tests/unit/test_tools_discovery.py
+- [x] T025 [P] [US1] Write test_workspace_info_returns_state in mp_mcp/tests/unit/test_tools_discovery.py
 
 ### Implementation for User Story 1
 
-- [x] T026 [US1] Implement list_events tool in mp-mcp-server/src/mp_mcp_server/tools/discovery.py
-- [x] T027 [US1] Implement list_properties tool in mp-mcp-server/src/mp_mcp_server/tools/discovery.py
-- [x] T028 [US1] Implement list_property_values tool in mp-mcp-server/src/mp_mcp_server/tools/discovery.py
-- [x] T029 [US1] Implement list_funnels tool in mp-mcp-server/src/mp_mcp_server/tools/discovery.py
-- [x] T030 [US1] Implement list_cohorts tool in mp-mcp-server/src/mp_mcp_server/tools/discovery.py
-- [x] T031 [US1] Implement list_bookmarks tool in mp-mcp-server/src/mp_mcp_server/tools/discovery.py
-- [x] T032 [US1] Implement top_events tool in mp-mcp-server/src/mp_mcp_server/tools/discovery.py
-- [x] T033 [US1] Implement workspace_info tool in mp-mcp-server/src/mp_mcp_server/tools/discovery.py
-- [x] T034 [US1] Register discovery tools in server.py imports in mp-mcp-server/src/mp_mcp_server/server.py
+- [x] T026 [US1] Implement list_events tool in mp_mcp/src/mp_mcp/tools/discovery.py
+- [x] T027 [US1] Implement list_properties tool in mp_mcp/src/mp_mcp/tools/discovery.py
+- [x] T028 [US1] Implement list_property_values tool in mp_mcp/src/mp_mcp/tools/discovery.py
+- [x] T029 [US1] Implement list_funnels tool in mp_mcp/src/mp_mcp/tools/discovery.py
+- [x] T030 [US1] Implement list_cohorts tool in mp_mcp/src/mp_mcp/tools/discovery.py
+- [x] T031 [US1] Implement list_bookmarks tool in mp_mcp/src/mp_mcp/tools/discovery.py
+- [x] T032 [US1] Implement top_events tool in mp_mcp/src/mp_mcp/tools/discovery.py
+- [x] T033 [US1] Implement workspace_info tool in mp_mcp/src/mp_mcp/tools/discovery.py
+- [x] T034 [US1] Register discovery tools in server.py imports in mp_mcp/src/mp_mcp/server.py
 - [x] T035 [US1] Run discovery tests and verify all pass: just test -k test_tools_discovery
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently ✅
@@ -117,37 +118,37 @@
 
 ### Tests for User Story 2
 
-- [x] T036 [P] [US2] Write test_segmentation_returns_time_series in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T037 [P] [US2] Write test_segmentation_with_segment_property in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T038 [P] [US2] Write test_funnel_returns_conversion_data in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T039 [P] [US2] Write test_retention_returns_cohort_data in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T040 [P] [US2] Write test_jql_executes_script in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T041 [P] [US2] Write test_event_counts_returns_multi_event_series in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T042 [P] [US2] Write test_property_counts_returns_value_breakdown in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T043 [P] [US2] Write test_activity_feed_returns_user_events in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T044 [P] [US2] Write test_frequency_returns_distribution in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T045 [P] [US2] Write test_segmentation_numeric_returns_buckets in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T046 [P] [US2] Write test_segmentation_sum_returns_totals in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T047 [P] [US2] Write test_segmentation_average_returns_averages in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T048 [P] [US2] Write test_query_flows_executes_flows_report in mp-mcp-server/tests/unit/test_tools_live_query.py
-- [x] T049 [P] [US2] Write test_query_saved_report_executes_insight in mp-mcp-server/tests/unit/test_tools_live_query.py
+- [x] T036 [P] [US2] Write test_segmentation_returns_time_series in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T037 [P] [US2] Write test_segmentation_with_segment_property in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T038 [P] [US2] Write test_funnel_returns_conversion_data in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T039 [P] [US2] Write test_retention_returns_cohort_data in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T040 [P] [US2] Write test_jql_executes_script in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T041 [P] [US2] Write test_event_counts_returns_multi_event_series in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T042 [P] [US2] Write test_property_counts_returns_value_breakdown in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T043 [P] [US2] Write test_activity_feed_returns_user_events in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T044 [P] [US2] Write test_frequency_returns_distribution in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T045 [P] [US2] Write test_segmentation_numeric_returns_buckets in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T046 [P] [US2] Write test_segmentation_sum_returns_totals in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T047 [P] [US2] Write test_segmentation_average_returns_averages in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T048 [P] [US2] Write test_query_flows_executes_flows_report in mp_mcp/tests/unit/test_tools_live_query.py
+- [x] T049 [P] [US2] Write test_query_saved_report_executes_insight in mp_mcp/tests/unit/test_tools_live_query.py
 
 ### Implementation for User Story 2
 
-- [x] T050 [US2] Implement segmentation tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T051 [US2] Implement funnel tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T052 [US2] Implement retention tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T053 [US2] Implement jql tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T054 [US2] Implement event_counts tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T055 [US2] Implement property_counts tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T056 [US2] Implement activity_feed tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T057 [US2] Implement frequency tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T058 [US2] Implement segmentation_numeric tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T059 [US2] Implement segmentation_sum tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T060 [US2] Implement segmentation_average tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T061 [US2] Implement query_flows tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T062 [US2] Implement query_saved_report tool in mp-mcp-server/src/mp_mcp_server/tools/live_query.py
-- [x] T063 [US2] Register live query tools in server.py imports in mp-mcp-server/src/mp_mcp_server/server.py
+- [x] T050 [US2] Implement segmentation tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T051 [US2] Implement funnel tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T052 [US2] Implement retention tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T053 [US2] Implement jql tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T054 [US2] Implement event_counts tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T055 [US2] Implement property_counts tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T056 [US2] Implement activity_feed tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T057 [US2] Implement frequency tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T058 [US2] Implement segmentation_numeric tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T059 [US2] Implement segmentation_sum tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T060 [US2] Implement segmentation_average tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T061 [US2] Implement query_flows tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T062 [US2] Implement query_saved_report tool in mp_mcp/src/mp_mcp/tools/live_query.py
+- [x] T063 [US2] Register live query tools in server.py imports in mp_mcp/src/mp_mcp/server.py
 - [x] T064 [US2] Run live query tests and verify all pass: just test -k test_tools_live_query
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently ✅
@@ -162,21 +163,21 @@
 
 ### Tests for User Story 3
 
-- [x] T065 [P] [US3] Write test_fetch_events_creates_table in mp-mcp-server/tests/unit/test_tools_fetch.py
-- [x] T066 [P] [US3] Write test_fetch_events_returns_fetch_result in mp-mcp-server/tests/unit/test_tools_fetch.py
-- [x] T067 [P] [US3] Write test_fetch_events_with_date_range in mp-mcp-server/tests/unit/test_tools_fetch.py
-- [x] T068 [P] [US3] Write test_fetch_profiles_creates_table in mp-mcp-server/tests/unit/test_tools_fetch.py
-- [x] T069 [P] [US3] Write test_fetch_profiles_returns_fetch_result in mp-mcp-server/tests/unit/test_tools_fetch.py
-- [x] T070 [P] [US3] Write test_stream_events_returns_iterator_info in mp-mcp-server/tests/unit/test_tools_fetch.py
-- [x] T071 [P] [US3] Write test_fetch_events_parallel_uses_workers in mp-mcp-server/tests/unit/test_tools_fetch.py
+- [x] T065 [P] [US3] Write test_fetch_events_creates_table in mp_mcp/tests/unit/test_tools_fetch.py
+- [x] T066 [P] [US3] Write test_fetch_events_returns_fetch_result in mp_mcp/tests/unit/test_tools_fetch.py
+- [x] T067 [P] [US3] Write test_fetch_events_with_date_range in mp_mcp/tests/unit/test_tools_fetch.py
+- [x] T068 [P] [US3] Write test_fetch_profiles_creates_table in mp_mcp/tests/unit/test_tools_fetch.py
+- [x] T069 [P] [US3] Write test_fetch_profiles_returns_fetch_result in mp_mcp/tests/unit/test_tools_fetch.py
+- [x] T070 [P] [US3] Write test_stream_events_returns_iterator_info in mp_mcp/tests/unit/test_tools_fetch.py
+- [x] T071 [P] [US3] Write test_fetch_events_parallel_uses_workers in mp_mcp/tests/unit/test_tools_fetch.py
 
 ### Implementation for User Story 3
 
-- [x] T072 [US3] Implement fetch_events tool in mp-mcp-server/src/mp_mcp_server/tools/fetch.py
-- [x] T073 [US3] Implement fetch_profiles tool in mp-mcp-server/src/mp_mcp_server/tools/fetch.py
-- [x] T074 [US3] Implement stream_events tool in mp-mcp-server/src/mp_mcp_server/tools/fetch.py
-- [x] T075 [US3] Implement stream_profiles tool in mp-mcp-server/src/mp_mcp_server/tools/fetch.py
-- [x] T076 [US3] Register fetch tools in server.py imports in mp-mcp-server/src/mp_mcp_server/server.py
+- [x] T072 [US3] Implement fetch_events tool in mp_mcp/src/mp_mcp/tools/fetch.py
+- [x] T073 [US3] Implement fetch_profiles tool in mp_mcp/src/mp_mcp/tools/fetch.py
+- [x] T074 [US3] Implement stream_events tool in mp_mcp/src/mp_mcp/tools/fetch.py
+- [x] T075 [US3] Implement stream_profiles tool in mp_mcp/src/mp_mcp/tools/fetch.py
+- [x] T076 [US3] Register fetch tools in server.py imports in mp_mcp/src/mp_mcp/server.py
 - [x] T077 [US3] Run fetch tests and verify all pass: just test -k test_tools_fetch
 
 **Checkpoint**: Data fetching complete - local analysis can begin ✅
@@ -191,33 +192,33 @@
 
 ### Tests for User Story 4
 
-- [x] T078 [P] [US4] Write test_sql_executes_query in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T079 [P] [US4] Write test_sql_returns_dict_format in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T080 [P] [US4] Write test_sql_scalar_returns_single_value in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T081 [P] [US4] Write test_list_tables_returns_table_info in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T082 [P] [US4] Write test_table_schema_returns_columns in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T083 [P] [US4] Write test_sample_returns_random_rows in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T084 [P] [US4] Write test_summarize_returns_statistics in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T085 [P] [US4] Write test_event_breakdown_returns_counts in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T086 [P] [US4] Write test_property_keys_extracts_json_keys in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T087 [P] [US4] Write test_column_stats_returns_detailed_stats in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T088 [P] [US4] Write test_drop_table_removes_table in mp-mcp-server/tests/unit/test_tools_local.py
-- [x] T089 [P] [US4] Write test_drop_all_removes_all_tables in mp-mcp-server/tests/unit/test_tools_local.py
+- [x] T078 [P] [US4] Write test_sql_executes_query in mp_mcp/tests/unit/test_tools_local.py
+- [x] T079 [P] [US4] Write test_sql_returns_dict_format in mp_mcp/tests/unit/test_tools_local.py
+- [x] T080 [P] [US4] Write test_sql_scalar_returns_single_value in mp_mcp/tests/unit/test_tools_local.py
+- [x] T081 [P] [US4] Write test_list_tables_returns_table_info in mp_mcp/tests/unit/test_tools_local.py
+- [x] T082 [P] [US4] Write test_table_schema_returns_columns in mp_mcp/tests/unit/test_tools_local.py
+- [x] T083 [P] [US4] Write test_sample_returns_random_rows in mp_mcp/tests/unit/test_tools_local.py
+- [x] T084 [P] [US4] Write test_summarize_returns_statistics in mp_mcp/tests/unit/test_tools_local.py
+- [x] T085 [P] [US4] Write test_event_breakdown_returns_counts in mp_mcp/tests/unit/test_tools_local.py
+- [x] T086 [P] [US4] Write test_property_keys_extracts_json_keys in mp_mcp/tests/unit/test_tools_local.py
+- [x] T087 [P] [US4] Write test_column_stats_returns_detailed_stats in mp_mcp/tests/unit/test_tools_local.py
+- [x] T088 [P] [US4] Write test_drop_table_removes_table in mp_mcp/tests/unit/test_tools_local.py
+- [x] T089 [P] [US4] Write test_drop_all_removes_all_tables in mp_mcp/tests/unit/test_tools_local.py
 
 ### Implementation for User Story 4
 
-- [x] T090 [US4] Implement sql tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T091 [US4] Implement sql_scalar tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T092 [US4] Implement list_tables tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T093 [US4] Implement table_schema tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T094 [US4] Implement sample tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T095 [US4] Implement summarize tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T096 [US4] Implement event_breakdown tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T097 [US4] Implement property_keys tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T098 [US4] Implement column_stats tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T099 [US4] Implement drop_table tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T100 [US4] Implement drop_all_tables tool in mp-mcp-server/src/mp_mcp_server/tools/local.py
-- [x] T101 [US4] Register local tools in server.py imports in mp-mcp-server/src/mp_mcp_server/server.py
+- [x] T090 [US4] Implement sql tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T091 [US4] Implement sql_scalar tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T092 [US4] Implement list_tables tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T093 [US4] Implement table_schema tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T094 [US4] Implement sample tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T095 [US4] Implement summarize tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T096 [US4] Implement event_breakdown tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T097 [US4] Implement property_keys tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T098 [US4] Implement column_stats tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T099 [US4] Implement drop_table tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T100 [US4] Implement drop_all_tables tool in mp_mcp/src/mp_mcp/tools/local.py
+- [x] T101 [US4] Register local tools in server.py imports in mp_mcp/src/mp_mcp/server.py
 - [x] T102 [US4] Run local tests and verify all pass: just test -k test_tools_local
 
 **Checkpoint**: Full fetch + local analysis workflow complete ✅
@@ -232,26 +233,26 @@
 
 ### Tests for User Story 5
 
-- [x] T103 [P] [US5] Write test_workspace_info_resource in mp-mcp-server/tests/unit/test_resources.py
-- [x] T104 [P] [US5] Write test_tables_resource in mp-mcp-server/tests/unit/test_resources.py
-- [x] T105 [P] [US5] Write test_events_resource in mp-mcp-server/tests/unit/test_resources.py
-- [x] T106 [P] [US5] Write test_funnels_resource in mp-mcp-server/tests/unit/test_resources.py
-- [x] T107 [P] [US5] Write test_cohorts_resource in mp-mcp-server/tests/unit/test_resources.py
-- [x] T108 [P] [US5] Write test_properties_resource_template in mp-mcp-server/tests/unit/test_resources.py
-- [x] T109 [P] [US5] Write test_table_schema_resource_template in mp-mcp-server/tests/unit/test_resources.py
+- [x] T103 [P] [US5] Write test_workspace_info_resource in mp_mcp/tests/unit/test_resources.py
+- [x] T104 [P] [US5] Write test_tables_resource in mp_mcp/tests/unit/test_resources.py
+- [x] T105 [P] [US5] Write test_events_resource in mp_mcp/tests/unit/test_resources.py
+- [x] T106 [P] [US5] Write test_funnels_resource in mp_mcp/tests/unit/test_resources.py
+- [x] T107 [P] [US5] Write test_cohorts_resource in mp_mcp/tests/unit/test_resources.py
+- [x] T108 [P] [US5] Write test_properties_resource_template in mp_mcp/tests/unit/test_resources.py
+- [x] T109 [P] [US5] Write test_table_schema_resource_template in mp_mcp/tests/unit/test_resources.py
 
 ### Implementation for User Story 5
 
-- [x] T110 [US5] Implement workspace://info resource in mp-mcp-server/src/mp_mcp_server/resources.py
-- [x] T111 [US5] Implement workspace://tables resource in mp-mcp-server/src/mp_mcp_server/resources.py
-- [x] T112 [US5] Implement schema://events resource in mp-mcp-server/src/mp_mcp_server/resources.py
-- [x] T113 [US5] Implement schema://funnels resource in mp-mcp-server/src/mp_mcp_server/resources.py
-- [x] T114 [US5] Implement schema://cohorts resource in mp-mcp-server/src/mp_mcp_server/resources.py
-- [x] T115 [US5] Implement schema://bookmarks resource in mp-mcp-server/src/mp_mcp_server/resources.py
-- [x] T116 [US5] Implement schema://properties/{event} resource template in mp-mcp-server/src/mp_mcp_server/resources.py
-- [x] T117 [US5] Implement workspace://schema/{table} resource template in mp-mcp-server/src/mp_mcp_server/resources.py
-- [x] T118 [US5] Implement workspace://sample/{table} resource template in mp-mcp-server/src/mp_mcp_server/resources.py
-- [x] T119 [US5] Register resources in server.py imports in mp-mcp-server/src/mp_mcp_server/server.py
+- [x] T110 [US5] Implement workspace://info resource in mp_mcp/src/mp_mcp/resources.py
+- [x] T111 [US5] Implement workspace://tables resource in mp_mcp/src/mp_mcp/resources.py
+- [x] T112 [US5] Implement schema://events resource in mp_mcp/src/mp_mcp/resources.py
+- [x] T113 [US5] Implement schema://funnels resource in mp_mcp/src/mp_mcp/resources.py
+- [x] T114 [US5] Implement schema://cohorts resource in mp_mcp/src/mp_mcp/resources.py
+- [x] T115 [US5] Implement schema://bookmarks resource in mp_mcp/src/mp_mcp/resources.py
+- [x] T116 [US5] Implement schema://properties/{event} resource template in mp_mcp/src/mp_mcp/resources.py
+- [x] T117 [US5] Implement workspace://schema/{table} resource template in mp_mcp/src/mp_mcp/resources.py
+- [x] T118 [US5] Implement workspace://sample/{table} resource template in mp_mcp/src/mp_mcp/resources.py
+- [x] T119 [US5] Register resources in server.py imports in mp_mcp/src/mp_mcp/server.py
 - [x] T120 [US5] Run resource tests and verify all pass: just test -k test_resources
 
 **Checkpoint**: MCP resources provide session state visibility ✅
@@ -266,19 +267,19 @@
 
 ### Tests for User Story 6
 
-- [x] T121 [P] [US6] Write test_analytics_workflow_prompt_registered in mp-mcp-server/tests/unit/test_prompts.py
-- [x] T122 [P] [US6] Write test_funnel_analysis_prompt_registered in mp-mcp-server/tests/unit/test_prompts.py
-- [x] T123 [P] [US6] Write test_retention_analysis_prompt_registered in mp-mcp-server/tests/unit/test_prompts.py
-- [x] T124 [P] [US6] Write test_local_analysis_workflow_prompt_registered in mp-mcp-server/tests/unit/test_prompts.py
-- [x] T125 [P] [US6] Write test_analytics_workflow_returns_messages in mp-mcp-server/tests/unit/test_prompts.py
+- [x] T121 [P] [US6] Write test_analytics_workflow_prompt_registered in mp_mcp/tests/unit/test_prompts.py
+- [x] T122 [P] [US6] Write test_funnel_analysis_prompt_registered in mp_mcp/tests/unit/test_prompts.py
+- [x] T123 [P] [US6] Write test_retention_analysis_prompt_registered in mp_mcp/tests/unit/test_prompts.py
+- [x] T124 [P] [US6] Write test_local_analysis_workflow_prompt_registered in mp_mcp/tests/unit/test_prompts.py
+- [x] T125 [P] [US6] Write test_analytics_workflow_returns_messages in mp_mcp/tests/unit/test_prompts.py
 
 ### Implementation for User Story 6
 
-- [x] T126 [US6] Implement analytics_workflow prompt in mp-mcp-server/src/mp_mcp_server/prompts.py
-- [x] T127 [US6] Implement funnel_analysis prompt in mp-mcp-server/src/mp_mcp_server/prompts.py
-- [x] T128 [US6] Implement retention_analysis prompt in mp-mcp-server/src/mp_mcp_server/prompts.py
-- [x] T129 [US6] Implement local_analysis_workflow prompt in mp-mcp-server/src/mp_mcp_server/prompts.py
-- [x] T130 [US6] Register prompts in server.py imports in mp-mcp-server/src/mp_mcp_server/server.py
+- [x] T126 [US6] Implement analytics_workflow prompt in mp_mcp/src/mp_mcp/prompts.py
+- [x] T127 [US6] Implement funnel_analysis prompt in mp_mcp/src/mp_mcp/prompts.py
+- [x] T128 [US6] Implement retention_analysis prompt in mp_mcp/src/mp_mcp/prompts.py
+- [x] T129 [US6] Implement local_analysis_workflow prompt in mp_mcp/src/mp_mcp/prompts.py
+- [x] T130 [US6] Register prompts in server.py imports in mp_mcp/src/mp_mcp/server.py
 - [x] T131 [US6] Run prompt tests and verify all pass: just test -k test_prompts
 
 **Checkpoint**: All user stories complete with guided workflows ✅
@@ -291,15 +292,15 @@
 
 ### Tests for CLI
 
-- [x] T132 [P] Write test_cli_runs_server in mp-mcp-server/tests/unit/test_cli.py
-- [x] T133 [P] Write test_cli_accepts_account_option in mp-mcp-server/tests/unit/test_cli.py
-- [x] T134 [P] Write test_cli_accepts_transport_option in mp-mcp-server/tests/unit/test_cli.py
-- [x] T135 [P] Write test_cli_accepts_port_option in mp-mcp-server/tests/unit/test_cli.py
+- [x] T132 [P] Write test_cli_runs_server in mp_mcp/tests/unit/test_cli.py
+- [x] T133 [P] Write test_cli_accepts_account_option in mp_mcp/tests/unit/test_cli.py
+- [x] T134 [P] Write test_cli_accepts_transport_option in mp_mcp/tests/unit/test_cli.py
+- [x] T135 [P] Write test_cli_accepts_port_option in mp_mcp/tests/unit/test_cli.py
 
 ### Implementation for CLI
 
-- [x] T136 Implement CLI entry point with argparse in mp-mcp-server/src/mp_mcp_server/cli.py
-- [x] T137 Verify entry point works: mp-mcp-server --help
+- [x] T136 Implement CLI entry point with argparse in mp_mcp/src/mp_mcp/cli.py
+- [x] T137 Verify entry point works: mp_mcp --help
 - [x] T138 Run CLI tests and verify all pass: just test -k test_cli
 
 ---
@@ -308,12 +309,12 @@
 
 **Purpose**: End-to-end validation with FastMCP in-memory client
 
-- [x] T139 [P] Write test_discovery_workflow integration test in mp-mcp-server/tests/integration/test_server_integration.py
-- [x] T140 [P] Write test_fetch_and_sql_workflow integration test in mp-mcp-server/tests/integration/test_server_integration.py
-- [x] T141 [P] Write test_segmentation_workflow integration test in mp-mcp-server/tests/integration/test_server_integration.py
-- [x] T142 [P] Write test_resource_access integration test in mp-mcp-server/tests/integration/test_server_integration.py
+- [x] T139 [P] Write test_discovery_workflow integration test in mp_mcp/tests/integration/test_server_integration.py
+- [x] T140 [P] Write test_fetch_and_sql_workflow integration test in mp_mcp/tests/integration/test_server_integration.py
+- [x] T141 [P] Write test_segmentation_workflow integration test in mp_mcp/tests/integration/test_server_integration.py
+- [x] T142 [P] Write test_resource_access integration test in mp_mcp/tests/integration/test_server_integration.py
 - [x] T143 Run all integration tests: just test -k test_server_integration
-- [x] T144 Run full test suite: just test mp-mcp-server/tests/
+- [x] T144 Run full test suite: just test mp_mcp/tests/
 
 ---
 
@@ -321,12 +322,12 @@
 
 **Purpose**: Final polish and documentation
 
-- [x] T145 [P] Create README.md with installation and usage in mp-mcp-server/README.md
-- [x] T146 [P] Create claude_desktop_config.json example in mp-mcp-server/claude_desktop_config.json
+- [x] T145 [P] Create README.md with installation and usage in mp_mcp/README.md
+- [x] T146 [P] Create claude_desktop_config.json example in mp_mcp/claude_desktop_config.json
 - [x] T147 Verify quickstart.md steps work end-to-end per specs/020-mcp-server/quickstart.md
 - [x] T148 Run full quality checks: ruff check/format pass
-- [ ] T149 Verify coverage meets 90% threshold: just test-cov mp-mcp-server/tests/
-- [x] T150 [P] Add type stubs or py.typed marker in mp-mcp-server/src/mp_mcp_server/py.typed
+- [ ] T149 Verify coverage meets 90% threshold: just test-cov mp_mcp/tests/
+- [x] T150 [P] Add type stubs or py.typed marker in mp_mcp/src/mp_mcp/py.typed
 
 ---
 

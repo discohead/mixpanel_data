@@ -16,7 +16,7 @@ git clone https://github.com/your-org/mixpanel_data.git
 cd mixpanel_data
 
 # Install the MCP server package
-pip install ./mp-mcp-server
+pip install ./mp_mcp
 ```
 
 ## Configuration
@@ -26,6 +26,7 @@ pip install ./mp-mcp-server
 Choose one of these methods:
 
 **Option A: Environment variables**
+
 ```bash
 export MP_USERNAME="your-service-account-username"
 export MP_SECRET="your-service-account-secret"
@@ -34,6 +35,7 @@ export MP_REGION="us"  # or "eu", "in"
 ```
 
 **Option B: Configuration file**
+
 ```bash
 mkdir -p ~/.mp
 cat > ~/.mp/config.toml << 'EOF'
@@ -56,7 +58,7 @@ Add the MCP server to your Claude Desktop configuration:
 {
   "mcpServers": {
     "mixpanel": {
-      "command": "mp-mcp-server",
+      "command": "mp_mcp",
       "args": []
     }
   }
@@ -64,11 +66,12 @@ Add the MCP server to your Claude Desktop configuration:
 ```
 
 For named accounts:
+
 ```json
 {
   "mcpServers": {
     "mixpanel-prod": {
-      "command": "mp-mcp-server",
+      "command": "mp_mcp",
       "args": ["--account", "production"]
     }
   }
@@ -152,7 +155,7 @@ Claude: [Writes and executes SQL query]
 ### Server not appearing in Claude Desktop
 
 - Verify the config file path is correct
-- Check that `mp-mcp-server` is in your PATH
+- Check that `mp_mcp` is in your PATH
 - Look at Claude Desktop logs for errors
 
 ## Next Steps

@@ -32,6 +32,6 @@
     "pyright-lsp@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
-    "mixpanel-data@mixpanel-data-dev": true
+    "mixpanel-data@mixpanel-data": true
   }
 }

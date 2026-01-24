@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document defines the next generation of `mp-mcp-server` enhancements, transforming it from a thin API wrapper into an **intelligent analytics platform**. The key insight driving this evolution comes from Notion's MCP server: instead of exposing raw primitives, expose **higher-order abstractions** that compose multiple operations into single, meaningful workflows.
+This document defines the next generation of `mp_mcp` enhancements, transforming it from a thin API wrapper into an **intelligent analytics platform**. The key insight driving this evolution comes from Notion's MCP server: instead of exposing raw primitives, expose **higher-order abstractions** that compose multiple operations into single, meaningful workflows.
 
 ### Vision
 
@@ -11,21 +11,22 @@ This document defines the next generation of `mp-mcp-server` enhancements, trans
 Current state: 27 tools that map 1:1 to `Workspace` methods.
 
 Target state: A tiered capability model where:
+
 - **Tier 1 (Primitives)**: Existing 27 tools remain unchanged
 - **Tier 2 (Composed)**: Higher-order tools that orchestrate multiple primitives
 - **Tier 3 (Intelligent)**: Sampling-powered tools that synthesize and recommend
 
 ### Core MCP Features to Leverage
 
-| Feature | Status | Enhancement Opportunity |
-|---------|--------|-------------------------|
-| **Tools** | Implemented (27) | Add composed tools, NL interface |
-| **Resources** | Implemented (6) | Add dynamic templates, cached views |
-| **Prompts** | Implemented (4) | Add framework-embedded expertise |
-| **Sampling** | Not used | Server requests LLM analysis of results |
-| **Elicitation** | Not used | Interactive workflows with user input |
-| **Tasks** | Not used | Progress reporting for long-running operations |
-| **Middleware** | Not used | Caching, rate limiting, audit logging |
+| Feature         | Status           | Enhancement Opportunity                        |
+| --------------- | ---------------- | ---------------------------------------------- |
+| **Tools**       | Implemented (27) | Add composed tools, NL interface               |
+| **Resources**   | Implemented (6)  | Add dynamic templates, cached views            |
+| **Prompts**     | Implemented (4)  | Add framework-embedded expertise               |
+| **Sampling**    | Not used         | Server requests LLM analysis of results        |
+| **Elicitation** | Not used         | Interactive workflows with user input          |
+| **Tasks**       | Not used         | Progress reporting for long-running operations |
+| **Middleware**  | Not used         | Caching, rate limiting, audit logging          |
 
 ---
 
@@ -40,7 +41,7 @@ Target state: A tiered capability model where:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    mp-mcp-server                             │
+│                    mp_mcp                             │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │ Tools (27)  │  Resources (6)  │  Prompts (4)          │  │
 │  └───────────────────────────────────────────────────────┘  │
@@ -68,7 +69,7 @@ Target state: A tiered capability model where:
        └────────────────────┼────────────────────┘
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    mp-mcp-server v2                          │
+│                    mp_mcp v2                          │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │                    Middleware Layer                    │  │
 │  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌──────────┐  │  │
@@ -131,6 +132,7 @@ FastMCP's `ctx.sample()` enables the server to request LLM completions from the 
 **Purpose**: Complete root cause analysis of a metric decline in one tool call.
 
 **Workflow**:
+
 ```
 User asks: "Why did signups drop on Tuesday?"
                     │
@@ -182,8 +184,8 @@ User asks: "Why did signups drop on Tuesday?"
 
 ```python
 from fastmcp import Context
-from mp_mcp_server.server import mcp
-from mp_mcp_server.context import get_workspace
+from mp_mcp.server import mcp
+from mp_mcp.context import get_workspace
 from datetime import datetime, timedelta
 import json
 
@@ -336,6 +338,7 @@ Format your response as JSON with these keys:
 **Purpose**: Complete funnel analysis with actionable recommendations.
 
 **Workflow**:
+
 ```
 1. Run base funnel query
 2. Identify worst-performing step
@@ -470,6 +473,7 @@ Format as JSON with keys:
 **Purpose**: Answer any analytics question using natural language.
 
 **Workflow**:
+
 ```
 User: "Why do mobile users have lower retention?"
                     │
@@ -952,11 +956,11 @@ Composed tools follow the **Notion pattern**: abstract away complexity into sing
 
 The GQM (Goal-Question-Metric) methodology decomposes vague analytics questions into systematic investigations:
 
-| Level | Type | Description |
-|-------|------|-------------|
-| **Goal** | Conceptual | What the user wants to understand or achieve |
-| **Question** | Operational | 3-5 specific, answerable sub-questions |
-| **Metric** | Quantitative | Concrete Mixpanel query for each question |
+| Level        | Type         | Description                                  |
+| ------------ | ------------ | -------------------------------------------- |
+| **Goal**     | Conceptual   | What the user wants to understand or achieve |
+| **Question** | Operational  | 3-5 specific, answerable sub-questions       |
+| **Metric**   | Quantitative | Concrete Mixpanel query for each question    |
 
 ```python
 @mcp.tool
@@ -1923,10 +1927,10 @@ class CachingMiddleware(Middleware):
 
 Mixpanel has different rate limits for different API types:
 
-| API | Rate Limit | Concurrency | Notes |
-|-----|------------|-------------|-------|
-| **Query API** | 60 queries/hour | 5 concurrent | Segmentation, funnel, retention, JQL |
-| **Raw Export API** | 60 queries/hour, 3/second | 100 concurrent | Event/profile fetching |
+| API                | Rate Limit                | Concurrency    | Notes                                |
+| ------------------ | ------------------------- | -------------- | ------------------------------------ |
+| **Query API**      | 60 queries/hour           | 5 concurrent   | Segmentation, funnel, retention, JQL |
+| **Raw Export API** | 60 queries/hour, 3/second | 100 concurrent | Event/profile fetching               |
 
 A 429 error is returned when limits are exceeded.
 
@@ -2099,7 +2103,7 @@ except RateLimitError as e:
 import logging
 from datetime import datetime
 
-logger = logging.getLogger("mp-mcp-audit")
+logger = logging.getLogger("mp_mcp.audit")
 
 class AuditMiddleware(Middleware):
     """Log all tool calls for reproducibility."""
@@ -2181,31 +2185,31 @@ FastMCP v2.14.0 introduced `@mcp.tool(task=True)` for tools that execute asynchr
 
 ### 7.2 When to Use Task-Enabled Tools
 
-| Characteristic | Use `task=True` | Use Regular Tool |
-|----------------|-----------------|------------------|
-| Execution time | > 10 seconds | < 10 seconds |
-| Has progress stages | ✓ | ✗ |
-| User may want to cancel | ✓ | ✗ |
-| Fetches large datasets | ✓ | ✗ |
-| Orchestrates multiple queries | ✓ | ✗ |
+| Characteristic                | Use `task=True` | Use Regular Tool |
+| ----------------------------- | --------------- | ---------------- |
+| Execution time                | > 10 seconds    | < 10 seconds     |
+| Has progress stages           | ✓               | ✗                |
+| User may want to cancel       | ✓               | ✗                |
+| Fetches large datasets        | ✓               | ✗                |
+| Orchestrates multiple queries | ✓               | ✗                |
 
 ### 7.3 Candidate Tools for Task-Enabling
 
-| Tool | Rationale | Progress Pattern |
-|------|-----------|------------------|
-| `fetch_events` | Large date ranges can take minutes | "Fetched day X of Y: N events" |
-| `fetch_profiles` | Profile exports scale with cohort size | "Fetched page X: N profiles" |
-| `gqm_investigation` | Executes 3-5 sequential queries | "Running query X of Y: [question]" |
-| `diagnose_metric_drop` | Multi-step analysis with sampling | "Step X: [analysis phase]" |
-| `product_health_dashboard` | Computes all AARRR metrics | "Computing [A/A/R/R/R] metrics..." |
-| `cohort_comparison` | Multiple comparison dimensions | "Comparing dimension X of Y" |
+| Tool                       | Rationale                              | Progress Pattern                   |
+| -------------------------- | -------------------------------------- | ---------------------------------- |
+| `fetch_events`             | Large date ranges can take minutes     | "Fetched day X of Y: N events"     |
+| `fetch_profiles`           | Profile exports scale with cohort size | "Fetched page X: N profiles"       |
+| `gqm_investigation`        | Executes 3-5 sequential queries        | "Running query X of Y: [question]" |
+| `diagnose_metric_drop`     | Multi-step analysis with sampling      | "Step X: [analysis phase]"         |
+| `product_health_dashboard` | Computes all AARRR metrics             | "Computing [A/A/R/R/R] metrics..." |
+| `cohort_comparison`        | Multiple comparison dimensions         | "Comparing dimension X of Y"       |
 
 ### 7.4 Implementation Pattern
 
 ```python
 from fastmcp import FastMCP, Context
 
-mcp = FastMCP("mp-mcp-server")
+mcp = FastMCP("mp_mcp")
 
 @mcp.tool(task=True)
 async def fetch_events(
@@ -2350,6 +2354,7 @@ async def fetch_events(..., ctx: Context) -> dict:
 ```
 
 **Best practices for cancellation:**
+
 1. Check before expensive operations, not after
 2. Return partial results when cancelled (don't discard work)
 3. Include metadata about how much was completed
@@ -2361,7 +2366,7 @@ For a local MCP server, **in-memory task storage** is sufficient:
 
 ```python
 # Default: in-memory storage (no external dependencies)
-mcp = FastMCP("mp-mcp-server")
+mcp = FastMCP("mp_mcp")
 
 # Optional: Redis for persistence across restarts
 # Only needed if users require:
@@ -2370,7 +2375,7 @@ mcp = FastMCP("mp-mcp-server")
 # - Long-running task recovery
 from docket import Docket
 mcp = FastMCP(
-    "mp-mcp-server",
+    "mp_mcp",
     task_runner=Docket(redis_url="redis://localhost:6379")
 )
 ```
@@ -2381,10 +2386,10 @@ mcp = FastMCP(
 
 Task-enabled tools gracefully degrade for clients that don't support tasks:
 
-| Client Support | Behavior |
-|----------------|----------|
-| **Supports tasks** | Returns `ToolTask` immediately, client polls for progress |
-| **No task support** | Executes synchronously, blocks until complete |
+| Client Support      | Behavior                                                  |
+| ------------------- | --------------------------------------------------------- |
+| **Supports tasks**  | Returns `ToolTask` immediately, client polls for progress |
+| **No task support** | Executes synchronously, blocks until complete             |
 
 The server handles this automatically—no conditional code needed in tool implementations.
 
@@ -2394,22 +2399,22 @@ The server handles this automatically—no conditional code needed in tool imple
 
 ### Priority Matrix
 
-| Enhancement | Value | Effort | Priority |
-|------------|-------|--------|----------|
-| Sampling: `diagnose_metric_drop` | Very High | High | P0 |
-| Sampling: `ask_mixpanel` NL interface | Very High | High | P0 |
-| Composed: `product_health_dashboard` | High | Medium | P1 |
-| Composed: `gqm_investigation` | High | Medium | P1 |
-| Task-enabled: `fetch_events`, `fetch_profiles` | High | Low | P1 |
-| Elicitation: `safe_large_fetch` | Medium | Low | P1 |
-| Task-enabled: composed tools | Medium | Low | P2 |
-| Resource templates (retention, trends) | Medium | Low | P2 |
-| Prompts: AARRR + GQM frameworks | Medium | Low | P2 |
-| Middleware: Caching | Medium | Medium | P2 |
-| Middleware: Rate limiting | High | Medium | P2 |
-| Elicitation: `guided_analysis` | Medium | High | P3 |
-| Composed: `cohort_comparison` | Medium | Medium | P3 |
-| Middleware: Audit logging | Low | Low | P3 |
+| Enhancement                                    | Value     | Effort | Priority |
+| ---------------------------------------------- | --------- | ------ | -------- |
+| Sampling: `diagnose_metric_drop`               | Very High | High   | P0       |
+| Sampling: `ask_mixpanel` NL interface          | Very High | High   | P0       |
+| Composed: `product_health_dashboard`           | High      | Medium | P1       |
+| Composed: `gqm_investigation`                  | High      | Medium | P1       |
+| Task-enabled: `fetch_events`, `fetch_profiles` | High      | Low    | P1       |
+| Elicitation: `safe_large_fetch`                | Medium    | Low    | P1       |
+| Task-enabled: composed tools                   | Medium    | Low    | P2       |
+| Resource templates (retention, trends)         | Medium    | Low    | P2       |
+| Prompts: AARRR + GQM frameworks                | Medium    | Low    | P2       |
+| Middleware: Caching                            | Medium    | Medium | P2       |
+| Middleware: Rate limiting                      | High      | Medium | P2       |
+| Elicitation: `guided_analysis`                 | Medium    | High   | P3       |
+| Composed: `cohort_comparison`                  | Medium    | Medium | P3       |
+| Middleware: Audit logging                      | Low       | Low    | P3       |
 
 ### Phase 8.1: Core Intelligence (Week 1-2)
 
@@ -2422,6 +2427,7 @@ The server handles this automatically—no conditional code needed in tool imple
 5. Documentation for intelligent tools
 
 **Deliverables**:
+
 - 2 new intelligent tools
 - Sampling integration tested
 - Usage examples documented
@@ -2439,6 +2445,7 @@ The server handles this automatically—no conditional code needed in tool imple
 7. Document composed tool and task patterns
 
 **Deliverables**:
+
 - 3 new composed tools
 - 4+ task-enabled tools with progress reporting
 - GQM + AARRR framework integration
@@ -2456,6 +2463,7 @@ The server handles this automatically—no conditional code needed in tool imple
 5. Enhanced prompts with frameworks
 
 **Deliverables**:
+
 - 2 elicitation-enabled tools
 - 5+ new resource templates
 - 3+ framework prompts
@@ -2471,6 +2479,7 @@ The server handles this automatically—no conditional code needed in tool imple
 5. Production deployment documentation
 
 **Deliverables**:
+
 - 3 middleware components
 - Performance benchmarks
 - Deployment guide
@@ -2572,12 +2581,12 @@ async def test_retention_benchmark_with_industry(client):
 
 ### Quantitative
 
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Tool invocation success rate | >95% | Audit logs |
-| Average query response time | <5s for primitives, <30s for composed | Performance monitoring |
-| Sampling fallback usage | <20% | Track fallback invocations |
-| Cache hit rate | >50% for cacheable tools | Cache middleware stats |
+| Metric                       | Target                                | Measurement                |
+| ---------------------------- | ------------------------------------- | -------------------------- |
+| Tool invocation success rate | >95%                                  | Audit logs                 |
+| Average query response time  | <5s for primitives, <30s for composed | Performance monitoring     |
+| Sampling fallback usage      | <20%                                  | Track fallback invocations |
+| Cache hit rate               | >50% for cacheable tools              | Cache middleware stats     |
 
 ### Qualitative
 
@@ -2590,16 +2599,16 @@ async def test_retention_benchmark_with_industry(client):
 
 ## Appendix A: MCP Feature Reference
 
-| Feature | Spec Version | FastMCP Support | Our Usage |
-|---------|--------------|-----------------|-----------|
-| Tools | Core | Full | 27 primitive + N composed |
-| Resources | Core | Full | 6 static + N templates |
-| Prompts | Core | Full | 4 current + N framework |
-| Sampling | 2024-11 | Full | Intelligent tools |
-| Elicitation | 2025-06 | Full | Interactive workflows |
-| Middleware | FastMCP 2.0 | Full | Caching, rate limiting, audit |
-| Progress | Core | Full | Long-running fetches |
-| Cancellation | Core | Full | Abort long operations |
+| Feature      | Spec Version | FastMCP Support | Our Usage                     |
+| ------------ | ------------ | --------------- | ----------------------------- |
+| Tools        | Core         | Full            | 27 primitive + N composed     |
+| Resources    | Core         | Full            | 6 static + N templates        |
+| Prompts      | Core         | Full            | 4 current + N framework       |
+| Sampling     | 2024-11      | Full            | Intelligent tools             |
+| Elicitation  | 2025-06      | Full            | Interactive workflows         |
+| Middleware   | FastMCP 2.0  | Full            | Caching, rate limiting, audit |
+| Progress     | Core         | Full            | Long-running fetches          |
+| Cancellation | Core         | Full            | Abort long operations         |
 
 ---
 
@@ -2699,6 +2708,6 @@ Follow-up questions I can help with:
 
 ---
 
-*Document Version: 1.0*
-*Created: 2026-01-13*
-*Status: Ready for Review*
+_Document Version: 1.0_
+_Created: 2026-01-13_
+_Status: Ready for Review_

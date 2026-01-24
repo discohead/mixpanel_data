@@ -4,16 +4,18 @@
 
 ## Overview
 
-This document consolidates research findings for implementing intelligent tools, elicitation workflows, task-enabled operations, and middleware in the `mp-mcp-server` using FastMCP 2.x APIs.
+This document consolidates research findings for implementing intelligent tools, elicitation workflows, task-enabled operations, and middleware in the `mp_mcp` using FastMCP 2.x APIs.
 
 ---
 
 ## 1. Sampling API (`ctx.sample()`)
 
 ### Decision
+
 Use FastMCP's built-in `ctx.sample()` method for LLM synthesis in intelligent tools, with graceful degradation when sampling is unavailable.
 
 ### Rationale
+
 - FastMCP 2.x provides native sampling support via `ctx.sample()`
 - Structured output via `result_type` enables reliable JSON parsing
 - Built-in fallback handler support enables graceful degradation
@@ -36,6 +38,7 @@ async def sample(
 ```
 
 ### Return Value
+
 - `SamplingResult.text`: Raw text response
 - `SamplingResult.result`: Typed result (when `result_type` specified)
 - `SamplingResult.history`: All messages exchanged
@@ -89,6 +92,7 @@ async def diagnose_metric_drop(event: str, date: str, ctx: Context) -> dict:
 ```
 
 ### Alternatives Considered
+
 1. **Direct Anthropic API calls**: Rejected because it requires API key management and doesn't integrate with MCP client capabilities.
 2. **No sampling at all**: Rejected because it defeats the purpose of intelligent tools.
 
@@ -97,9 +101,11 @@ async def diagnose_metric_drop(event: str, date: str, ctx: Context) -> dict:
 ## 2. Elicitation API (`ctx.elicit()`)
 
 ### Decision
+
 Use FastMCP's `ctx.elicit()` for interactive workflows requiring user input mid-execution.
 
 ### Rationale
+
 - Native MCP protocol support for structured user input
 - Type-safe response handling via dataclasses/Pydantic models
 - Clean handling of accept/decline/cancel actions
@@ -115,6 +121,7 @@ async def elicit(
 ```
 
 ### Response Types Supported
+
 1. **Scalar types**: `str`, `int`, `bool`
 2. **No response**: `None` (approval only)
 3. **Constrained options**: `["option1", "option2"]` or `Literal["a", "b"]`
@@ -175,6 +182,7 @@ async def safe_large_fetch(from_date: str, to_date: str, ctx: Context) -> dict:
 ```
 
 ### Alternatives Considered
+
 1. **Always require limit parameter**: Rejected because it burdens users with estimation.
 2. **Automatic chunking without confirmation**: Rejected because it doesn't give user control.
 
@@ -183,9 +191,11 @@ async def safe_large_fetch(from_date: str, to_date: str, ctx: Context) -> dict:
 ## 3. Task-Enabled Tools (`@mcp.tool(task=True)`)
 
 ### Decision
+
 Use FastMCP's task system with `Progress` dependency for long-running operations.
 
 ### Rationale
+
 - Native progress reporting via MCP protocol
 - Built-in cancellation handling via `asyncio.CancelledError`
 - In-memory task storage sufficient for single-server deployment
@@ -251,10 +261,12 @@ async def fetch_events(...) -> dict:
 ```
 
 ### Fallback Behavior
+
 - Clients that don't support tasks receive synchronous execution
 - No code changes needed for fallback
 
 ### Alternatives Considered
+
 1. **Redis-backed task storage (Docket)**: Rejected per user requirement for in-memory only.
 2. **Manual threading**: Rejected because FastMCP provides native support.
 
@@ -263,22 +275,24 @@ async def fetch_events(...) -> dict:
 ## 4. Middleware Layer
 
 ### Decision
+
 Use FastMCP's built-in middleware classes for caching, rate limiting, and logging.
 
 ### Rationale
+
 - Native integration with MCP request lifecycle
 - Pre-built implementations available for common use cases
 - Composable middleware chain
 
 ### Available Middleware Classes
 
-| Middleware | Purpose | Import Path |
-|------------|---------|-------------|
-| `ResponseCachingMiddleware` | Cache tool/resource results | `fastmcp.server.middleware.caching` |
-| `RateLimitingMiddleware` | Token bucket rate limiting | `fastmcp.server.middleware.rate_limiting` |
-| `SlidingWindowRateLimitingMiddleware` | Time-window rate limiting | `fastmcp.server.middleware.rate_limiting` |
-| `LoggingMiddleware` | Human-readable audit logs | `fastmcp.server.middleware.logging` |
-| `StructuredLoggingMiddleware` | JSON-structured logs | `fastmcp.server.middleware.logging` |
+| Middleware                            | Purpose                     | Import Path                               |
+| ------------------------------------- | --------------------------- | ----------------------------------------- |
+| `ResponseCachingMiddleware`           | Cache tool/resource results | `fastmcp.server.middleware.caching`       |
+| `RateLimitingMiddleware`              | Token bucket rate limiting  | `fastmcp.server.middleware.rate_limiting` |
+| `SlidingWindowRateLimitingMiddleware` | Time-window rate limiting   | `fastmcp.server.middleware.rate_limiting` |
+| `LoggingMiddleware`                   | Human-readable audit logs   | `fastmcp.server.middleware.logging`       |
+| `StructuredLoggingMiddleware`         | JSON-structured logs        | `fastmcp.server.middleware.logging`       |
 
 ### Middleware Registration Order
 
@@ -317,6 +331,7 @@ mcp.add_middleware(ResponseCachingMiddleware(
 ### Rate Limiting for Mixpanel API Limits
 
 **Mixpanel Rate Limits**:
+
 - Query API: 60 queries/hour, 5 concurrent
 - Export API: 60 queries/hour, 3/second, 100 concurrent
 
@@ -355,6 +370,7 @@ class MixpanelRateLimitMiddleware(Middleware):
 ```
 
 ### Alternatives Considered
+
 1. **External rate limiting (nginx/envoy)**: Rejected because it adds deployment complexity.
 2. **No rate limiting**: Rejected because it risks API quota exhaustion.
 
@@ -363,6 +379,7 @@ class MixpanelRateLimitMiddleware(Middleware):
 ## 5. Dynamic Resources
 
 ### Decision
+
 Use FastMCP's parameterized resource templates for dynamic analytics views.
 
 ### Implementation Pattern
@@ -382,6 +399,7 @@ async def retention_weekly(event: str, ctx: Context) -> str:
 ```
 
 ### Resource Templates to Implement
+
 - `analysis://retention/{event}/weekly`
 - `analysis://trends/{event}/{days}`
 - `users://{distinct_id}/journey`
@@ -393,6 +411,7 @@ async def retention_weekly(event: str, ctx: Context) -> str:
 ## 6. Framework Prompts
 
 ### Decision
+
 Extend existing prompts with GQM, AARRR, experiment analysis, and data quality frameworks.
 
 ### Implementation Pattern
@@ -424,17 +443,17 @@ Now investigate: {goal}
 
 ## Summary of Technology Choices
 
-| Capability | FastMCP Feature | Version Required |
-|------------|-----------------|------------------|
-| LLM Sampling | `ctx.sample()` | 2.0.0+ |
-| Structured Sampling | `result_type` param | 2.14.1+ |
-| User Elicitation | `ctx.elicit()` | 2.x |
-| Task Execution | `@mcp.tool(task=True)` | 2.x |
-| Progress Reporting | `Progress` dependency | 2.x |
-| Middleware | `Middleware` base class | 2.9.0+ |
-| Built-in Caching | `ResponseCachingMiddleware` | 2.9.0+ |
-| Built-in Rate Limiting | `RateLimitingMiddleware` | 2.9.0+ |
-| Built-in Logging | `LoggingMiddleware` | 2.9.0+ |
+| Capability             | FastMCP Feature             | Version Required |
+| ---------------------- | --------------------------- | ---------------- |
+| LLM Sampling           | `ctx.sample()`              | 2.0.0+           |
+| Structured Sampling    | `result_type` param         | 2.14.1+          |
+| User Elicitation       | `ctx.elicit()`              | 2.x              |
+| Task Execution         | `@mcp.tool(task=True)`      | 2.x              |
+| Progress Reporting     | `Progress` dependency       | 2.x              |
+| Middleware             | `Middleware` base class     | 2.9.0+           |
+| Built-in Caching       | `ResponseCachingMiddleware` | 2.9.0+           |
+| Built-in Rate Limiting | `RateLimitingMiddleware`    | 2.9.0+           |
+| Built-in Logging       | `LoggingMiddleware`         | 2.9.0+           |
 
 **Minimum FastMCP Version**: 2.14.1 (for structured sampling support)
 
@@ -442,9 +461,9 @@ Now investigate: {goal}
 
 ## Open Questions Resolved
 
-| Question | Resolution |
-|----------|------------|
+| Question                        | Resolution                                                       |
+| ------------------------------- | ---------------------------------------------------------------- |
 | How to detect sampling support? | Use try/except; fallback handlers only configure server-side LLM |
-| In-memory vs Redis for tasks? | In-memory per user requirement |
-| Separate rate limiters per API? | Custom middleware needed for Mixpanel's dual-limit structure |
-| Feature flags for Tier 2/3? | No flags; all tools always available per user requirement |
+| In-memory vs Redis for tasks?   | In-memory per user requirement                                   |
+| Separate rate limiters per API? | Custom middleware needed for Mixpanel's dual-limit structure     |
+| Feature flags for Tier 2/3?     | No flags; all tools always available per user requirement        |

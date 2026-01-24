@@ -7,14 +7,14 @@ on:
     paths:
       - "src/**"
       - "tests/**"
-      - "mp-mcp-server/**"
+      - "mp_mcp/**"
   pull_request:
     branches:
       - main
     paths:
       - "src/**"
       - "tests/**"
-      - "mp-mcp-server/**"
+      - "mp_mcp/**"
 
 jobs:
   test:
@@ -93,22 +93,22 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Sync MCP server dependencies
-        run: cd mp-mcp-server && uv sync --all-extras
+        run: cd mp_mcp && uv sync --all-extras
 
       - name: Lint MCP server with ruff
-        run: cd mp-mcp-server && uv run ruff check src/ tests/
+        run: cd mp_mcp && uv run ruff check src/ tests/
 
       - name: Type check MCP server with mypy
-        run: cd mp-mcp-server && uv run mypy src/ tests/
+        run: cd mp_mcp && uv run mypy src/ tests/
 
       - name: Run MCP server tests with pytest
         if: matrix.python-version != '3.12'
-        run: cd mp-mcp-server && uv run pytest
+        run: cd mp_mcp && uv run pytest
 
       - name: Run MCP server tests with coverage (Python 3.12 only)
         if: matrix.python-version == '3.12'
-        run: cd mp-mcp-server && uv run pytest --cov=src/mp_mcp_server --cov-report=term-missing --cov-fail-under=90
+        run: cd mp_mcp && uv run pytest --cov=src/mp_mcp --cov-report=term-missing --cov-fail-under=90
 
       - name: Build MCP server package
         if: matrix.python-version == '3.12'
-        run: cd mp-mcp-server && uv build
+        run: cd mp_mcp && uv build

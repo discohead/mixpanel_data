@@ -5,7 +5,8 @@
 
 ## Summary
 
-Transform the existing `mp-mcp-server` from a thin API wrapper (27 primitive tools) into an intelligent analytics platform with:
+Transform the existing `mp_mcp` from a thin API wrapper (27 primitive tools) into an intelligent analytics platform with:
+
 - **Tier 3**: Sampling-powered intelligent tools (`diagnose_metric_drop`, `ask_mixpanel`, `funnel_optimization_report`) using `ctx.sample()` for LLM synthesis with graceful degradation
 - **Tier 2**: Composed tools (`gqm_investigation`, `product_health_dashboard`, `cohort_comparison`) orchestrating multiple primitives
 - **Interactive**: Elicitation workflows (`guided_analysis`, `safe_large_fetch`) using `ctx.elicit()`
@@ -21,26 +22,27 @@ Transform the existing `mp-mcp-server` from a thin API wrapper (27 primitive too
 **Storage**: DuckDB (via mixpanel_data.Workspace), in-memory for middleware caches
 **Testing**: pytest, pytest-asyncio, pytest-cov, mypy --strict
 **Target Platform**: Local MCP server (stdio transport for Claude Desktop, SSE for web clients)
-**Project Type**: Single project (extending existing mp-mcp-server)
+**Project Type**: Single project (extending existing mp_mcp)
 **Performance Goals**: <5s for primitive tools, <30s for composed tools, <60s for intelligent tools with sampling
 **Constraints**: In-memory storage only (no Redis), graceful degradation when sampling unavailable
 **Scale/Scope**: Single-server deployment, 27 existing tools + ~15 new tools
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+_GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
-| Principle | Status | Notes |
-|-----------|--------|-------|
-| I. Library-First | **PASS** | MCP server wraps `mixpanel_data` library; all logic in library or composed from it |
-| II. Agent-Native Design | **PASS** | All tools produce structured JSON output; no interactive prompts in default path |
-| III. Context Window Efficiency | **PASS** | Intelligent tools synthesize results to reduce token usage vs. raw data dumps |
-| IV. Two Data Paths | **PASS** | Live queries via Mixpanel API; local analysis via DuckDB; both paths supported |
-| V. Explicit Over Implicit | **PASS** | No magic; explicit table management, explicit degradation behavior |
-| VI. Unix Philosophy | **PASS** | Tools compose; middleware is separate concern; single responsibility |
-| VII. Secure by Default | **PASS** | Credentials managed by mixpanel_data config; no secrets in logs or output |
+| Principle                      | Status   | Notes                                                                              |
+| ------------------------------ | -------- | ---------------------------------------------------------------------------------- |
+| I. Library-First               | **PASS** | MCP server wraps `mixpanel_data` library; all logic in library or composed from it |
+| II. Agent-Native Design        | **PASS** | All tools produce structured JSON output; no interactive prompts in default path   |
+| III. Context Window Efficiency | **PASS** | Intelligent tools synthesize results to reduce token usage vs. raw data dumps      |
+| IV. Two Data Paths             | **PASS** | Live queries via Mixpanel API; local analysis via DuckDB; both paths supported     |
+| V. Explicit Over Implicit      | **PASS** | No magic; explicit table management, explicit degradation behavior                 |
+| VI. Unix Philosophy            | **PASS** | Tools compose; middleware is separate concern; single responsibility               |
+| VII. Secure by Default         | **PASS** | Credentials managed by mixpanel_data config; no secrets in logs or output          |
 
 **Technology Stack Compliance**:
+
 - Python 3.10+: ✅
 - Pydantic v2: ✅ (used by FastMCP)
 - DuckDB: ✅ (via mixpanel_data)
@@ -50,17 +52,17 @@ Transform the existing `mp-mcp-server` from a thin API wrapper (27 primitive too
 
 ### Post-Design Re-evaluation
 
-*Re-checked after Phase 1 design artifacts (data-model.md, contracts/tools.yaml, quickstart.md).*
+_Re-checked after Phase 1 design artifacts (data-model.md, contracts/tools.yaml, quickstart.md)._
 
-| Principle | Status | Phase 1 Verification |
-|-----------|--------|---------------------|
-| I. Library-First | **PASS** | All data types support Workspace method results |
-| II. Agent-Native Design | **PASS** | All result types are structured dataclasses with JSON serialization |
-| III. Context Window Efficiency | **PASS** | AnalysisResult includes synthesis fields to reduce token usage |
-| IV. Two Data Paths | **PASS** | Tool contracts support both live and local query modes |
-| V. Explicit Over Implicit | **PASS** | Status fields explicitly indicate success/partial/sampling_unavailable |
-| VI. Unix Philosophy | **PASS** | Each tool has single responsibility; composed tools orchestrate |
-| VII. Secure by Default | **PASS** | No credential fields in data models; raw_data excludes secrets |
+| Principle                      | Status   | Phase 1 Verification                                                   |
+| ------------------------------ | -------- | ---------------------------------------------------------------------- |
+| I. Library-First               | **PASS** | All data types support Workspace method results                        |
+| II. Agent-Native Design        | **PASS** | All result types are structured dataclasses with JSON serialization    |
+| III. Context Window Efficiency | **PASS** | AnalysisResult includes synthesis fields to reduce token usage         |
+| IV. Two Data Paths             | **PASS** | Tool contracts support both live and local query modes                 |
+| V. Explicit Over Implicit      | **PASS** | Status fields explicitly indicate success/partial/sampling_unavailable |
+| VI. Unix Philosophy            | **PASS** | Each tool has single responsibility; composed tools orchestrate        |
+| VII. Secure by Default         | **PASS** | No credential fields in data models; raw_data excludes secrets         |
 
 **POST-DESIGN RESULT**: PASS - Design phase introduces no violations.
 
@@ -81,8 +83,8 @@ specs/021-mcp-server-v2/
 ### Source Code (repository root)
 
 ```text
-mp-mcp-server/
-├── src/mp_mcp_server/
+mp_mcp/
+├── src/mp_mcp/
 │   ├── __init__.py
 │   ├── server.py                    # FastMCP server with lifespan
 │   ├── cli.py                       # CLI entry point
@@ -134,5 +136,5 @@ mp-mcp-server/
 > No Constitution violations to justify.
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| *None* | - | - |
+| --------- | ---------- | ------------------------------------ |
+| _None_    | -          | -                                    |

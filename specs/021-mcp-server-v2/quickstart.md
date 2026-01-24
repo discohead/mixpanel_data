@@ -4,7 +4,7 @@
 
 ## Overview
 
-This guide helps developers get started implementing intelligent tools, middleware, and enhanced resources for the `mp-mcp-server`.
+This guide helps developers get started implementing intelligent tools, middleware, and enhanced resources for the `mp_mcp`.
 
 ---
 
@@ -27,12 +27,12 @@ uv pip show fastmcp | grep Version
 
 ### Tool Tiers
 
-| Tier | Description | Key API |
-|------|-------------|---------|
-| **Tier 1** | Primitive tools (existing 27) | Direct Workspace calls |
-| **Tier 2** | Composed tools | Orchestrate multiple Tier 1 |
-| **Tier 3** | Intelligent tools | `ctx.sample()` for LLM synthesis |
-| **Interactive** | Elicitation workflows | `ctx.elicit()` for user input |
+| Tier            | Description                   | Key API                          |
+| --------------- | ----------------------------- | -------------------------------- |
+| **Tier 1**      | Primitive tools (existing 27) | Direct Workspace calls           |
+| **Tier 2**      | Composed tools                | Orchestrate multiple Tier 1      |
+| **Tier 3**      | Intelligent tools             | `ctx.sample()` for LLM synthesis |
+| **Interactive** | Elicitation workflows         | `ctx.elicit()` for user input    |
 
 ### Graceful Degradation Pattern
 
@@ -197,7 +197,7 @@ mcp.add_middleware(ResponseCachingMiddleware(
 New code goes in these directories:
 
 ```
-mp-mcp-server/src/mp_mcp_server/
+mp_mcp/src/mp_mcp/
 ├── tools/
 │   ├── intelligent/          # Tier 3 tools (sampling-powered)
 │   │   ├── __init__.py
@@ -274,7 +274,7 @@ async def test_diagnose_metric_drop_without_sampling(mock_context, mock_workspac
 ### Getting Workspace from Context
 
 ```python
-from mp_mcp_server.context import get_workspace
+from mp_mcp.context import get_workspace
 
 @mcp.tool
 async def my_tool(ctx: Context) -> dict:
@@ -297,7 +297,7 @@ def default_date_range(days_back: int = 30) -> tuple[str, str]:
 ### Error Handling
 
 ```python
-from mp_mcp_server.errors import MixpanelError, AuthenticationError
+from mp_mcp.errors import MixpanelError, AuthenticationError
 
 @mcp.tool
 async def my_tool(ctx: Context) -> dict:
@@ -318,4 +318,4 @@ async def my_tool(ctx: Context) -> dict:
 2. Review [data-model.md](data-model.md) for result type definitions
 3. Review [contracts/tools.yaml](contracts/tools.yaml) for tool schemas
 4. Run `just check` to verify environment setup
-5. Start implementation following existing patterns in `mp-mcp-server/`
+5. Start implementation following existing patterns in `mp_mcp/`

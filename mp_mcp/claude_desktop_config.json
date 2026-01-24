@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mixpanel": {
+      "command": "mp_mcp",
+      "args": []
+    }
+  }
+}

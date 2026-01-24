@@ -93,6 +93,12 @@ plugins:
         CLI Reference:
           - cli/index.md
           - cli/commands.md
+        MCP Server:
+          - mcp/index.md
+          - mcp/installation.md
+          - mcp/tools.md
+          - mcp/resources.md
+          - mcp/examples.md
         Architecture:
           - architecture/design.md
           - architecture/data-model.md
@@ -143,6 +149,12 @@ plugins:
         CLI Reference:
           - cli/index.md: "CLI overview and output formats"
           - cli/commands.md: "Complete command reference"
+        MCP Server:
+          - mcp/index.md: "MCP server overview for AI assistants"
+          - mcp/installation.md: "Install and configure for Claude Desktop"
+          - mcp/tools.md: "Complete tool reference (39 tools)"
+          - mcp/resources.md: "MCP resources and workflow prompts"
+          - mcp/examples.md: "Example conversations and workflows"
         Architecture:
           - architecture/design.md: "Layered architecture and services"
           - architecture/data-model.md: "Event and profile data model"
@@ -184,6 +196,12 @@ nav:
   - CLI Reference:
       - Overview: cli/index.md
       - Commands: cli/commands.md
+  - MCP Server:
+      - Overview: mcp/index.md
+      - Installation: mcp/installation.md
+      - Tools: mcp/tools.md
+      - Resources & Prompts: mcp/resources.md
+      - Examples: mcp/examples.md
   - Architecture:
       - Design: architecture/design.md
       - Data Model: architecture/data-model.md
