@@ -38,6 +38,30 @@ class TestCohortHelpers:
         assert "cohort_a" in jql
         assert "cohort_b" in jql
 
+    def test_build_event_comparison_jql_with_event_selector(self) -> None:
+        """_build_event_comparison_jql should include event_selectors when event provided."""
+        from mp_mcp_server.tools.composed.cohort import _build_event_comparison_jql
+
+        jql = _build_event_comparison_jql(
+            cohort_a_filter='properties["cluster"] == "prod-1"',
+            cohort_b_filter='properties["cluster"] == "prod-2"',
+            event="sql-query",
+        )
+        assert "function main()" in jql
+        assert 'event_selectors: [{event: "sql-query"}]' in jql
+        assert "cohort_a" in jql
+        assert "cohort_b" in jql
+
+    def test_build_event_comparison_jql_without_event_selector(self) -> None:
+        """_build_event_comparison_jql should not include event_selectors when no event."""
+        from mp_mcp_server.tools.composed.cohort import _build_event_comparison_jql
+
+        jql = _build_event_comparison_jql(
+            cohort_a_filter='properties["sessions"] >= 10',
+            cohort_b_filter='properties["sessions"] < 3',
+        )
+        assert "event_selectors" not in jql
+
     def test_build_user_comparison_jql(self) -> None:
         """_build_user_comparison_jql should generate valid JQL."""
         from mp_mcp_server.tools.composed.cohort import _build_user_comparison_jql
@@ -48,6 +72,30 @@ class TestCohortHelpers:
         )
         assert "function main()" in jql
         assert "groupByUser" in jql
+
+    def test_build_user_comparison_jql_with_event_selector(self) -> None:
+        """_build_user_comparison_jql should include event_selectors when event provided."""
+        from mp_mcp_server.tools.composed.cohort import _build_user_comparison_jql
+
+        jql = _build_user_comparison_jql(
+            cohort_a_filter='properties["cluster"] == "prod-1"',
+            cohort_b_filter='properties["cluster"] == "prod-2"',
+            event="signup",
+        )
+        assert 'event_selectors: [{event: "signup"}]' in jql
+
+    def test_build_user_comparison_jql_has_final_aggregation(self) -> None:
+        """_build_user_comparison_jql should have final groupBy for cohort aggregation."""
+        from mp_mcp_server.tools.composed.cohort import _build_user_comparison_jql
+
+        jql = _build_user_comparison_jql(
+            cohort_a_filter='properties["country"] == "US"',
+            cohort_b_filter='properties["country"] == "EU"',
+        )
+        # Verify final aggregation is present (aggregates users to cohort counts)
+        assert ".groupBy([function(r)" in jql
+        assert "return r.key[0]" in jql
+        assert "mixpanel.reducer.count()" in jql
 
     def test_parse_event_comparison_results_empty(self) -> None:
         """_parse_event_comparison_results should handle empty results."""
@@ -311,13 +359,13 @@ class TestDashboardComputeFunctions:
         from mp_mcp_server.tools.composed.dashboard import _compute_acquisition
 
         # Set up mock segmentation response with series data
-        mock_context.lifespan_context["workspace"].segmentation.return_value = (
-            MagicMock(
-                to_dict=lambda: {
-                    "total": 1500,
-                    "series": {"signup": {"2024-01-01": 100, "2024-01-02": 150}},
-                }
-            )
+        mock_context.lifespan_context[
+            "workspace"
+        ].segmentation.return_value = MagicMock(
+            to_dict=lambda: {
+                "total": 1500,
+                "series": {"signup": {"2024-01-01": 100, "2024-01-02": 150}},
+            }
         )
 
         result = _compute_acquisition(
@@ -334,16 +382,16 @@ class TestDashboardComputeFunctions:
         """_compute_acquisition should support segmentation."""
         from mp_mcp_server.tools.composed.dashboard import _compute_acquisition
 
-        mock_context.lifespan_context["workspace"].segmentation.return_value = (
-            MagicMock(
-                to_dict=lambda: {
-                    "total": 1500,
-                    "series": {
-                        "Chrome": {"2024-01-01": 100, "2024-01-02": 150},
-                        "Firefox": {"2024-01-01": 50, "2024-01-02": 75},
-                    },
-                }
-            )
+        mock_context.lifespan_context[
+            "workspace"
+        ].segmentation.return_value = MagicMock(
+            to_dict=lambda: {
+                "total": 1500,
+                "series": {
+                    "Chrome": {"2024-01-01": 100, "2024-01-02": 150},
+                    "Firefox": {"2024-01-01": 50, "2024-01-02": 75},
+                },
+            }
         )
 
         result = _compute_acquisition(
@@ -361,8 +409,8 @@ class TestDashboardComputeFunctions:
         """_compute_acquisition should handle errors gracefully."""
         from mp_mcp_server.tools.composed.dashboard import _compute_acquisition
 
-        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
-            Exception("API error")
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = Exception(
+            "API error"
         )
 
         result = _compute_acquisition(
@@ -381,13 +429,13 @@ class TestDashboardComputeFunctions:
         """_compute_activation should compute activation rate."""
         from mp_mcp_server.tools.composed.dashboard import _compute_activation
 
-        mock_context.lifespan_context["workspace"].segmentation.return_value = (
-            MagicMock(
-                to_dict=lambda: {
-                    "total": 1000,
-                    "series": {"event": {"2024-01-01": 100}},
-                }
-            )
+        mock_context.lifespan_context[
+            "workspace"
+        ].segmentation.return_value = MagicMock(
+            to_dict=lambda: {
+                "total": 1000,
+                "series": {"event": {"2024-01-01": 100}},
+            }
         )
 
         result = _compute_activation(
@@ -406,8 +454,8 @@ class TestDashboardComputeFunctions:
         """_compute_activation should handle errors gracefully."""
         from mp_mcp_server.tools.composed.dashboard import _compute_activation
 
-        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
-            Exception("API error")
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = Exception(
+            "API error"
         )
 
         result = _compute_activation(
@@ -425,14 +473,12 @@ class TestDashboardComputeFunctions:
         """_compute_retention should compute retention metrics."""
         from mp_mcp_server.tools.composed.dashboard import _compute_retention
 
-        mock_context.lifespan_context["workspace"].retention.return_value = (
-            MagicMock(
-                to_dict=lambda: {
-                    "data": {
-                        "cohort1": {7: 0.25},
-                    }
+        mock_context.lifespan_context["workspace"].retention.return_value = MagicMock(
+            to_dict=lambda: {
+                "data": {
+                    "cohort1": {7: 0.25},
                 }
-            )
+            }
         )
 
         result = _compute_retention(
@@ -448,8 +494,8 @@ class TestDashboardComputeFunctions:
         """_compute_retention should handle errors gracefully."""
         from mp_mcp_server.tools.composed.dashboard import _compute_retention
 
-        mock_context.lifespan_context["workspace"].retention.side_effect = (
-            Exception("API error")
+        mock_context.lifespan_context["workspace"].retention.side_effect = Exception(
+            "API error"
         )
 
         result = _compute_retention(
@@ -465,13 +511,13 @@ class TestDashboardComputeFunctions:
         """_compute_revenue should compute revenue metrics."""
         from mp_mcp_server.tools.composed.dashboard import _compute_revenue
 
-        mock_context.lifespan_context["workspace"].segmentation.return_value = (
-            MagicMock(
-                to_dict=lambda: {
-                    "total": 5000,
-                    "series": {"purchase": {"2024-01-01": 500}},
-                }
-            )
+        mock_context.lifespan_context[
+            "workspace"
+        ].segmentation.return_value = MagicMock(
+            to_dict=lambda: {
+                "total": 5000,
+                "series": {"purchase": {"2024-01-01": 500}},
+            }
         )
 
         result = _compute_revenue(
@@ -502,8 +548,8 @@ class TestDashboardComputeFunctions:
         """_compute_revenue should handle errors gracefully."""
         from mp_mcp_server.tools.composed.dashboard import _compute_revenue
 
-        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
-            Exception("API error")
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = Exception(
+            "API error"
         )
 
         result = _compute_revenue(
@@ -520,13 +566,13 @@ class TestDashboardComputeFunctions:
         """_compute_referral should compute referral metrics."""
         from mp_mcp_server.tools.composed.dashboard import _compute_referral
 
-        mock_context.lifespan_context["workspace"].segmentation.return_value = (
-            MagicMock(
-                to_dict=lambda: {
-                    "total": 200,
-                    "series": {"invite_sent": {"2024-01-01": 50}},
-                }
-            )
+        mock_context.lifespan_context[
+            "workspace"
+        ].segmentation.return_value = MagicMock(
+            to_dict=lambda: {
+                "total": 200,
+                "series": {"invite_sent": {"2024-01-01": 50}},
+            }
         )
 
         result = _compute_referral(
@@ -557,8 +603,8 @@ class TestDashboardComputeFunctions:
         """_compute_referral should handle errors gracefully."""
         from mp_mcp_server.tools.composed.dashboard import _compute_referral
 
-        mock_context.lifespan_context["workspace"].segmentation.side_effect = (
-            Exception("API error")
+        mock_context.lifespan_context["workspace"].segmentation.side_effect = Exception(
+            "API error"
         )
 
         result = _compute_referral(
@@ -672,9 +718,7 @@ class TestHealthScoreEdgeCases:
         # Low retention
         dashboard = ProductHealthDashboard(
             period={"from_date": "2024-01-01", "to_date": "2024-01-31"},
-            retention=AARRRMetrics(
-                category="retention", primary_metric=0.15, trend={}
-            ),
+            retention=AARRRMetrics(category="retention", primary_metric=0.15, trend={}),
         )
         scores = _compute_health_score(dashboard)
         assert scores["retention"] == 5
@@ -907,8 +951,8 @@ class TestCohortComparison:
         """cohort_comparison should handle JQL errors."""
         from mp_mcp_server.tools.composed.cohort import cohort_comparison
 
-        mock_context.lifespan_context["workspace"].jql.side_effect = (
-            Exception("JQL error")
+        mock_context.lifespan_context["workspace"].jql.side_effect = Exception(
+            "JQL error"
         )
 
         result = cohort_comparison(  # type: ignore[operator]

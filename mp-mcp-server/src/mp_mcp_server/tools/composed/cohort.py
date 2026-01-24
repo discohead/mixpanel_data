@@ -44,6 +44,7 @@ def _get_default_date_range(days_back: int = 30) -> tuple[str, str]:
 def _build_event_comparison_jql(
     cohort_a_filter: str,
     cohort_b_filter: str,
+    event: str | None = None,
 ) -> str:
     """Build JQL script for event frequency comparison.
 
@@ -53,6 +54,8 @@ def _build_event_comparison_jql(
     Args:
         cohort_a_filter: JavaScript filter expression for cohort A.
         cohort_b_filter: JavaScript filter expression for cohort B.
+        event: Optional event name to scope the query. Recommended for
+            high-volume projects to avoid timeouts.
 
     Returns:
         JQL script string.
@@ -63,11 +66,16 @@ def _build_event_comparison_jql(
     filter_a = cohort_a_filter.replace('properties["', 'event.properties["')
     filter_b = cohort_b_filter.replace('properties["', 'event.properties["')
 
+    # Build event selector if provided (improves performance on high-volume projects)
+    event_selector = ""
+    if event:
+        event_selector = f',\n    event_selectors: [{{event: "{event}"}}]'
+
     return f"""
 function main() {{
   return Events({{
     from_date: params.from_date,
-    to_date: params.to_date
+    to_date: params.to_date{event_selector}
   }})
   .filter(function(event) {{
     var inA = {filter_a};
@@ -86,15 +94,19 @@ function main() {{
 def _build_user_comparison_jql(
     cohort_a_filter: str,
     cohort_b_filter: str,
+    event: str | None = None,
 ) -> str:
     """Build JQL script for unique user comparison.
 
     Creates a JQL script that counts unique users per cohort,
-    providing a retention/engagement proxy.
+    providing a retention/engagement proxy. The query aggregates
+    to cohort-level counts (2-3 rows) to avoid result size limits.
 
     Args:
         cohort_a_filter: JavaScript filter expression for cohort A.
         cohort_b_filter: JavaScript filter expression for cohort B.
+        event: Optional event name to scope the query. Required for
+            high-volume projects to avoid timeouts.
 
     Returns:
         JQL script string.
@@ -103,11 +115,16 @@ def _build_user_comparison_jql(
     filter_a = cohort_a_filter.replace('properties["', 'event.properties["')
     filter_b = cohort_b_filter.replace('properties["', 'event.properties["')
 
+    # Build event selector if provided (improves performance on high-volume projects)
+    event_selector = ""
+    if event:
+        event_selector = f',\n    event_selectors: [{{event: "{event}"}}]'
+
     return f"""
 function main() {{
   return Events({{
     from_date: params.from_date,
-    to_date: params.to_date
+    to_date: params.to_date{event_selector}
   }})
   .filter(function(event) {{
     var inA = {filter_a};
@@ -118,7 +135,8 @@ function main() {{
     if ({filter_a}) return "cohort_a";
     if ({filter_b}) return "cohort_b";
     return "other";
-  }}], mixpanel.reducer.count());
+  }}], mixpanel.reducer.count())
+  .groupBy([function(r) {{ return r.key[0]; }}], mixpanel.reducer.count());
 }}
 """
 
@@ -163,33 +181,39 @@ def _parse_event_comparison_results(
         if a_count > 0 and b_count > 0:
             ratio = a_count / b_count
             if ratio > 1.5 or ratio < 0.67:
-                differences.append({
+                differences.append(
+                    {
+                        "event": event,
+                        "cohort_a_count": a_count,
+                        "cohort_b_count": b_count,
+                        "ratio": round(ratio, 2),
+                        "interpretation": (
+                            f"Cohort A has {ratio:.1f}x more {event} events"
+                            if ratio > 1
+                            else f"Cohort B has {1 / ratio:.1f}x more {event} events"
+                        ),
+                    }
+                )
+        elif a_count > 0 and b_count == 0:
+            differences.append(
+                {
                     "event": event,
                     "cohort_a_count": a_count,
-                    "cohort_b_count": b_count,
-                    "ratio": round(ratio, 2),
-                    "interpretation": (
-                        f"Cohort A has {ratio:.1f}x more {event} events"
-                        if ratio > 1
-                        else f"Cohort B has {1/ratio:.1f}x more {event} events"
-                    ),
-                })
-        elif a_count > 0 and b_count == 0:
-            differences.append({
-                "event": event,
-                "cohort_a_count": a_count,
-                "cohort_b_count": 0,
-                "ratio": float("inf"),
-                "interpretation": f"Only Cohort A has {event} events",
-            })
+                    "cohort_b_count": 0,
+                    "ratio": float("inf"),
+                    "interpretation": f"Only Cohort A has {event} events",
+                }
+            )
         elif b_count > 0 and a_count == 0:
-            differences.append({
-                "event": event,
-                "cohort_a_count": 0,
-                "cohort_b_count": b_count,
-                "ratio": 0,
-                "interpretation": f"Only Cohort B has {event} events",
-            })
+            differences.append(
+                {
+                    "event": event,
+                    "cohort_a_count": 0,
+                    "cohort_b_count": b_count,
+                    "ratio": 0,
+                    "interpretation": f"Only Cohort B has {event} events",
+                }
+            )
 
     # Sort by ratio magnitude (most different first)
     differences.sort(
@@ -277,7 +301,9 @@ def cohort_comparison(
             Defaults to 30 days ago.
         to_date: End date for analysis (YYYY-MM-DD).
             Defaults to today.
-        acquisition_event: Event for retention analysis (default: signup).
+        acquisition_event: Event to scope queries (default: signup). Required
+            for high-volume projects to avoid timeouts. Queries only consider
+            users/events matching this event name.
         compare_dimensions: Dimensions to compare. Options:
             - 'event_frequency': Compare event counts
             - 'retention': Compare return rates
@@ -311,9 +337,6 @@ def cohort_comparison(
     """
     ws = get_workspace(ctx)
 
-    # Note: acquisition_event kept for API compatibility but not used in JQL approach
-    _ = acquisition_event
-
     # Set default date range
     if not from_date or not to_date:
         from_date, to_date = _get_default_date_range()
@@ -339,7 +362,9 @@ def cohort_comparison(
     # JQL call 1: Event frequency and top events comparison
     if "event_frequency" in compare_dimensions or "top_events" in compare_dimensions:
         try:
-            jql_script = _build_event_comparison_jql(cohort_a_filter, cohort_b_filter)
+            jql_script = _build_event_comparison_jql(
+                cohort_a_filter, cohort_b_filter, event=acquisition_event
+            )
             jql_result = ws.jql(
                 script=jql_script,
                 params={"from_date": from_date, "to_date": to_date},
@@ -381,7 +406,9 @@ def cohort_comparison(
     # JQL call 2: User/retention comparison
     if "retention" in compare_dimensions:
         try:
-            jql_script = _build_user_comparison_jql(cohort_a_filter, cohort_b_filter)
+            jql_script = _build_user_comparison_jql(
+                cohort_a_filter, cohort_b_filter, event=acquisition_event
+            )
             jql_result = ws.jql(
                 script=jql_script,
                 params={"from_date": from_date, "to_date": to_date},
@@ -413,7 +440,7 @@ def cohort_comparison(
                     )
                 elif ratio < 0.8:
                     key_differences.append(
-                        f"{cohort_b_name} has {1/ratio:.1f}x more unique users"
+                        f"{cohort_b_name} has {1 / ratio:.1f}x more unique users"
                     )
 
         except Exception as e:
@@ -422,7 +449,10 @@ def cohort_comparison(
             comparisons["retention"] = {"error": error_msg}
 
     # Update cohort metrics
-    if "event_frequency" in comparisons and "error" not in comparisons["event_frequency"]:
+    if (
+        "event_frequency" in comparisons
+        and "error" not in comparisons["event_frequency"]
+    ):
         cohort_a.metrics["event_frequency"] = comparisons["event_frequency"].get(
             "cohort_a_frequency", {}
         )
