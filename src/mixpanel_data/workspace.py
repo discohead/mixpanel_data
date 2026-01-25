@@ -1578,14 +1578,27 @@ class Workspace:
             to_date=to_date,
         )
 
-    def query_saved_report(self, bookmark_id: int) -> SavedReportResult:
-        """Query a saved report (Insights, Retention, or Funnel).
+    def query_saved_report(
+        self,
+        bookmark_id: int,
+        *,
+        bookmark_type: Literal[
+            "insights", "funnels", "retention", "flows"
+        ] = "insights",
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> SavedReportResult:
+        """Query a saved report by bookmark type.
 
-        Executes a saved report by its bookmark ID. The report type is
-        automatically detected from the response headers.
+        Routes to the appropriate Mixpanel API endpoint based on bookmark_type
+        and returns the normalized result.
 
         Args:
             bookmark_id: ID of saved report (from list_bookmarks or Mixpanel URL).
+            bookmark_type: Type of bookmark to query. Determines which API endpoint
+                is called. Defaults to 'insights'.
+            from_date: Start date (YYYY-MM-DD). Required for funnels, optional otherwise.
+            to_date: End date (YYYY-MM-DD). Required for funnels, optional otherwise.
 
         Returns:
             SavedReportResult with report data and report_type property.
@@ -1594,7 +1607,12 @@ class Workspace:
             ConfigError: If API credentials not available.
             QueryError: If bookmark_id is invalid or report not found.
         """
-        return self._live_query_service.query_saved_report(bookmark_id=bookmark_id)
+        return self._live_query_service.query_saved_report(
+            bookmark_id=bookmark_id,
+            bookmark_type=bookmark_type,
+            from_date=from_date,
+            to_date=to_date,
+        )
 
     def query_flows(self, bookmark_id: int) -> FlowsResult:
         """Query a saved Flows report.

@@ -18,7 +18,8 @@ import logging
 import random
 import time
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING, Any
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 
@@ -79,6 +80,7 @@ def _iter_jsonl_lines(response: httpx.Response) -> Iterator[str]:
         line_str = bytes(buffer).decode("utf-8", errors="replace").strip()
         if line_str:
             yield line_str
+
 
 # Regional endpoint configuration
 # Each region has separate URLs for query APIs and export/data APIs
@@ -1496,26 +1498,79 @@ class MixpanelAPIClient:
     def query_saved_report(
         self,
         bookmark_id: int,
+        *,
+        bookmark_type: Literal[
+            "insights", "funnels", "retention", "flows"
+        ] = "insights",
+        from_date: str | None = None,
+        to_date: str | None = None,
     ) -> dict[str, Any]:
-        """Query a saved report (Insights, Retention, or Funnel).
+        """Query a saved report by bookmark type.
 
-        Executes a saved report by its bookmark ID. The report type is
-        automatically detected from the response headers.
+        Routes to the appropriate Mixpanel API endpoint based on bookmark_type
+        and returns the raw API response.
 
         Args:
             bookmark_id: Saved report identifier (from Mixpanel URL or list_bookmarks).
+            bookmark_type: Type of bookmark to query. Determines which API endpoint
+                is called. Defaults to 'insights'.
+            from_date: Start date (YYYY-MM-DD). Required for funnels, optional otherwise.
+                If not provided for funnels, defaults to 30 days ago.
+            to_date: End date (YYYY-MM-DD). Required for funnels, optional otherwise.
+                If not provided for funnels, defaults to today.
 
         Returns:
-            Raw API response with time-series data and metadata.
-            The response structure varies by report type.
+            Raw API response with report data. Structure varies by bookmark_type:
+            - insights: {headers, computed_at, date_range, series}
+            - funnels: {computed_at, data, meta}
+            - retention: {date: {first, counts, rates}}
+            - flows: {computed_at, steps, breakdowns, overallConversionRate}
 
         Raises:
             AuthenticationError: Invalid credentials.
             QueryError: Invalid bookmark_id or report not found.
             RateLimitError: Rate limit exceeded.
         """
-        url = self._build_url("query", "/insights")
-        params: dict[str, Any] = {"bookmark_id": bookmark_id}
+        if bookmark_type == "insights":
+            url = self._build_url("query", "/insights")
+            params: dict[str, Any] = {"bookmark_id": bookmark_id}
+        elif bookmark_type == "funnels":
+            url = self._build_url("query", "/funnels")
+            # Funnels uses funnel_id instead of bookmark_id
+            # Default to 30-day window, deriving missing date from the provided one
+            if from_date is None and to_date is None:
+                # Neither provided: use last 30 days from today
+                to_date = datetime.now().strftime("%Y-%m-%d")
+                from_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+            elif from_date is None and to_date is not None:
+                # Only to_date provided: derive from_date as 30 days before to_date
+                to_date_parsed = datetime.strptime(to_date, "%Y-%m-%d")
+                from_date = (to_date_parsed - timedelta(days=30)).strftime("%Y-%m-%d")
+            elif to_date is None and from_date is not None:
+                # Only from_date provided: derive to_date as 30 days after from_date
+                # but cap at today to avoid querying future dates
+                from_date_parsed = datetime.strptime(from_date, "%Y-%m-%d")
+                computed_to = from_date_parsed + timedelta(days=30)
+                to_date = min(computed_to, datetime.now()).strftime("%Y-%m-%d")
+            params = {
+                "funnel_id": bookmark_id,
+                "from_date": from_date,
+                "to_date": to_date,
+            }
+        elif bookmark_type == "retention":
+            url = self._build_url("query", "/retention")
+            params = {"bookmark_id": bookmark_id}
+        elif bookmark_type == "flows":
+            url = self._build_url("query", "/arb_funnels")
+            params = {
+                "bookmark_id": bookmark_id,
+                "query_type": "flows_sankey",
+            }
+        else:
+            # This shouldn't happen due to Literal type, but handle gracefully
+            url = self._build_url("query", "/insights")
+            params = {"bookmark_id": bookmark_id}
+
         result: dict[str, Any] = self._request("GET", url, params=params)
         return result
 

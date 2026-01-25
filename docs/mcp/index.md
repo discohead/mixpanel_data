@@ -13,8 +13,10 @@ The `mp_mcp` package provides an MCP server that connects AI assistants like Cla
 
 **Key capabilities:**
 
-- **Schema Discovery** — Explore events, properties, funnels, cohorts, and bookmarks
-- **Live Analytics** — Run segmentation, funnel, retention, and JQL queries
+- **Account Management** — List, switch, and test Mixpanel account credentials
+- **Schema Discovery** — Explore events, properties, funnels, cohorts, Lexicon schemas, and bookmarks
+- **Live Analytics** — Run segmentation, funnel, retention, JQL, and numeric aggregation queries
+- **Saved Reports** — Execute saved Insights, Retention, Funnel, and Flows reports
 - **Data Fetching** — Download events and profiles to local DuckDB storage
 - **Local Analysis** — Execute SQL queries against fetched data
 - **Intelligent Tools** — AI-powered metric diagnosis and natural language queries

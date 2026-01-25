@@ -173,12 +173,13 @@ Valid values:
     - launch-analysis: Impact/experiment reports
 """
 
-SavedReportType = Literal["insights", "retention", "funnel"]
+SavedReportType = Literal["insights", "retention", "funnel", "flows"]
 """Report type detected from saved report query results.
 
 Derived from headers array in the API response:
     - retention: Headers contain "$retention"
     - funnel: Headers contain "$funnel"
+    - flows: Headers contain "$flows"
     - insights: Default when no special headers present
 """
 
@@ -1234,6 +1235,7 @@ class SavedReportResult:
         Returns:
             'retention' if headers contain '$retention',
             'funnel' if headers contain '$funnel',
+            'flows' if headers contain '$flows',
             'insights' otherwise.
         """
         for header in self.headers:
@@ -1241,6 +1243,8 @@ class SavedReportResult:
                 return "retention"
             if "$funnel" in header.lower():
                 return "funnel"
+            if "$flows" in header.lower():
+                return "flows"
         return "insights"
 
     @property

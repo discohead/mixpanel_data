@@ -18,8 +18,10 @@ The MCP Server v2 transforms `mp_mcp` from a thin API wrapper into an **intellig
 
 ## Features
 
-- **Schema Discovery**: Explore events, properties, funnels, cohorts, and bookmarks
-- **Live Analytics**: Run segmentation, funnel, retention, and JQL queries
+- **Account Management**: List, switch, and test Mixpanel account credentials
+- **Schema Discovery**: Explore events, properties, funnels, cohorts, Lexicon schemas, and bookmarks
+- **Live Analytics**: Run segmentation, funnel, retention, JQL, and numeric aggregation queries
+- **Saved Reports**: Execute saved Insights, Retention, Funnel, and Flows reports
 - **Data Fetching**: Download events and profiles to local DuckDB storage
 - **Local Analysis**: Execute SQL queries against fetched data
 - **Intelligent Tools**: AI-powered metric diagnosis and natural language queries
@@ -126,7 +128,14 @@ mp_mcp --transport http --port 8000
 | **Tier 3**      | Intelligent tools (AI synthesis)           | `ctx.sample()` |
 | **Interactive** | Elicitation workflows                      | `ctx.elicit()` |
 
-### Discovery (8 tools)
+### Auth (4 tools)
+
+- `list_accounts` - List all configured Mixpanel accounts
+- `show_account` - Show details for a specific account (secret redacted)
+- `switch_account` - Set a Mixpanel account as default
+- `test_credentials` - Test account credentials by pinging the API
+
+### Discovery (11 tools)
 
 - `list_events` - List all tracked events
 - `list_properties` - Get properties for an event
@@ -136,8 +145,11 @@ mp_mcp --transport http --port 8000
 - `list_bookmarks` - List saved reports
 - `top_events` - Get most active events
 - `workspace_info` - Get workspace configuration
+- `lexicon_schemas` - List Lexicon schemas (data dictionary)
+- `lexicon_schema` - Get a single Lexicon schema by entity type and name
+- `clear_discovery_cache` - Clear cached discovery results
 
-### Live Query (8 tools)
+### Live Query (18 tools)
 
 - `segmentation` - Time series event analysis
 - `funnel` - Conversion funnel analysis
@@ -147,6 +159,16 @@ mp_mcp --transport http --port 8000
 - `property_counts` - Property value breakdown
 - `activity_feed` - User event history
 - `frequency` - Event frequency distribution
+- `query_saved_report` - Execute a saved Insights, Retention, or Funnel report
+- `query_flows` - Execute a saved Flows report
+- `segmentation_numeric` - Bucket events by numeric property ranges
+- `segmentation_sum` - Calculate sum of numeric property over time
+- `segmentation_average` - Calculate average of numeric property over time
+- `property_distribution` - Get distribution of values for a property (JQL)
+- `numeric_summary` - Get statistical summary for a numeric property (JQL)
+- `daily_counts` - Get daily event counts (JQL)
+- `engagement_distribution` - Get user engagement distribution (JQL)
+- `property_coverage` - Get property coverage statistics (JQL)
 
 ### Fetch (4 tools)
 
@@ -334,6 +356,7 @@ mp_mcp/src/mp_mcp/
 ├── resources.py           # MCP resources
 ├── prompts.py             # Framework prompts
 ├── tools/
+│   ├── auth.py            # Account management tools
 │   ├── discovery.py       # Schema discovery tools
 │   ├── live_query.py      # Live query tools
 │   ├── fetch.py           # Data fetching tools

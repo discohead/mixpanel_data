@@ -13,16 +13,75 @@ Tools are organized into tiers based on their complexity and MCP features:
 
 | Tier | Count | Description | MCP Feature |
 |------|-------|-------------|-------------|
-| **Tier 1** | 31 | Primitive tools (direct API calls) | Standard tools |
+| **Tier 1** | 48 | Primitive tools (direct API calls) | Standard tools |
 | **Tier 2** | 3 | Composed tools (multi-query orchestration) | Standard tools |
 | **Tier 3** | 3 | Intelligent tools (AI synthesis) | `ctx.sample()` |
 | **Interactive** | 2 | Elicitation workflows | `ctx.elicit()` |
 
-**Total: 39 tools**
+**Total: 56 tools**
 
 ---
 
-## Discovery Tools (8)
+## Auth Tools (4)
+
+Manage Mixpanel account credentials and configuration.
+
+### list_accounts
+
+List all configured Mixpanel accounts.
+
+**Returns:** Account names with username, project_id, region, and is_default flag
+
+**Example prompt:** "What Mixpanel accounts do I have configured?"
+
+---
+
+### show_account
+
+Show details for a specific Mixpanel account.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Account name |
+
+**Returns:** Account details with secret redacted for security
+
+**Example prompt:** "Show me the production account configuration"
+
+---
+
+### switch_account
+
+Set a Mixpanel account as the default.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Account name to set as default |
+
+**Returns:** Confirmation of new default
+
+!!! note "Session Restart Required"
+    Switching the default only affects future sessions. Restart the MCP server to use the new default.
+
+**Example prompt:** "Switch to the staging account"
+
+---
+
+### test_credentials
+
+Test Mixpanel account credentials by pinging the API.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `account` | string | No | Account name to test (default: current) |
+
+**Returns:** Success status with project info and event count
+
+**Example prompt:** "Test my Mixpanel credentials"
+
+---
+
+## Discovery Tools (11)
 
 Explore your Mixpanel project's schema and metadata.
 
@@ -120,7 +179,49 @@ Get workspace configuration details.
 
 ---
 
-## Live Query Tools (8)
+### lexicon_schemas
+
+List Lexicon schemas (data dictionary) in the project.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `entity_type` | string | No | Filter by type ("event" or "profile") |
+
+**Returns:** List of schema definitions with name, description, and metadata
+
+!!! warning "Rate Limited"
+    The Lexicon API has a strict 5 requests/minute rate limit. Results are cached.
+
+**Example prompt:** "What events are documented in the Lexicon?"
+
+---
+
+### lexicon_schema
+
+Get a single Lexicon schema by entity type and name.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `entity_type` | string | Yes | Entity type ("event" or "profile") |
+| `name` | string | Yes | Entity name to look up |
+
+**Returns:** Schema definition with name, description, properties, and metadata
+
+**Example prompt:** "What is the schema for the signup event?"
+
+---
+
+### clear_discovery_cache
+
+Clear cached discovery results to fetch fresh data.
+
+**Returns:** Confirmation message
+
+**Example prompt:** "I just added a new event, refresh the cache"
+
+---
+
+## Live Query Tools (18)
 
 Execute queries against the Mixpanel API.
 
@@ -258,6 +359,178 @@ Event frequency distribution.
 **Returns:** Distribution of events per user
 
 **Example prompt:** "How many times do users typically trigger the Purchase event?"
+
+---
+
+### query_saved_report
+
+Execute a saved Insights, Retention, or Funnel report.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `bookmark_id` | int | Yes | ID of saved report (from list_bookmarks or Mixpanel URL) |
+
+**Returns:** Report data with report_type property
+
+**Example prompt:** "Run my saved conversion report (ID 12345)"
+
+---
+
+### query_flows
+
+Execute a saved Flows report.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `bookmark_id` | int | Yes | ID of saved Flows report |
+
+**Returns:** Steps, breakdowns, and conversion rate
+
+**Example prompt:** "Run my saved user flow analysis"
+
+---
+
+### segmentation_numeric
+
+Bucket events by numeric property ranges.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `event` | string | Yes | Event to analyze |
+| `from_date` | string | Yes | Start date (YYYY-MM-DD) |
+| `to_date` | string | Yes | End date (YYYY-MM-DD) |
+| `on` | string | Yes | Numeric property expression to bucket by |
+| `unit` | string | No | Time unit (hour, day) |
+| `where` | string | No | Filter expression |
+| `type` | string | No | Count type (general, unique, average) |
+
+**Returns:** Events bucketed by numeric ranges
+
+**Example prompt:** "How are purchase amounts distributed?"
+
+---
+
+### segmentation_sum
+
+Calculate sum of numeric property over time.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `event` | string | Yes | Event to analyze |
+| `from_date` | string | Yes | Start date (YYYY-MM-DD) |
+| `to_date` | string | Yes | End date (YYYY-MM-DD) |
+| `on` | string | Yes | Numeric property expression to sum |
+| `unit` | string | No | Time unit (hour, day) |
+| `where` | string | No | Filter expression |
+
+**Returns:** Sum values per period
+
+**Example prompt:** "What was total revenue per day last month?"
+
+---
+
+### segmentation_average
+
+Calculate average of numeric property over time.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `event` | string | Yes | Event to analyze |
+| `from_date` | string | Yes | Start date (YYYY-MM-DD) |
+| `to_date` | string | Yes | End date (YYYY-MM-DD) |
+| `on` | string | Yes | Numeric property expression to average |
+| `unit` | string | No | Time unit (hour, day) |
+| `where` | string | No | Filter expression |
+
+**Returns:** Average values per period
+
+**Example prompt:** "What was average order value per day?"
+
+---
+
+### property_distribution
+
+Get distribution of values for a property using JQL.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `event` | string | Yes | Event to analyze |
+| `property_name` | string | Yes | Property to get distribution for |
+| `from_date` | string | Yes | Start date (YYYY-MM-DD) |
+| `to_date` | string | Yes | End date (YYYY-MM-DD) |
+| `limit` | int | No | Maximum values to return (default: 20) |
+
+**Returns:** Value counts and percentages sorted by frequency
+
+**Example prompt:** "What's the country distribution for purchases?"
+
+---
+
+### numeric_summary
+
+Get statistical summary for a numeric property using JQL.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `event` | string | Yes | Event to analyze |
+| `property_name` | string | Yes | Numeric property name |
+| `from_date` | string | Yes | Start date (YYYY-MM-DD) |
+| `to_date` | string | Yes | End date (YYYY-MM-DD) |
+| `percentiles` | list[int] | No | Percentiles to compute (default: [25, 50, 75, 90, 95, 99]) |
+
+**Returns:** Count, min, max, avg, stddev, and percentiles
+
+**Example prompt:** "What are the statistics for purchase amounts?"
+
+---
+
+### daily_counts
+
+Get daily event counts via JQL.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `from_date` | string | Yes | Start date (YYYY-MM-DD) |
+| `to_date` | string | Yes | End date (YYYY-MM-DD) |
+| `events` | list[string] | No | Events to count (None = all events) |
+
+**Returns:** Date/event/count entries
+
+**Example prompt:** "How many signups and purchases per day this week?"
+
+---
+
+### engagement_distribution
+
+Get user engagement distribution using JQL.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `from_date` | string | Yes | Start date (YYYY-MM-DD) |
+| `to_date` | string | Yes | End date (YYYY-MM-DD) |
+| `events` | list[string] | No | Events to count (None = all events) |
+| `buckets` | list[int] | No | Bucket boundaries (default: [1, 2, 5, 10, 25, 50, 100]) |
+
+**Returns:** User counts per engagement bucket
+
+**Example prompt:** "How are users distributed by number of purchases?"
+
+---
+
+### property_coverage
+
+Get property coverage statistics using JQL.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `event` | string | Yes | Event to analyze |
+| `properties` | list[string] | Yes | Property names to check |
+| `from_date` | string | Yes | Start date (YYYY-MM-DD) |
+| `to_date` | string | Yes | End date (YYYY-MM-DD) |
+
+**Returns:** Coverage statistics (defined vs undefined) per property
+
+**Example prompt:** "How complete are the coupon_code and referrer properties?"
 
 ---
 

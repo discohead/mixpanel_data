@@ -152,6 +152,7 @@ if _SKILLS_DIR.exists():
 # These imports must happen after mcp is defined
 from mp_mcp import prompts, resources  # noqa: E402, F401
 from mp_mcp.tools import (  # noqa: E402, F401
+    auth,
     composed,
     discovery,
     fetch,

@@ -273,3 +273,35 @@ class TestListBookmarks:
         assert bookmark.description is None
         assert bookmark.creator_id is None
         assert bookmark.creator_name is None
+
+    def test_list_bookmarks_handles_nested_api_response(
+        self,
+        discovery_service: DiscoveryService,
+        mock_api_client: MagicMock,
+    ) -> None:
+        """list_bookmarks() should handle nested {"results": {"results": [...]}} structure.
+
+        The Mixpanel Bookmarks API v2 returns a nested structure where the actual
+        bookmark list is at results.results, not directly at results.
+        """
+        mock_api_client.list_bookmarks.return_value = {
+            "status": "ok",
+            "results": {
+                "results": [
+                    {
+                        "id": 12345,
+                        "name": "Nested Report",
+                        "type": "insights",
+                        "project_id": 8,
+                        "created": "2024-01-01T00:00:00",
+                        "modified": "2024-01-02T00:00:00",
+                    }
+                ]
+            },
+        }
+
+        result = discovery_service.list_bookmarks()
+
+        assert len(result) == 1
+        assert result[0].id == 12345
+        assert result[0].name == "Nested Report"

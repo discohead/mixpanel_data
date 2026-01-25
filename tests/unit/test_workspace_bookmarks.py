@@ -1,6 +1,7 @@
 """Tests for Workspace bookmark methods.
 
 Phase 015: Bookmarks API - Tests for Workspace.list_bookmarks() and related methods.
+Phase 016: Smart routing for query_saved_report with bookmark_type parameter.
 """
 
 from __future__ import annotations
@@ -249,7 +250,10 @@ class TestQuerySavedReport:
 
             assert result.bookmark_id == 12345
             mock_live_query.query_saved_report.assert_called_once_with(
-                bookmark_id=12345
+                bookmark_id=12345,
+                bookmark_type="insights",
+                from_date=None,
+                to_date=None,
             )
         finally:
             ws.close()
@@ -355,6 +359,106 @@ class TestQuerySavedReport:
             result = ws.query_saved_report(bookmark_id=12345)
 
             assert isinstance(result, SavedReportResult)
+        finally:
+            ws.close()
+
+    def test_query_saved_report_passes_bookmark_type_to_service(
+        self,
+        workspace_factory: Callable[..., Workspace],
+    ) -> None:
+        """query_saved_report() should pass bookmark_type to service."""
+        from mixpanel_data.types import SavedReportResult
+
+        ws = workspace_factory()
+        try:
+            mock_live_query = MagicMock()
+            mock_live_query.query_saved_report.return_value = SavedReportResult(
+                bookmark_id=12345,
+                computed_at="",
+                from_date="",
+                to_date="",
+                headers=["$funnel"],
+                series={},
+            )
+            ws._live_query = mock_live_query
+
+            ws.query_saved_report(bookmark_id=12345, bookmark_type="funnels")
+
+            mock_live_query.query_saved_report.assert_called_once_with(
+                bookmark_id=12345,
+                bookmark_type="funnels",
+                from_date=None,
+                to_date=None,
+            )
+        finally:
+            ws.close()
+
+    def test_query_saved_report_passes_dates_to_service(
+        self,
+        workspace_factory: Callable[..., Workspace],
+    ) -> None:
+        """query_saved_report() should pass from_date/to_date to service."""
+        from mixpanel_data.types import SavedReportResult
+
+        ws = workspace_factory()
+        try:
+            mock_live_query = MagicMock()
+            mock_live_query.query_saved_report.return_value = SavedReportResult(
+                bookmark_id=12345,
+                computed_at="",
+                from_date="2024-06-01",
+                to_date="2024-06-30",
+                headers=["$funnel"],
+                series={},
+            )
+            ws._live_query = mock_live_query
+
+            ws.query_saved_report(
+                bookmark_id=12345,
+                bookmark_type="funnels",
+                from_date="2024-06-01",
+                to_date="2024-06-30",
+            )
+
+            mock_live_query.query_saved_report.assert_called_once_with(
+                bookmark_id=12345,
+                bookmark_type="funnels",
+                from_date="2024-06-01",
+                to_date="2024-06-30",
+            )
+        finally:
+            ws.close()
+
+    def test_query_saved_report_backward_compatible(
+        self,
+        workspace_factory: Callable[..., Workspace],
+    ) -> None:
+        """query_saved_report(bookmark_id) should work without new params."""
+        from mixpanel_data.types import SavedReportResult
+
+        ws = workspace_factory()
+        try:
+            mock_live_query = MagicMock()
+            mock_live_query.query_saved_report.return_value = SavedReportResult(
+                bookmark_id=12345,
+                computed_at="",
+                from_date="",
+                to_date="",
+                headers=["$metric"],
+                series={},
+            )
+            ws._live_query = mock_live_query
+
+            result = ws.query_saved_report(bookmark_id=12345)
+
+            assert isinstance(result, SavedReportResult)
+            # Should default to insights
+            mock_live_query.query_saved_report.assert_called_once_with(
+                bookmark_id=12345,
+                bookmark_type="insights",
+                from_date=None,
+                to_date=None,
+            )
         finally:
             ws.close()
 

@@ -667,8 +667,14 @@ class LiveQueryService:
     def query_saved_report(
         self,
         bookmark_id: int,
+        *,
+        bookmark_type: Literal[
+            "insights", "funnels", "retention", "flows"
+        ] = "insights",
+        from_date: str | None = None,
+        to_date: str | None = None,
     ) -> SavedReportResult:
-        """Query a saved report (Insights, Retention, or Funnel).
+        """Query a saved report by bookmark type.
 
         Retrieves data from a pre-configured saved report by its
         bookmark ID, returning a typed result with automatic report type
@@ -676,6 +682,10 @@ class LiveQueryService:
 
         Args:
             bookmark_id: Saved report identifier (from Mixpanel URL or list_bookmarks).
+            bookmark_type: Type of bookmark to query. Determines which API endpoint
+                is called. Defaults to 'insights'.
+            from_date: Start date (YYYY-MM-DD). Required for funnels, optional otherwise.
+            to_date: End date (YYYY-MM-DD). Required for funnels, optional otherwise.
 
         Returns:
             SavedReportResult with time-series data, metadata, and report_type.
@@ -693,8 +703,13 @@ class LiveQueryService:
             print(result.df.head())
             ```
         """
-        raw = self._api_client.query_saved_report(bookmark_id=bookmark_id)
-        return _transform_saved_report(raw, bookmark_id)
+        raw = self._api_client.query_saved_report(
+            bookmark_id=bookmark_id,
+            bookmark_type=bookmark_type,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        return _transform_saved_report(raw, bookmark_id, bookmark_type)
 
     def query_flows(
         self,
@@ -1376,26 +1391,67 @@ def _transform_activity_feed(
 def _transform_saved_report(
     raw: dict[str, Any],
     bookmark_id: int,
+    bookmark_type: Literal["insights", "funnels", "retention", "flows"] = "insights",
 ) -> SavedReportResult:
     """Transform raw saved report API response into SavedReportResult.
 
-    Extracts date range and time-series data from the response.
-    The report type (insights, retention, funnel) is automatically
-    detected from headers by the SavedReportResult.report_type property.
+    Normalizes responses from different API endpoints (insights, funnels,
+    retention, flows) into a consistent SavedReportResult structure.
 
     Args:
         raw: Raw API response dictionary.
         bookmark_id: Saved report identifier.
+        bookmark_type: Type of bookmark that was queried.
 
     Returns:
         Typed SavedReportResult with metadata, time-series, and report_type.
     """
-    computed_at = raw.get("computed_at", "")
-    date_range = raw.get("date_range", {})
-    from_date = date_range.get("from_date", "")
-    to_date = date_range.get("to_date", "")
-    headers = raw.get("headers", [])
-    series = raw.get("series", {})
+    if bookmark_type == "insights":
+        # Insights: {computed_at, date_range: {from_date, to_date}, headers, series}
+        computed_at = raw.get("computed_at", "")
+        date_range = raw.get("date_range", {})
+        from_date = date_range.get("from_date", "")
+        to_date = date_range.get("to_date", "")
+        headers = raw.get("headers", [])
+        series = raw.get("series", {})
+    elif bookmark_type == "funnels":
+        # Funnels: {computed_at, data: {date: {steps}}, meta}
+        computed_at = raw.get("computed_at", "")
+        data = raw.get("data", {})
+        # Extract dates from data keys
+        date_keys = sorted(data.keys()) if data else []
+        from_date = date_keys[0] if date_keys else ""
+        to_date = date_keys[-1] if date_keys else ""
+        headers = ["$funnel"]  # Synthetic header for type detection
+        series = data
+    elif bookmark_type == "retention":
+        # Retention: {date: {first, counts, rates}} - entire response is the data
+        computed_at = ""  # Not provided by retention API
+        # Response keys are dates
+        date_keys = sorted(raw.keys()) if raw else []
+        from_date = date_keys[0] if date_keys else ""
+        to_date = date_keys[-1] if date_keys else ""
+        headers = ["$retention"]  # Synthetic header for type detection
+        series = raw  # Entire response is the data
+    elif bookmark_type == "flows":
+        # Flows: {computed_at, steps, breakdowns, overallConversionRate, metadata}
+        computed_at = raw.get("computed_at", "")
+        from_date = ""  # Not provided by flows API
+        to_date = ""
+        headers = ["$flows"]  # Synthetic header for type detection
+        series = {
+            "steps": raw.get("steps", []),
+            "breakdowns": raw.get("breakdowns", []),
+            "overallConversionRate": raw.get("overallConversionRate", 0.0),
+        }
+    else:
+        # Fallback to insights behavior
+        computed_at = raw.get("computed_at", "")
+        date_range = raw.get("date_range", {})
+        from_date = date_range.get("from_date", "")
+        to_date = date_range.get("to_date", "")
+        headers = raw.get("headers", [])
+        series = raw.get("series", {})
 
     return SavedReportResult(
         bookmark_id=bookmark_id,

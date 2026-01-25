@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from fastmcp import Context
 
-from mixpanel_data import BookmarkType
+from mixpanel_data import BookmarkType, EntityType
 from mp_mcp.context import get_workspace
 from mp_mcp.errors import handle_errors
 from mp_mcp.server import mcp
@@ -251,3 +251,98 @@ def workspace_info(ctx: Context) -> dict[str, Any]:
         "region": info.region,
         "tables": [t.to_dict() for t in ws.tables()],
     }
+
+
+@mcp.tool
+@handle_errors
+def lexicon_schemas(
+    ctx: Context,
+    entity_type: EntityType | None = None,
+) -> list[dict[str, Any]]:
+    """List Lexicon schemas (data dictionary) in the project.
+
+    Returns documented event and profile property schemas from the
+    Mixpanel Lexicon. Useful for understanding what data is tracked
+    and how it's defined.
+
+    Note: The Lexicon API has a strict 5 requests/minute rate limit.
+    Results are cached to avoid hitting this limit.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        entity_type: Optional filter by type ("event" or "profile").
+            If None, returns all schemas.
+
+    Returns:
+        List of schema definitions with name, description, and metadata.
+
+    Example:
+        Ask: "What events are documented in the Lexicon?"
+        Uses: lexicon_schemas(entity_type="event")
+
+        Ask: "Show me all documented schemas"
+        Uses: lexicon_schemas()
+    """
+    ws = get_workspace(ctx)
+    return [s.to_dict() for s in ws.lexicon_schemas(entity_type=entity_type)]
+
+
+@mcp.tool
+@handle_errors
+def lexicon_schema(
+    ctx: Context,
+    entity_type: EntityType,
+    name: str,
+) -> dict[str, Any]:
+    """Get a single Lexicon schema by entity type and name.
+
+    Returns the documented schema for a specific event or profile property
+    from the Mixpanel Lexicon (data dictionary).
+
+    Note: The Lexicon API has a strict 5 requests/minute rate limit.
+    Results are cached to avoid hitting this limit.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+        entity_type: Entity type ("event" or "profile").
+        name: Entity name to look up.
+
+    Returns:
+        Schema definition with name, description, properties, and metadata.
+
+    Raises:
+        QueryError: If schema not found.
+
+    Example:
+        Ask: "What is the schema for the signup event?"
+        Uses: lexicon_schema(entity_type="event", name="signup")
+
+        Ask: "Show me the profile property schema for email"
+        Uses: lexicon_schema(entity_type="profile", name="$email")
+    """
+    ws = get_workspace(ctx)
+    return ws.lexicon_schema(entity_type=entity_type, name=name).to_dict()
+
+
+@mcp.tool
+@handle_errors
+def clear_discovery_cache(ctx: Context) -> dict[str, str]:
+    """Clear cached discovery results to fetch fresh data.
+
+    Discovery operations (events, properties, funnels, cohorts, schemas)
+    are cached for performance. Use this tool when you need to see
+    recently added events or updated schemas.
+
+    Args:
+        ctx: FastMCP context with workspace access.
+
+    Returns:
+        Dictionary with success status and message.
+
+    Example:
+        Ask: "I just added a new event, refresh the cache"
+        Uses: clear_discovery_cache()
+    """
+    ws = get_workspace(ctx)
+    ws.clear_discovery_cache()
+    return {"status": "success", "message": "Discovery cache cleared"}

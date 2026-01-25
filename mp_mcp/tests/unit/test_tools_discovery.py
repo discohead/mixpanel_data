@@ -124,3 +124,65 @@ class TestWorkspaceInfoTools:
         result = workspace_info(mock_context)  # type: ignore[operator]
         assert result["project_id"] == 123456
         assert result["region"] == "us"
+
+
+class TestLexiconSchemasTools:
+    """Tests for the lexicon_schemas tool."""
+
+    def test_lexicon_schemas_tool_registered(
+        self, registered_tool_names: list[str]
+    ) -> None:
+        """lexicon_schemas tool should be registered with the MCP server."""
+        assert "lexicon_schemas" in registered_tool_names
+
+    def test_lexicon_schemas_returns_schemas(self, mock_context: MagicMock) -> None:
+        """lexicon_schemas should return schema metadata from Workspace."""
+        from mp_mcp.tools.discovery import lexicon_schemas
+
+        result = lexicon_schemas(mock_context)  # type: ignore[operator]
+        assert len(result) == 1
+        assert result[0]["name"] == "signup"
+        assert result[0]["entity_type"] == "event"
+
+
+class TestLexiconSchemaTools:
+    """Tests for the lexicon_schema tool."""
+
+    def test_lexicon_schema_tool_registered(
+        self, registered_tool_names: list[str]
+    ) -> None:
+        """lexicon_schema tool should be registered with the MCP server."""
+        assert "lexicon_schema" in registered_tool_names
+
+    def test_lexicon_schema_returns_single_schema(
+        self, mock_context: MagicMock
+    ) -> None:
+        """lexicon_schema should return a single schema from Workspace."""
+        from mp_mcp.tools.discovery import lexicon_schema
+
+        result = lexicon_schema(  # type: ignore[operator]
+            mock_context, entity_type="event", name="signup"
+        )
+        assert result["name"] == "signup"
+        assert result["entity_type"] == "event"
+        assert result["description"] == "User signed up"
+
+
+class TestClearDiscoveryCacheTools:
+    """Tests for the clear_discovery_cache tool."""
+
+    def test_clear_discovery_cache_tool_registered(
+        self, registered_tool_names: list[str]
+    ) -> None:
+        """clear_discovery_cache tool should be registered with the MCP server."""
+        assert "clear_discovery_cache" in registered_tool_names
+
+    def test_clear_discovery_cache_returns_success(
+        self, mock_context: MagicMock
+    ) -> None:
+        """clear_discovery_cache should return success status."""
+        from mp_mcp.tools.discovery import clear_discovery_cache
+
+        result = clear_discovery_cache(mock_context)  # type: ignore[operator]
+        assert result["status"] == "success"
+        assert "cache" in result["message"].lower()

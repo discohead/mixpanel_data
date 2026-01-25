@@ -1,11 +1,13 @@
-"""Tests for MixpanelAPIClient.list_bookmarks() method.
+"""Tests for MixpanelAPIClient bookmark methods.
 
 Phase 015: Bookmarks API - Tests for listing saved reports.
+Phase 016: Smart routing for query_saved_report with bookmark_type parameter.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timedelta
 
 import httpx
 import pytest
@@ -319,3 +321,235 @@ class TestQueryFlows:
             client.query_flows(bookmark_id=99999)
 
         assert "Bookmark not found" in str(exc_info.value)
+
+
+class TestQuerySavedReportRouting:
+    """Tests for MixpanelAPIClient.query_saved_report() smart routing."""
+
+    def test_query_saved_report_default_routes_to_insights(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report() without bookmark_type should call /insights."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/api/query/insights" in str(request.url)
+            assert "bookmark_id=12345" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "headers": ["$metric"],
+                    "computed_at": "2024-01-15T10:00:00",
+                    "date_range": {"from_date": "2024-01-01", "to_date": "2024-01-15"},
+                    "series": {"Event A": {"2024-01-01": 100}},
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            result = client.query_saved_report(bookmark_id=12345)
+
+        assert "headers" in result
+        assert result["headers"] == ["$metric"]
+
+    def test_query_saved_report_insights_type_routes_to_insights(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report(bookmark_type='insights') should call /insights."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/api/query/insights" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "headers": ["$metric"],
+                    "computed_at": "2024-01-15T10:00:00",
+                    "date_range": {"from_date": "2024-01-01", "to_date": "2024-01-15"},
+                    "series": {},
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.query_saved_report(bookmark_id=12345, bookmark_type="insights")
+
+    def test_query_saved_report_funnels_routes_to_funnels_endpoint(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report(bookmark_type='funnels') should call /funnels."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/api/query/funnels" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "computed_at": "2024-01-15T10:00:00",
+                    "data": {"2024-01-15": {"steps": []}},
+                    "meta": {},
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.query_saved_report(bookmark_id=12345, bookmark_type="funnels")
+
+    def test_query_saved_report_funnels_uses_funnel_id_param(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report(bookmark_type='funnels') should use funnel_id parameter."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            # For funnels, the bookmark_id is passed as funnel_id
+            assert "funnel_id=12345" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "computed_at": "2024-01-15T10:00:00",
+                    "data": {},
+                    "meta": {},
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.query_saved_report(bookmark_id=12345, bookmark_type="funnels")
+
+    def test_query_saved_report_funnels_default_dates_last_30_days(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report(bookmark_type='funnels') defaults to last 30 days."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            assert f"from_date={thirty_days_ago}" in url_str
+            assert f"to_date={today}" in url_str
+            return httpx.Response(
+                200,
+                json={
+                    "computed_at": "2024-01-15T10:00:00",
+                    "data": {},
+                    "meta": {},
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.query_saved_report(bookmark_id=12345, bookmark_type="funnels")
+
+    def test_query_saved_report_funnels_uses_provided_dates(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report(bookmark_type='funnels', from_date, to_date) uses provided dates."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            assert "from_date=2024-06-01" in url_str
+            assert "to_date=2024-06-30" in url_str
+            return httpx.Response(
+                200,
+                json={
+                    "computed_at": "2024-06-30T10:00:00",
+                    "data": {},
+                    "meta": {},
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.query_saved_report(
+                bookmark_id=12345,
+                bookmark_type="funnels",
+                from_date="2024-06-01",
+                to_date="2024-06-30",
+            )
+
+    def test_query_saved_report_retention_routes_to_retention_endpoint(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report(bookmark_type='retention') should call /retention."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/api/query/retention" in str(request.url)
+            assert "bookmark_id=12345" in str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "2024-01-01": {"first": 100, "counts": [100, 80, 60], "rates": []},
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.query_saved_report(bookmark_id=12345, bookmark_type="retention")
+
+    def test_query_saved_report_flows_routes_to_arb_funnels(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report(bookmark_type='flows') should call /arb_funnels."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            assert "/api/query/arb_funnels" in url_str
+            assert "bookmark_id=12345" in url_str
+            assert "query_type=flows_sankey" in url_str
+            return httpx.Response(
+                200,
+                json={
+                    "computed_at": "2024-01-15T10:00:00",
+                    "steps": [],
+                    "breakdowns": [],
+                    "overallConversionRate": 0.0,
+                },
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.query_saved_report(bookmark_id=12345, bookmark_type="flows")
+
+    def test_query_saved_report_funnels_only_to_date_derives_from_date(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report(bookmark_type='funnels', to_date) derives from_date correctly.
+
+        When only to_date is provided, from_date should be derived as 30 days
+        before to_date, not 30 days before today. This prevents inverted date
+        ranges when querying historical data.
+        """
+        historical_to_date = "2023-06-15"
+        expected_from_date = "2023-05-16"  # 30 days before 2023-06-15
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            assert f"from_date={expected_from_date}" in url_str
+            assert f"to_date={historical_to_date}" in url_str
+            return httpx.Response(
+                200,
+                json={"computed_at": "2023-06-15T10:00:00", "data": {}, "meta": {}},
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.query_saved_report(
+                bookmark_id=12345,
+                bookmark_type="funnels",
+                to_date=historical_to_date,
+            )
+
+    def test_query_saved_report_funnels_only_from_date_derives_to_date(
+        self, test_credentials: Credentials
+    ) -> None:
+        """query_saved_report(bookmark_type='funnels', from_date) derives to_date correctly.
+
+        When only from_date is provided, to_date should be derived as 30 days
+        after from_date, but capped at today to avoid querying future dates.
+        """
+        historical_from_date = "2023-06-15"
+        expected_to_date = "2023-07-15"  # 30 days after 2023-06-15
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            assert f"from_date={historical_from_date}" in url_str
+            assert f"to_date={expected_to_date}" in url_str
+            return httpx.Response(
+                200,
+                json={"computed_at": "2023-07-15T10:00:00", "data": {}, "meta": {}},
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.query_saved_report(
+                bookmark_id=12345,
+                bookmark_type="funnels",
+                from_date=historical_from_date,
+            )

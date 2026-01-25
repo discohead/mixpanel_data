@@ -408,7 +408,13 @@ class DiscoveryService:
             Results are NOT cached because bookmarks may change frequently.
         """
         raw = self._api_client.list_bookmarks(bookmark_type=bookmark_type)
-        results = raw.get("results", [])
+        # API returns nested structure: {"results": {"results": [...]}}
+        results_container = raw.get("results", {})
+        if isinstance(results_container, dict):
+            results = results_container.get("results", [])
+        else:
+            # Fallback for older/different API versions returning flat list
+            results = results_container
         return [_parse_bookmark_info(bm) for bm in results]
 
     def list_top_events(
