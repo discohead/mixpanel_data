@@ -10,7 +10,7 @@ check: lint typecheck test mcp-check
 
 # Run tests
 test *args:
-    uv run pytest {{ args }} -vv
+    uv run pytest {{ args }}
 
 # Run tests with dev Hypothesis profile (fast, 10 examples)
 test-dev *args:

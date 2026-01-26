@@ -107,7 +107,7 @@ disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-vv --tb=short"
 
 [tool.coverage.run]
 source = ["src/mixpanel_data"]
