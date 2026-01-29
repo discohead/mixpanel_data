@@ -1529,11 +1529,11 @@ class TestPublicRequest:
             client.request(
                 "POST",
                 "https://mixpanel.com/api/app/projects/12345/data",
-                json_body={"name": "test", "value": 123},
+                json_body={"name": "test", "value": 123, "query_origin": "mixpanel-data-cli"},
             )
 
         assert "application/json" in captured_content_type
-        assert captured_body == {"name": "test", "value": 123}
+        assert captured_body == {"name": "test", "value": 123, "query_origin": "mixpanel-data-cli"}
 
     def test_request_with_custom_headers(self, test_credentials: Credentials) -> None:
         """request() should merge custom headers with auth."""

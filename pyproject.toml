@@ -107,7 +107,7 @@ disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-vv --tb=short"
 
 [tool.coverage.run]
 source = ["src/mixpanel_data"]
@@ -129,5 +129,6 @@ dev = [
     "click-man>=0.5.1",
     "pre-commit>=4.5.1",
     "psutil>=7.2.0",
+    "ruff>=0.1",
     "types-psutil>=7.2.0.20251228",
 ]
