@@ -10,6 +10,7 @@ Complete reference for the `mixpanel_data` Python library.
 - Local Query Methods
 - Live Query Methods
 - Introspection Methods
+- Feature Flag Methods
 - Table Management
 - Escape Hatches
 
@@ -475,6 +476,147 @@ def column_stats(
 ) -> ColumnStatsResult
 ```
 Deep single-column analysis. Supports JSON path expressions like `"properties->>'$.country'"`.
+
+## Feature Flag Methods
+
+### feature_flags()
+```python
+def feature_flags(self, *, include_archived: bool = False) -> FeatureFlagListResult
+```
+List all feature flags in the project.
+
+Returns `FeatureFlagListResult(flags)`.
+- `flags`: list of `FeatureFlagResult`
+- `.df` property: DataFrame with columns (id, name, key, status, description, tags, created, modified, creator_name)
+- `.to_dict()`: list of flag dicts
+- `.to_table_dict()`: flat dicts for table display (tags joined with comma)
+
+### feature_flag()
+```python
+def feature_flag(self, flag_id: str) -> FeatureFlagResult
+```
+Get a single feature flag by ID.
+
+Returns `FeatureFlagResult(id, name, key, description, status, tags, ruleset, created, modified, creator_name, raw)`.
+- `id` (str): UUID
+- `name` (str): Human-readable name
+- `key` (str): Programmatic key used in code
+- `description` (str | None): Optional description
+- `status` (str): Flag status (e.g., "active", "draft", "archived")
+- `tags` (list[str]): Tags for organizing flags
+- `ruleset` (dict): Ruleset config including variants and rollout conditions
+- `created` (str | None): ISO timestamp
+- `modified` (str | None): ISO timestamp
+- `creator_name` (str | None): Display name of creator
+- `raw` (dict): Complete raw API response
+
+### create_feature_flag()
+```python
+def create_feature_flag(self, payload: dict[str, Any]) -> FeatureFlagResult
+```
+Create a new feature flag. Returns `FeatureFlagResult`.
+
+### update_feature_flag()
+```python
+def update_feature_flag(self, flag_id: str, payload: dict[str, Any]) -> FeatureFlagResult
+```
+Update an existing feature flag. Uses PUT semantics (full replacement, not partial update). Returns `FeatureFlagResult`.
+
+### delete_feature_flag()
+```python
+def delete_feature_flag(self, flag_id: str) -> dict[str, Any]
+```
+Delete a feature flag. Cannot delete flags that are currently enabled—disable first or use `archive_feature_flag()`. Returns raw API response.
+
+### archive_feature_flag()
+```python
+def archive_feature_flag(self, flag_id: str) -> dict[str, Any]
+```
+Archive a feature flag (soft delete). Archived flags are hidden by default but can be restored. Returns raw API response.
+
+### restore_feature_flag()
+```python
+def restore_feature_flag(self, flag_id: str) -> dict[str, Any]
+```
+Restore an archived feature flag. Returns raw API response.
+
+### Feature Flag Payload Structure
+
+The `payload` dict for `create_feature_flag()` and `update_feature_flag()`:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | str (1-255 chars) | Yes | Human-readable flag name |
+| `key` | str (1-255 chars) | Yes | Programmatic key (must be unique) |
+| `tags` | list[str] | Yes | Tags for organizing flags |
+| `status` | str | Yes | `"enabled"`, `"disabled"`, or `"archived"` |
+| `context` | str (1-255 chars) | Yes | Evaluation context identifier |
+| `serving_method` | str | Yes | `"client"`, `"server"`, `"remote_or_local"`, or `"remote_only"` |
+| `ruleset` | dict | Yes | Variants and rollout rules (see below) |
+| `description` | str | No | Optional description |
+| `experiment_id` | str | No | Linked experiment ID |
+| `data_group_id` | str | No | Data group ID |
+| `hash_salt` | str (exactly 32 chars) | No | Hash salt for consistent bucketing |
+
+**RuleSet structure:**
+
+```json
+{
+  "variants": [
+    {
+      "key": "control",
+      "value": false,
+      "description": "Control group",
+      "is_control": true,
+      "split": 0.5,
+      "is_sticky": true
+    },
+    {
+      "key": "treatment",
+      "value": true,
+      "description": "Treatment group",
+      "is_control": false,
+      "split": 0.5,
+      "is_sticky": true
+    }
+  ],
+  "rollout": [
+    {
+      "name": "Global rollout",
+      "cohort_definition": null,
+      "rollout_percentage": 1.0,
+      "variant_override": null,
+      "variant_splits": {"control": 0.5, "treatment": 0.5}
+    }
+  ]
+}
+```
+
+- **variants** (list, max 11): Each variant has `key` (str), `value` (bool/str/object), `description` (optional str), `is_control` (bool), `split` (0.0-1.0), `is_sticky` (bool)
+- **rollout** (list): Each rollout has `name` (optional str), `cohort_definition` (optional dict), `rollout_percentage` (0.0-1.0), `variant_override` (optional `{"key": str}`), `variant_splits` (dict[str, float])
+
+**Example payload:**
+
+```json
+{
+  "name": "Dark Mode",
+  "key": "dark_mode",
+  "tags": ["ui", "experiment"],
+  "status": "disabled",
+  "context": "user",
+  "serving_method": "client",
+  "description": "Enable dark mode UI for selected users",
+  "ruleset": {
+    "variants": [
+      {"key": "off", "value": false, "is_control": true, "split": 0.5, "is_sticky": true},
+      {"key": "on", "value": true, "is_control": false, "split": 0.5, "is_sticky": true}
+    ],
+    "rollout": [
+      {"rollout_percentage": 1.0, "variant_splits": {"off": 0.5, "on": 0.5}}
+    ]
+  }
+}
+```
 
 ## Table Management
 

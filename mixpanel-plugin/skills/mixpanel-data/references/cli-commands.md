@@ -8,6 +8,7 @@ Complete reference for the `mp` CLI application.
 - Fetch Commands (mp fetch)
 - Query Commands (mp query)
 - Inspect Commands (mp inspect)
+- Feature Flag Commands (mp flags)
 
 ## Global Options
 
@@ -491,4 +492,128 @@ Delete a table.
 ```bash
 mp inspect drop -t events
 mp inspect drop -t events --force  # Skip confirmation
+```
+
+## Feature Flag Commands (mp flags)
+
+CRUD operations for Mixpanel feature flags.
+
+### mp flags list
+List all feature flags in the project.
+```bash
+mp flags list
+mp flags list --include-archived
+mp flags list --format table
+mp flags list --jq '.[].key'
+```
+
+| Option | Description |
+|--------|-------------|
+| `--include-archived` | Include archived flags in the listing |
+| `--format` | Output format: json, jsonl, table, csv, plain |
+| `--jq` | jq filter for JSON output |
+
+### mp flags get
+Get a single feature flag by ID.
+```bash
+mp flags get abc-123-def
+mp flags get abc-123-def --format table
+mp flags get abc-123-def --jq '.ruleset'
+```
+
+| Option | Description |
+|--------|-------------|
+| `flag_id` | Feature flag UUID (positional, required) |
+| `--format` | Output format |
+| `--jq` | jq filter |
+
+### mp flags create
+Create a new feature flag from a JSON configuration file.
+```bash
+mp flags create --config-file flag.json
+mp flags create -c flag.json --name "Override Name"
+echo '{"name":"Test","key":"test","ruleset":{}}' | mp flags create -c -
+```
+
+| Option | Description |
+|--------|-------------|
+| `--config-file, -c` | Path to JSON config file (use "-" for stdin, required) |
+| `--name` | Override flag name from config |
+| `--key` | Override flag key from config |
+| `--description` | Override flag description from config |
+| `--format` | Output format |
+| `--jq` | jq filter |
+
+### mp flags update
+Update an existing feature flag from a JSON configuration file. Uses PUT semantics (full replacement).
+```bash
+mp flags update abc-123-def --config-file flag.json
+mp flags update abc-123-def -c flag.json --name "New Name"
+mp flags update abc-123-def -c flag.json --status disabled
+```
+
+| Option | Description |
+|--------|-------------|
+| `flag_id` | Feature flag UUID to update (positional, required) |
+| `--config-file, -c` | Path to JSON config file (use "-" for stdin, required) |
+| `--name` | Override flag name from config |
+| `--key` | Override flag key from config |
+| `--status` | Override flag status from config |
+| `--description` | Override flag description from config |
+| `--format` | Output format |
+| `--jq` | jq filter |
+
+### mp flags delete
+Delete a feature flag. Cannot delete enabled flags—disable first or use `mp flags archive`.
+```bash
+mp flags delete abc-123-def
+```
+
+| Option | Description |
+|--------|-------------|
+| `flag_id` | Feature flag UUID to delete (positional, required) |
+
+### mp flags archive
+Archive a feature flag (soft delete). Archived flags are hidden by default but can be restored.
+```bash
+mp flags archive abc-123-def
+```
+
+| Option | Description |
+|--------|-------------|
+| `flag_id` | Feature flag UUID to archive (positional, required) |
+
+### mp flags restore
+Restore an archived feature flag.
+```bash
+mp flags restore abc-123-def
+```
+
+| Option | Description |
+|--------|-------------|
+| `flag_id` | Feature flag UUID to restore (positional, required) |
+
+### JSON Config Format
+
+The JSON config file for `mp flags create` and `mp flags update` should contain a feature flag payload object. See the [library-api.md Feature Flag Payload Structure](library-api.md#feature-flag-payload-structure) for the full schema.
+
+Minimal example:
+```json
+{
+  "name": "My Flag",
+  "key": "my_flag",
+  "tags": [],
+  "status": "disabled",
+  "context": "user",
+  "serving_method": "client",
+  "ruleset": {
+    "variants": [
+      {"key": "off", "value": false, "is_control": true, "split": 0.5, "is_sticky": true},
+      {"key": "on", "value": true, "is_control": false, "split": 0.5, "is_sticky": true}
+    ],
+    "rollout": [
+      {"rollout_percentage": 1.0, "variant_splits": {"off": 0.5, "on": 0.5}}
+    ]
+  }
+}
 ```

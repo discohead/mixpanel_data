@@ -48,8 +48,8 @@ When you need detailed information, read these reference files:
 
 | File | When to Read |
 |------|--------------|
-| [library-api.md](references/library-api.md) | Complete Python API signatures, parameters, return types for all Workspace methods |
-| [cli-commands.md](references/cli-commands.md) | Full CLI command reference with all options and examples |
+| [library-api.md](references/library-api.md) | Complete Python API signatures, parameters, return types for all Workspace methods (including feature flags) |
+| [cli-commands.md](references/cli-commands.md) | Full CLI command reference with all options and examples (including feature flag commands) |
 | [query-expressions.md](references/query-expressions.md) | Complete filter expression syntax, JQL reference, built-in reducers, bucketing |
 | [patterns.md](references/patterns.md) | JSON property queries in DuckDB, pandas integration, jq/Unix pipelines, data science workflows |
 | [documentation.md](references/documentation.md) | How to fetch external documentation from llms.txt, page URLs, fetch strategy |
@@ -146,6 +146,30 @@ mp query jql script.js --param from_date=2024-01-01
 ```
 
 For complete JQL reference (data sources, transformations, built-in reducers, bucketing, common patterns), see [references/query-expressions.md](references/query-expressions.md).
+
+## Feature Flags
+
+Manage feature flags programmatically—list, create, update, delete, archive, and restore flags in your Mixpanel project.
+
+```python
+# Python
+flags = ws.feature_flags()
+flag = ws.create_feature_flag({"name": "Dark Mode", "key": "dark_mode", "ruleset": {"variants": [{"key": "on", "value": True}]}})
+ws.update_feature_flag(flag.id, {"name": "Dark Mode", "key": "dark_mode", "status": "disabled", "ruleset": {"variants": [{"key": "on", "value": True}]}})
+```
+
+```bash
+# CLI
+mp flags list --format table
+mp flags get abc-123-def
+mp flags create -c flag.json
+mp flags update abc-123-def -c flag.json --status disabled
+mp flags archive abc-123-def
+```
+
+**Note**: `update_feature_flag()` / `mp flags update` uses PUT semantics (full replacement, not partial update). Send the complete flag configuration.
+
+For complete method signatures and CLI options, see [references/library-api.md](references/library-api.md) and [references/cli-commands.md](references/cli-commands.md).
 
 ## Credentials
 
@@ -255,6 +279,7 @@ The Workspace class provides three main capability areas:
 3. **Analytics**: `segmentation()`, `funnel()`, `retention()`, `jql()` - Live queries and analysis
 4. **Local SQL**: `sql()`, `sql_scalar()`, `sql_rows()` - Query DuckDB with SQL
 5. **Introspection**: `info()`, `tables()`, `sample()`, `summarize()` - Inspect local data
+6. **Feature Flags**: `feature_flags()`, `feature_flag()`, `create_feature_flag()`, `update_feature_flag()`, `delete_feature_flag()`, `archive_feature_flag()`, `restore_feature_flag()` - Manage feature flags
 
 ### Advanced Profile Fetching
 
