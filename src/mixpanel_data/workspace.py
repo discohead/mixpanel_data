@@ -46,6 +46,7 @@ import pandas as pd
 from mixpanel_data._internal.api_client import MixpanelAPIClient
 from mixpanel_data._internal.config import ConfigManager, Credentials
 from mixpanel_data._internal.services.discovery import DiscoveryService
+from mixpanel_data._internal.services.feature_flag import FeatureFlagService
 from mixpanel_data._internal.services.fetcher import FetcherService
 from mixpanel_data._internal.services.live_query import LiveQueryService
 from mixpanel_data._internal.storage import StorageEngine
@@ -65,6 +66,8 @@ from mixpanel_data.types import (
     EventBreakdownResult,
     EventCountsResult,
     EventStats,
+    FeatureFlagListResult,
+    FeatureFlagResult,
     FetchResult,
     FlowsResult,
     FrequencyResult,
@@ -266,6 +269,7 @@ class Workspace:
         self._discovery: DiscoveryService | None = None
         self._fetcher: FetcherService | None = None
         self._live_query: LiveQueryService | None = None
+        self._feature_flag: FeatureFlagService | None = None
 
     @classmethod
     @contextmanager
@@ -612,6 +616,13 @@ class Workspace:
         if self._live_query is None:
             self._live_query = LiveQueryService(self._require_api_client())
         return self._live_query
+
+    @property
+    def _feature_flag_service(self) -> FeatureFlagService:
+        """Get or create feature flag service (lazy initialization)."""
+        if self._feature_flag is None:
+            self._feature_flag = FeatureFlagService(self._require_api_client())
+        return self._feature_flag
 
     # =========================================================================
     # DISCOVERY METHODS
@@ -2544,6 +2555,169 @@ class Workspace:
         for table in tables:
             if type is None or table.type == type:
                 self.storage.drop_table(table.name)
+
+    # =========================================================================
+    # FEATURE FLAG METHODS
+    # =========================================================================
+
+    def feature_flags(self, *, include_archived: bool = False) -> FeatureFlagListResult:
+        """List all feature flags in the project.
+
+        Args:
+            include_archived: If True, include archived flags. Defaults to False.
+
+        Returns:
+            FeatureFlagListResult containing all matching flags.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            AuthenticationError: Invalid credentials.
+            RateLimitError: Rate limit exceeded after retries.
+
+        Example:
+            ```python
+            result = ws.feature_flags()
+            for flag in result.flags:
+                print(flag.name, flag.key, flag.status)
+            ```
+        """
+        return self._feature_flag_service.list_flags(include_archived=include_archived)
+
+    def feature_flag(self, flag_id: str) -> FeatureFlagResult:
+        """Get a single feature flag by ID.
+
+        Args:
+            flag_id: UUID of the feature flag.
+
+        Returns:
+            FeatureFlagResult for the requested flag.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            AuthenticationError: Invalid credentials.
+            QueryError: Flag not found.
+
+        Example:
+            ```python
+            flag = ws.feature_flag("abc-123-def")
+            print(flag.name, flag.status)
+            ```
+        """
+        return self._feature_flag_service.get_flag(flag_id)
+
+    def create_feature_flag(self, payload: dict[str, Any]) -> FeatureFlagResult:
+        """Create a new feature flag.
+
+        Args:
+            payload: Feature flag configuration including name, key, and ruleset.
+
+        Returns:
+            FeatureFlagResult for the newly created flag.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            AuthenticationError: Invalid credentials.
+            QueryError: Invalid payload or duplicate key.
+
+        Example:
+            ```python
+            flag = ws.create_feature_flag({
+                "name": "New Feature",
+                "key": "new_feature",
+                "ruleset": {"variants": []}
+            })
+            ```
+        """
+        return self._feature_flag_service.create_flag(payload)
+
+    def update_feature_flag(
+        self, flag_id: str, payload: dict[str, Any]
+    ) -> FeatureFlagResult:
+        """Update an existing feature flag (full replacement).
+
+        Args:
+            flag_id: UUID of the feature flag to update.
+            payload: Complete feature flag configuration.
+
+        Returns:
+            FeatureFlagResult for the updated flag.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            AuthenticationError: Invalid credentials.
+            QueryError: Flag not found or invalid payload.
+
+        Example:
+            ```python
+            flag = ws.update_feature_flag("abc-123", {"name": "Updated"})
+            ```
+        """
+        return self._feature_flag_service.update_flag(flag_id, payload)
+
+    def delete_feature_flag(self, flag_id: str) -> dict[str, Any]:
+        """Delete a feature flag.
+
+        Cannot delete flags that are currently enabled.
+
+        Args:
+            flag_id: UUID of the feature flag to delete.
+
+        Returns:
+            Raw API response.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            AuthenticationError: Invalid credentials.
+            QueryError: Flag not found or flag is enabled.
+
+        Example:
+            ```python
+            ws.delete_feature_flag("abc-123")
+            ```
+        """
+        return self._feature_flag_service.delete_flag(flag_id)
+
+    def archive_feature_flag(self, flag_id: str) -> dict[str, Any]:
+        """Archive a feature flag (soft delete).
+
+        Args:
+            flag_id: UUID of the feature flag to archive.
+
+        Returns:
+            Raw API response.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            AuthenticationError: Invalid credentials.
+            QueryError: Flag not found.
+
+        Example:
+            ```python
+            ws.archive_feature_flag("abc-123")
+            ```
+        """
+        return self._feature_flag_service.archive_flag(flag_id)
+
+    def restore_feature_flag(self, flag_id: str) -> dict[str, Any]:
+        """Restore an archived feature flag.
+
+        Args:
+            flag_id: UUID of the feature flag to restore.
+
+        Returns:
+            Raw API response.
+
+        Raises:
+            ConfigError: If API credentials not available.
+            AuthenticationError: Invalid credentials.
+            QueryError: Flag not found.
+
+        Example:
+            ```python
+            ws.restore_feature_flag("abc-123")
+            ```
+        """
+        return self._feature_flag_service.restore_flag(flag_id)
 
     # =========================================================================
     # ESCAPE HATCHES

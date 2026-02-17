@@ -3315,3 +3315,190 @@ class ParallelProfileResult:
             "fetched_at": self.fetched_at.isoformat(),
             "has_failures": self.has_failures,
         }
+
+
+# =============================================================================
+# Feature Flag Result Types
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class FeatureFlagResult:
+    """Result from a feature flag operation.
+
+    Represents a single feature flag from the Mixpanel Feature Flags API.
+    Contains the flag's configuration including its ruleset, status,
+    and metadata.
+
+    Attributes:
+        id: Unique feature flag identifier (UUID).
+        name: Human-readable flag name.
+        key: Programmatic key used in code to evaluate the flag.
+        description: Optional description of the flag's purpose.
+        status: Flag status (e.g., "active", "draft", "archived").
+        tags: List of tags for organizing flags.
+        ruleset: Full ruleset configuration including variants and conditions.
+        created: Creation timestamp (ISO format).
+        modified: Last modification timestamp (ISO format).
+        creator_name: Display name of the flag creator.
+        raw: Complete raw API response for the flag.
+
+    Example:
+        ```python
+        ws = Workspace()
+        flag = ws.feature_flag("flag-uuid-123")
+        print(flag.name, flag.key, flag.status)
+        ```
+    """
+
+    id: str
+    """Unique feature flag identifier (UUID)."""
+
+    name: str
+    """Human-readable flag name."""
+
+    key: str
+    """Programmatic key used in code to evaluate the flag."""
+
+    description: str | None = None
+    """Optional description of the flag's purpose."""
+
+    status: str = ""
+    """Flag status (e.g., 'active', 'draft', 'archived')."""
+
+    tags: list[str] = field(default_factory=list)
+    """List of tags for organizing flags."""
+
+    ruleset: dict[str, Any] = field(default_factory=dict)
+    """Full ruleset configuration including variants and conditions."""
+
+    created: str | None = None
+    """Creation timestamp (ISO format)."""
+
+    modified: str | None = None
+    """Last modification timestamp (ISO format)."""
+
+    creator_name: str | None = None
+    """Display name of the flag creator."""
+
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+    """Complete raw API response for the flag."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output.
+
+        Returns:
+            Dictionary with all flag fields suitable for JSON serialization.
+        """
+        result: dict[str, Any] = {
+            "id": self.id,
+            "name": self.name,
+            "key": self.key,
+            "status": self.status,
+            "tags": self.tags,
+            "ruleset": self.ruleset,
+        }
+        if self.description is not None:
+            result["description"] = self.description
+        if self.created is not None:
+            result["created"] = self.created
+        if self.modified is not None:
+            result["modified"] = self.modified
+        if self.creator_name is not None:
+            result["creator_name"] = self.creator_name
+        return result
+
+
+@dataclass(frozen=True)
+class FeatureFlagListResult:
+    """Result from listing feature flags.
+
+    Contains a list of FeatureFlagResult objects with convenience
+    methods for serialization and DataFrame conversion.
+
+    Attributes:
+        flags: List of feature flag results.
+
+    Example:
+        ```python
+        ws = Workspace()
+        result = ws.feature_flags()
+        for flag in result.flags:
+            print(flag.name, flag.key, flag.status)
+        df = result.df  # Convert to DataFrame
+        ```
+    """
+
+    flags: list[FeatureFlagResult]
+    """List of feature flag results."""
+
+    _df_cache: pd.DataFrame | None = field(default=None, repr=False)
+    """Internal cache for lazy DataFrame conversion."""
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Convert flag list to a normalized DataFrame.
+
+        Provides a flat tabular view of the flags with key metadata columns.
+
+        Returns:
+            DataFrame with columns: id, name, key, status, description,
+            tags, created, modified, creator_name.
+        """
+        if self._df_cache is not None:
+            return self._df_cache
+
+        if not self.flags:
+            result_df = pd.DataFrame(
+                columns=[
+                    "id",
+                    "name",
+                    "key",
+                    "status",
+                    "description",
+                    "tags",
+                    "created",
+                    "modified",
+                    "creator_name",
+                ]
+            )
+        else:
+            rows = [
+                {
+                    "id": f.id,
+                    "name": f.name,
+                    "key": f.key,
+                    "status": f.status,
+                    "description": f.description,
+                    "tags": ", ".join(f.tags) if f.tags else "",
+                    "created": f.created,
+                    "modified": f.modified,
+                    "creator_name": f.creator_name,
+                }
+                for f in self.flags
+            ]
+            result_df = pd.DataFrame(rows)
+
+        object.__setattr__(self, "_df_cache", result_df)
+        return result_df
+
+    def to_dict(self) -> list[dict[str, Any]]:
+        """Serialize for JSON output.
+
+        Returns:
+            List of flag dictionaries.
+        """
+        return [f.to_dict() for f in self.flags]
+
+    def to_table_dict(self) -> list[dict[str, Any]]:
+        """Convert to list of dicts for table formatting.
+
+        Returns:
+            List of flat dictionaries suitable for table display.
+        """
+        from typing import cast
+
+        df = self.df
+        if df.empty:
+            return []
+        return cast(list[dict[str, Any]], df.to_dict("records"))

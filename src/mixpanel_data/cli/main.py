@@ -133,11 +133,13 @@ def _register_commands() -> None:
     """Register all command groups with the main app."""
     from mixpanel_data.cli.commands.auth import auth_app
     from mixpanel_data.cli.commands.fetch import fetch_app
+    from mixpanel_data.cli.commands.flags import flags_app
     from mixpanel_data.cli.commands.inspect import inspect_app
     from mixpanel_data.cli.commands.query import query_app
 
     app.add_typer(auth_app, name="auth", help="Manage authentication and accounts.")
     app.add_typer(fetch_app, name="fetch", help="Fetch data from Mixpanel.")
+    app.add_typer(flags_app, name="flags", help="Manage feature flags.")
     app.add_typer(query_app, name="query", help="Query local and live data.")
     app.add_typer(
         inspect_app, name="inspect", help="Inspect schema and local database."

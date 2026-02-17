@@ -42,6 +42,8 @@ from mixpanel_data.types import (
     EventBreakdownResult,
     EventCountsResult,
     EventStats,
+    FeatureFlagListResult,
+    FeatureFlagResult,
     FetchResult,
     FlowsResult,
     FrequencyResult,
@@ -110,6 +112,8 @@ __all__ = [
     "EventNotFoundError",
     "DateRangeTooLargeError",
     # Result types
+    "FeatureFlagResult",
+    "FeatureFlagListResult",
     "FetchResult",
     "ParallelFetchResult",
     "ParallelProfileResult",
