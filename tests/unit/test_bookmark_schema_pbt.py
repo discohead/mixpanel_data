@@ -275,22 +275,24 @@ class TestDiscriminatorRejection:
 
     @given(
         bad_type=st.text(min_size=2, max_size=15).filter(
-            lambda s: s
-            not in {
-                "event",
-                "simple",
-                "cohort",
-                "funnel",
-                "retention",
-                "formula",
-                "custom-event",
-                "people",
-                "saved-metric",
-                "verified",
-                "retention-frequency",
-                "addiction",
-                "metric",
-            }
+            lambda s: (
+                s
+                not in {
+                    "event",
+                    "simple",
+                    "cohort",
+                    "funnel",
+                    "retention",
+                    "formula",
+                    "custom-event",
+                    "people",
+                    "saved-metric",
+                    "verified",
+                    "retention-frequency",
+                    "addiction",
+                    "metric",
+                }
+            )
         ),
     )
     @settings(max_examples=30)
