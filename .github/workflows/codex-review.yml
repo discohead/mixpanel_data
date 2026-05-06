@@ -6,8 +6,14 @@ on:
 
 jobs:
   codex:
-    # Only run when the "codex-review" label is applied by someone with write access
-    if: github.event.label.name == 'codex-review'
+    # Only run when the "codex-review" label is applied to a non-fork PR.
+    # GitHub gates label application on triage permission (granted with write
+    # access), which serves as the implicit access gate. The fork check stops a
+    # forked branch from supplying a hostile prompt file and avoids noisy
+    # failures (fork PRs don't have access to repo secrets like OPENAI_API_KEY).
+    if: |
+      github.event.label.name == 'codex-review' &&
+      github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     permissions:
       contents: read

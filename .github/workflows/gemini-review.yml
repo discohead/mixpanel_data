@@ -78,8 +78,10 @@ jobs:
           use_vertex_ai: '${{ vars.GOOGLE_GENAI_USE_VERTEXAI }}'
           upload_artifacts: '${{ vars.UPLOAD_ARTIFACTS }}'
           workflow_name: 'gemini-review'
-          # Explicitly set the PR number to handle `issue_comment` triggers (which GitHub treats as issues, not PRs)
-          github_pr_number: '${{ github.event.pull_request.number }}'
+          # Explicitly set the PR number to handle `issue_comment` triggers (which GitHub treats as issues, not PRs).
+          # Fall back to issue.number because PRs are issues — when this reusable workflow is
+          # invoked from an `issue_comment` event, `pull_request.number` is unset.
+          github_pr_number: '${{ github.event.pull_request.number || github.event.issue.number }}'
           settings: |-
             {
               "model": {

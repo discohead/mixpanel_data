@@ -1,7 +1,8 @@
 # Codex pull request review
 
-You are reviewing a pull request in the `mixpanel_data` repository — a Python
-library and CLI for the Mixpanel analytics platform.
+You are reviewing a pull request in the `mixpanel-headless` repository — the
+home of the `mixpanel_data` Python package and CLI for the Mixpanel analytics
+platform.
 
 Read `CLAUDE.md` at the repo root before forming your review. Apply its
 conventions, code-quality standards, and architectural rules strictly.

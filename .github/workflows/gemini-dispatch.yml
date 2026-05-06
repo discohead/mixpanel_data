@@ -116,6 +116,10 @@ jobs:
             }
 
       - name: 'Acknowledge request'
+        # Skip the ack for auto-triage so issue reporters who never asked for
+        # Gemini don't get an unsolicited "I've received your request" comment.
+        if: |-
+          ${{ steps.extract_command.outputs.command != 'triage' }}
         env:
           GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
           ISSUE_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
