@@ -3034,6 +3034,13 @@ class UpdateTextCardParams(BaseModel):
 # =============================================================================
 
 
+# Mirrors `get_root_model_for_bookmark_type` dispatch in
+# `mixpanel_data._internal.bookmark_schema`. Pydantic rejects construction
+# with any other value, catching typos like "insightz" at the API surface.
+BookmarkTypeLiteral = Literal["insights", "funnels", "retention", "flows", "user"]
+"""Valid bookmark/report types accepted by the Mixpanel v2 API."""
+
+
 class BookmarkMetadata(BaseModel):
     """Metadata associated with a bookmark/report.
 
@@ -3248,8 +3255,12 @@ class CreateBookmarkParams(BaseModel):
     name: str
     """Bookmark name (required)."""
 
-    bookmark_type: str = Field(alias="type")
-    """Report type (required, serialized as ``"type"``)."""
+    bookmark_type: BookmarkTypeLiteral = Field(alias="type")
+    """Report type (required, serialized as ``"type"``).
+
+    Pydantic-validated against the canonical set on construction —
+    typos like ``"insightz"`` are rejected before any API call.
+    """
 
     params: dict[str, Any]
     """Query parameters (required)."""

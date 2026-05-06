@@ -1,8 +1,10 @@
 """Authoritative Mixpanel bookmark enum constants.
 
 All values are sourced from the server-side validation at
-``analytics/bookmark_parser/insights/validate.py`` and
-``analytics/bookmark_parser/common/schema/property_selectors/operator_expr.json``.
+``analytics/bookmark_parser/insights/validate.py``,
+``analytics/bookmark_parser/common/schema/property_selectors/operator_expr.json``,
+and the canonical Pydantic definitions in
+``analytics/lib/common/mxpnl/report/bookmarks/{common,insights}/definitions.py``.
 
 These constants define every valid value the Mixpanel insights query API
 accepts for each bookmark field. Used by the validation engine to catch
@@ -47,6 +49,9 @@ VALID_MATH_TYPES: frozenset[str] = frozenset(
         "first_value",
         "multi_attribution",
         "numeric_summary",
+        # Per-user-only aggregation operator (canonical
+        # PER_USER_AGGREGATIONS includes this; included in the union here)
+        "session_replay_id_value",
         # Legacy / context-specific
         "general",
         "session",
@@ -58,7 +63,13 @@ VALID_MATH_TYPES: frozenset[str] = frozenset(
         "retention_rate",
     }
 )
-"""All valid math/aggregation operators across all contexts (insights, funnels, retention)."""
+"""All valid math/aggregation operators across all contexts (insights, funnels, retention).
+
+Mirrors the canonical ``MATH_TYPE`` union of
+``PRIMITIVE_MATH_TYPES``, ``NUMERIC_MATH_TYPES``, ``XAU_MATH_TYPES``,
+``PER_USER_AGGREGATIONS``, ``FUNNELS_MATH_TYPES``, ``RETENTION_MATH_TYPES``
+in ``analytics/lib/common/mxpnl/report/bookmarks/common/definitions.py``.
+"""
 
 VALID_MATH_INSIGHTS: frozenset[str] = frozenset(
     {
@@ -188,9 +199,19 @@ VALID_PROPERTY_TYPES: frozenset[str] = frozenset(
         "list",
         "object",
         "undefined",
+        # Canonical additions (insights/definitions.py PropertyType)
+        "dimension",  # property is a dimension join key
+        "other",  # NonProperty
+        "unknown",
     }
 )
-"""Valid property data types for filter and group-by clauses."""
+"""Valid property data types for filter and group-by clauses.
+
+Mirrors ``PropertyType`` in
+``analytics/lib/common/mxpnl/report/bookmarks/insights/definitions.py``.
+``"undefined"`` retained as legacy alias for ``"unknown"`` for back-compat
+with older bookmarks.
+"""
 
 # =============================================================================
 # Time Units
@@ -198,19 +219,33 @@ VALID_PROPERTY_TYPES: frozenset[str] = frozenset(
 
 VALID_TIME_UNITS: frozenset[str] = frozenset(
     {
-        "minute",
+        # BaseTimeUnit
         "hour",
         "day",
         "week",
         "month",
-        "year",
+        # ExtendedTimeUnit
+        "second",
+        "minute",
         "quarter",
+        "year",
+        # NonStandardTimeUnit
+        "session",
+        # SpecialTimeUnit (canonical TimeUnit union includes these)
+        "hour_of_day",
+        "day_of_week",
     }
 )
-"""Valid time units for time section aggregation."""
+"""Valid time units for time section aggregation.
+
+Mirrors ``TimeUnit`` (union of ``BaseTimeUnit``, ``ExtendedTimeUnit``,
+``NonStandardTimeUnit``, ``SpecialTimeUnit``) in
+``analytics/lib/common/mxpnl/report/bookmarks/common/definitions.py``.
+"""
 
 VALID_QUERY_TIME_UNITS: frozenset[str] = frozenset(
     {
+        "second",
         "minute",
         "hour",
         "day",
@@ -218,6 +253,7 @@ VALID_QUERY_TIME_UNITS: frozenset[str] = frozenset(
         "month",
         "year",
         "quarter",
+        "session",
         "day_of_week",
         "hour_of_day",
     }
@@ -238,9 +274,18 @@ VALID_RESOURCE_TYPES: frozenset[str] = frozenset(
         "event",
         "user",
         "cohort",
+        # Canonical additions (insights/definitions.py InsightsResourceType)
+        "all",
+        "formulas",
     }
 )
-"""Valid resource types for filters, groups, and show clauses."""
+"""Valid resource types for filters, groups, and show clauses.
+
+Mirrors ``InsightsResourceType`` in
+``analytics/lib/common/mxpnl/report/bookmarks/insights/definitions.py``,
+plus legacy singular aliases (``"event"``, ``"user"``, ``"cohort"``)
+the server still accepts.
+"""
 
 # =============================================================================
 # Metric / Behavior Types
@@ -255,12 +300,23 @@ VALID_METRIC_TYPES: frozenset[str] = frozenset(
         "people",
         "funnel",
         "retention",
-        "addiction",
         "formula",
+        # Canonical additions (insights/definitions.py MetricType)
+        "retention-frequency",
+        "saved-metric",
+        "verified",
+        # Legacy values still observed in older bookmarks (kept for back-compat)
+        "addiction",
         "metric",
     }
 )
-"""Valid behavior/metric types in show clause behavior blocks."""
+"""Valid behavior/metric types in show clause behavior blocks.
+
+Mirrors ``MetricType`` in
+``analytics/lib/common/mxpnl/report/bookmarks/insights/definitions.py``.
+Includes ``"addiction"`` and ``"metric"`` as legacy values that may appear
+in older saved bookmarks.
+"""
 
 # =============================================================================
 # Chart Types
@@ -268,19 +324,54 @@ VALID_METRIC_TYPES: frozenset[str] = frozenset(
 
 VALID_CHART_TYPES: frozenset[str] = frozenset(
     {
-        "line",
+        # Insights chart types
         "bar",
+        "line",
         "pie",
+        "bar-stacked",
+        "stacked-line",
         "table",
         "insights-metric",
         "column",
-        "funnel-steps",
+        "stacked-column",
+        # Legacy dashboards-only metric (still saved on the backend)
+        "metric",
+        # Flows chart types
+        "sankey",
+        "flows",  # alias for sankey
+        "paths",
+        # Funnel chart types
         "funnel-top-paths",
+        "funnel-steps",
+        "funnel-steps-metric",
+        "funnel-trend",
+        "funnel-frequency-line",
+        "funnel-frequency-bar",
+        "funnel-ttc-line",
+        "funnel-ttc-bar",
+        "funnel-median-ttc",
+        # Retention chart types
+        "line-retention",  # deprecated retention curve
+        "retention-trend",
+        "retention-trend-metric",
+        "retention-table",  # AKA retention curve
         "retention-curve",
+        "frequency",
+        # Impact chart types
+        "impact-adoption",
+        "impact-trends",
+        "impact-propensity",
+        # Legacy local additions (kept for back-compat with older bookmarks)
         "frequency-curve",
     }
 )
-"""Valid chart types for displayOptions.chartType."""
+"""Valid chart types for displayOptions.chartType.
+
+Mirrors ``ChartType`` in
+``analytics/lib/common/mxpnl/report/bookmarks/common/definitions.py``,
+plus ``"frequency-curve"`` retained as a legacy local addition for
+back-compat.
+"""
 
 # =============================================================================
 # Filter Operators

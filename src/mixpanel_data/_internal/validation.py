@@ -47,6 +47,11 @@ from mixpanel_data._internal.bookmark_enums import (
     VALID_RETENTION_UNITS,
     VALID_TIME_UNITS,
 )
+from mixpanel_data._internal.bookmark_schema import (
+    InsightsBookmarkSortConfig,
+    _sorting_code_mapper,
+    validate_with_pydantic,
+)
 
 # Import specific types needed for isinstance checks at runtime.
 from mixpanel_data._literal_types import (
@@ -2300,6 +2305,16 @@ def validate_bookmark(
     Returns:
         List of validation errors. Empty list means the bookmark is valid.
 
+    Note:
+        Layer 2 hand-written sub-validators emit granular ``B*`` / ``S*``
+        codes for the build-path. The sorting subset is now a thin
+        wrapper over the Pydantic mirror in ``bookmark_schema`` (single
+        source of truth — Layer 1 and Layer 2 cannot drift on sorting).
+        The Pydantic mirror is also invoked at the API boundary by
+        ``Workspace.create_bookmark`` / ``update_bookmark`` for strict
+        1:1 fidelity with Mixpanel's server schema (drift-checked via
+        ``scripts/validate_corpus.py``).
+
     Example:
         ```python
         from mixpanel_data._internal.validation import validate_bookmark
@@ -2392,6 +2407,10 @@ def validate_bookmark(
     if isinstance(group_section, list):
         for i, g in enumerate(group_section):
             errors.extend(_validate_group_clause(g, i))
+
+    # Validate optional top-level sorting block
+    if "sorting" in params:
+        errors.extend(validate_sorting_block(params["sorting"]))
 
     return errors
 
@@ -2993,6 +3012,78 @@ def _validate_group_clause(
                 path=f"{path}.cohorts",
                 message="Cohort group entry must have non-empty cohorts array",
                 code="B26_EMPTY_COHORTS",
+            )
+        )
+
+    return errors
+
+
+# =============================================================================
+# Layer 2: sorting block validator
+#
+# This is now a thin wrapper over the Pydantic mirror in bookmark_schema:
+# the FlatOrColumnSortConfig discriminator + extra="forbid" do all the
+# structural work. The wrapper adds two things on top:
+#
+#   1. S4_UNKNOWN_CHART_TYPE warnings (Pydantic would emit an error for
+#      unknown chart-type keys; we want a warning + suggestion instead).
+#   2. The S* code translation (via _sorting_code_mapper in bookmark_schema).
+#
+# By construction, validation here cannot drift from the canonical mirror.
+# =============================================================================
+
+
+def validate_sorting_block(sorting: Any) -> list[ValidationError]:
+    """Validate the optional ``params['sorting']`` block.
+
+    Wraps ``validate_with_pydantic(InsightsBookmarkSortConfig, ...)``
+    with a sorting-aware code mapper that recovers the package's stable
+    ``S*`` codes. Unknown chart-type keys are filtered out and reported
+    as ``S4_UNKNOWN_CHART_TYPE`` warnings (rather than ``extra_forbidden``
+    errors) so callers can keep producing best-effort output for partial
+    chart-type coverage.
+
+    Args:
+        sorting: The raw value at ``params['sorting']``. May be any type;
+            this function reports a structural error if it is not a dict.
+
+    Returns:
+        List of validation errors. Empty when the block is well-formed
+        (or omitted at the call site — callers gate on key presence).
+    """
+    if not isinstance(sorting, dict):
+        return [
+            ValidationError(
+                path="sorting",
+                message="'sorting' must be a dict",
+                code="S5_NOT_A_DICT",
+            )
+        ]
+
+    errors: list[ValidationError] = []
+    known: dict[str, Any] = {}
+    for chart_type, config in sorting.items():
+        if chart_type not in VALID_CHART_TYPES:
+            errors.append(
+                _enum_error(
+                    path=f"sorting.{chart_type}",
+                    field="chart type",
+                    value=str(chart_type),
+                    valid=VALID_CHART_TYPES,
+                    code="S4_UNKNOWN_CHART_TYPE",
+                    severity="warning",
+                )
+            )
+        else:
+            known[chart_type] = config
+
+    if known:
+        errors.extend(
+            validate_with_pydantic(
+                InsightsBookmarkSortConfig,
+                known,
+                path_prefix="sorting",
+                code_mapper=_sorting_code_mapper,
             )
         )
 

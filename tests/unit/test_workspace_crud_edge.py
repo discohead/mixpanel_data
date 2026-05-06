@@ -37,6 +37,7 @@ from mixpanel_data.types import (
 )
 from mixpanel_data.workspace import Workspace
 from tests.conftest import make_session
+from tests.unit._bookmark_fixtures import MINIMAL_FUNNEL_PARAMS
 
 # ---- 042 redesign: canonical fake Session for Workspace(session=…) ----
 _TEST_SESSION = Session(
@@ -114,10 +115,17 @@ class TestRequestBodySerialization:
                 )
             return httpx.Response(200, json={"status": "ok", "results": []})
 
+        # Use minimal valid funnel params so client-side schema
+        # validation passes; this test is about request body
+        # serialization (``bookmark_type`` → ``type`` alias), not about
+        # validation behavior.
         ws = _make_workspace(temp_dir, handler)
         ws.create_bookmark(
             CreateBookmarkParams(
-                name="X", bookmark_type="funnels", params={}, dashboard_id=99
+                name="X",
+                bookmark_type="funnels",
+                params=MINIMAL_FUNNEL_PARAMS,
+                dashboard_id=99,
             )
         )
 
