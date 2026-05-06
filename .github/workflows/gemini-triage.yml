@@ -1,15 +1,22 @@
 name: '🔀 Gemini Triage'
 
+# Gemini's PR-review and @gemini-cli mention paths were dropped (see PR #150 /
+# the README) — they were silently failing because the Gemini CLI consumes
+# input tokens but emits zero output for the prompts upstream ships. Triage
+# is the one path that works reliably because it doesn't depend on Gemini's
+# MCP tool-calling: the workflow's `label` job below applies labels directly
+# from the action's `summary` output (a CSV of label names) via
+# github.rest.issues.setLabels. So this workflow now triggers issues directly,
+# without going through a dispatcher.
+
 on:
-  workflow_call:
-    inputs:
-      additional_context:
-        type: 'string'
-        description: 'Any additional context from the request'
-        required: false
+  issues:
+    types:
+      - 'opened'
+      - 'reopened'
 
 concurrency:
-  group: '${{ github.workflow }}-triage-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}'
+  group: '${{ github.workflow }}-triage-${{ github.event.issue.number }}'
   cancel-in-progress: true
 
 defaults:
