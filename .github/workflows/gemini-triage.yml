@@ -73,7 +73,7 @@ jobs:
         id: 'gemini_analysis'
         if: |-
           ${{ steps.get_labels.outputs.available_labels != '' }}
-        uses: 'jaredmixpanel/run-gemini-cli@dc0f750388421b8ab57151bc6fe876dd8bebf8f6' # v0.1.22-pinned-1
+        uses: 'jaredmixpanel/run-gemini-cli@c45abde456b44f04791097f631931f36a334655d' # v0.1.22-pinned-2
         env:
           GEMINI_CLI_TRUST_WORKSPACE: 'true'
           GITHUB_TOKEN: '' # Do NOT pass any auth tokens here since this runs on untrusted inputs
