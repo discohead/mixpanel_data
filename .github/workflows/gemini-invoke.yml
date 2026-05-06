@@ -66,7 +66,7 @@ jobs:
 
       - name: 'Run Gemini CLI'
         id: 'run_gemini'
-        uses: 'jaredmixpanel/run-gemini-cli@dc0f750388421b8ab57151bc6fe876dd8bebf8f6' # v0.1.22-pinned-1
+        uses: 'jaredmixpanel/run-gemini-cli@c45abde456b44f04791097f631931f36a334655d' # v0.1.22-pinned-2
         env:
           GEMINI_CLI_TRUST_WORKSPACE: 'true'
           GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
@@ -132,3 +132,41 @@ jobs:
               }
             }
           prompt: '/gemini-invoke'
+
+      - name: 'Post Gemini response as comment'
+        # Always post a visible comment. The /gemini-invoke slash command is
+        # supposed to call add_issue_comment via the GitHub MCP server, but
+        # in practice Gemini often answers without invoking that tool — so
+        # the response only ends up in the run's step summary. This step
+        # ensures the user always sees something in the conversation. If
+        # gemini_response is empty (Gemini posted via MCP, errored silently,
+        # or returned no textual content), post a brief notice with a link to
+        # the run logs.
+        # See: https://github.com/google-github-actions/run-gemini-cli/issues/277
+        #      https://github.com/google-github-actions/run-gemini-cli/issues/278
+        if: |-
+          ${{ always() && !cancelled() }}
+        uses: 'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b' # v7
+        env:
+          GEMINI_RESPONSE: '${{ steps.run_gemini.outputs.gemini_response }}'
+          RUN_URL: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+        with:
+          github-token: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
+          script: |
+            const issue_number =
+              context.payload.pull_request?.number ?? context.payload.issue?.number;
+            if (!issue_number) {
+              core.setFailed('Could not determine issue/PR number for comment.');
+              return;
+            }
+            const response = (process.env.GEMINI_RESPONSE || '').trim();
+            const runUrl = process.env.RUN_URL;
+            const body = response
+              ? `${response}\n\n<sub>— Gemini · [run logs](${runUrl})</sub>`
+              : `🤖 Gemini ran but didn't return a textual response. It may have posted via the GitHub MCP tools above, or you can check the [run logs](${runUrl}) for details.`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              body,
+            });
