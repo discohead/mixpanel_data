@@ -122,3 +122,31 @@ jobs:
               "https://github.com/gemini-cli-extensions/code-review"
             ]
           prompt: '/pr-code-review'
+
+      - name: 'Post Gemini review as comment'
+        # /pr-code-review (from the code-review extension) is supposed to post
+        # a pending review via the GitHub MCP server's pull_request_review_write
+        # tool. In practice it doesn't always do that — the textual review ends
+        # up only in the run's step summary. This fallback always posts the
+        # captured response as a regular PR comment so the review reaches the
+        # author. If Gemini did post a pending review via MCP, both will appear.
+        if: |-
+          ${{ steps.gemini_pr_review.outputs.gemini_response != '' }}
+        uses: 'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b' # v7
+        env:
+          GEMINI_RESPONSE: '${{ steps.gemini_pr_review.outputs.gemini_response }}'
+        with:
+          github-token: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
+          script: |
+            const issue_number =
+              context.payload.pull_request?.number ?? context.payload.issue?.number;
+            if (!issue_number) {
+              core.setFailed('Could not determine PR number for comment.');
+              return;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              body: process.env.GEMINI_RESPONSE,
+            });

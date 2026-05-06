@@ -132,3 +132,32 @@ jobs:
               }
             }
           prompt: '/gemini-invoke'
+
+      - name: 'Post Gemini response as comment'
+        # The action captures Gemini's textual response into the gemini_response
+        # output. The /gemini-invoke slash command expects Gemini to call the
+        # add_issue_comment MCP tool itself, but for many prompts (especially
+        # Q&A) Gemini answers without invoking that tool — leaving the response
+        # only in the run's step summary. This fallback always posts the
+        # captured response so users get visible output. If Gemini also posted
+        # via MCP, both will appear (rare in practice).
+        if: |-
+          ${{ steps.run_gemini.outputs.gemini_response != '' }}
+        uses: 'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b' # v7
+        env:
+          GEMINI_RESPONSE: '${{ steps.run_gemini.outputs.gemini_response }}'
+        with:
+          github-token: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
+          script: |
+            const issue_number =
+              context.payload.pull_request?.number ?? context.payload.issue?.number;
+            if (!issue_number) {
+              core.setFailed('Could not determine issue/PR number for comment.');
+              return;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              body: process.env.GEMINI_RESPONSE,
+            });
