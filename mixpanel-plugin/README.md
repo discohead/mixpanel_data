@@ -123,8 +123,9 @@ The plugin also provides full entity CRUD via the Mixpanel App API:
 - **Alerts & Annotations** — monitoring and timeline markers
 - **Webhooks** — event-driven integrations
 - **Data Governance** — Lexicon definitions, drop filters, custom properties, custom events, lookup tables, schema registry
+- **Business Context** — read/write the markdown documentation that grounds AI assistants (org and project scopes, 50,000-char cap)
 
-All entity methods require a workspace ID. Use `ws.resolve_workspace_id()` to auto-discover it.
+All entity methods require a workspace ID. Use `ws.resolve_workspace_id()` to auto-discover it. Business context lives at the project + org level, so it is **not** workspace-scoped — it works as soon as a project is set.
 
 ## Authentication
 

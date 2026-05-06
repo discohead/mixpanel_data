@@ -1,7 +1,7 @@
 {
   "name": "mixpanel-data",
-  "version": "5.0.0",
-  "description": "Query and analyze Mixpanel data with Python. Provides the mixpanel_data auth surface (Account → Project → Workspace hierarchy) and API (5 query engines, discovery, entity CRUD) with a live documentation system (help.py) for method signatures, type lookup, fuzzy search, and hosted docs.",
+  "version": "5.1.0",
+  "description": "Query and analyze Mixpanel data with Python. Provides the mixpanel_data auth surface (Account → Project → Workspace hierarchy), API (5 query engines, discovery, entity CRUD), and Business Context read/write (the markdown documentation that grounds AI assistants, at org and project scopes), with a live documentation system (help.py) for method signatures, type lookup, fuzzy search, and hosted docs.",
   "author": {
     "name": "Jared McFarland",
     "email": "jaredcolin@gmail.com",

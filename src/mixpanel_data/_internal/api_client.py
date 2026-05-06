@@ -7929,3 +7929,159 @@ class MixpanelAPIClient:
                 f"expected list, got {type(result).__name__}",
             )
         return result
+
+    # =========================================================================
+    # Business Context (AIE-147)
+    # =========================================================================
+
+    def get_business_context(
+        self, *, organization_id: int | None = None
+    ) -> dict[str, Any]:
+        """Fetch business context content for an organization or project.
+
+        Calls ``GET /api/app/projects/{pid}/business-context`` (project
+        scope) or ``GET /api/app/organizations/{org_id}/business-context``
+        (organization scope). The endpoint always returns 200 with
+        ``{"content": ""}`` when no context has been set.
+
+        Path is constructed directly (NOT via ``maybe_scoped_path``)
+        because the endpoint is project-scoped, not workspace-scoped.
+
+        Args:
+            organization_id: When provided, fetches the org-level context
+                under ``/organizations/{organization_id}/business-context``.
+                When omitted, fetches the project-level context under
+                ``/projects/{pid}/business-context`` for the current
+                session's project.
+
+        Returns:
+            Dictionary of the form ``{"content": "<markdown>"}``. The
+            ``content`` field is the empty string when no context is set.
+
+        Raises:
+            AuthenticationError: Invalid credentials (401).
+            QueryError: Caller lacks access to the project / organization
+                (403, 404).
+            ServerError: Server-side errors (5xx).
+            MixpanelDataError: Network/connection errors or unexpected
+                response shape.
+
+        Example:
+            ```python
+            with MixpanelAPIClient(session=sess) as client:
+                # Project-level context for the active project.
+                project = client.get_business_context()
+                print(project["content"])
+
+                # Org-level context for org id 100.
+                org = client.get_business_context(organization_id=100)
+                print(org["content"])
+            ```
+        """
+        if organization_id is not None:
+            path = f"/organizations/{organization_id}/business-context"
+        else:
+            path = f"/projects/{self._session.project.id}/business-context"
+        result = self.app_request("GET", path)
+        if not isinstance(result, dict):
+            raise MixpanelDataError(
+                f"Unexpected response from get_business_context: "
+                f"expected dict, got {type(result).__name__}",
+            )
+        return result
+
+    def set_business_context(
+        self, content: str, *, organization_id: int | None = None
+    ) -> dict[str, Any]:
+        """Replace business context content at the given scope.
+
+        Calls ``PUT /api/app/projects/{pid}/business-context`` (project
+        scope) or ``PUT /api/app/organizations/{org_id}/business-context``
+        (organization scope). The PUT is full-replace — pass an empty
+        string to clear.
+
+        The Mixpanel server enforces a 50,000-character limit and
+        returns HTTP 400 ``"content exceeds maximum length of 50000
+        characters"`` above that threshold; callers should validate
+        client-side first to avoid the wasted round-trip (the
+        ``Workspace`` facade does this automatically).
+
+        Path is constructed directly (NOT via ``maybe_scoped_path``)
+        because the endpoint is project-scoped, not workspace-scoped.
+
+        Args:
+            content: New markdown content. Empty string clears the
+                context at this scope.
+            organization_id: When provided, writes the org-level context.
+                When omitted, writes the project-level context for the
+                current session's project.
+
+        Returns:
+            Dictionary of the form ``{"content": "<saved markdown>"}``
+            echoing what the server stored.
+
+        Raises:
+            AuthenticationError: Invalid credentials (401).
+            QueryError: Content exceeds 50,000 chars (400), caller lacks
+                ``edit_project_info`` permission (403), or invalid JSON
+                body (400).
+            ServerError: Server-side errors (5xx).
+            MixpanelDataError: Network/connection errors or unexpected
+                response shape.
+
+        Example:
+            ```python
+            with MixpanelAPIClient(session=sess) as client:
+                client.set_business_context("# About Acme\\n...")
+                client.set_business_context("", organization_id=100)  # clear org
+            ```
+        """
+        if organization_id is not None:
+            path = f"/organizations/{organization_id}/business-context"
+        else:
+            path = f"/projects/{self._session.project.id}/business-context"
+        result = self.app_request("PUT", path, json_body={"content": content})
+        if not isinstance(result, dict):
+            raise MixpanelDataError(
+                f"Unexpected response from set_business_context: "
+                f"expected dict, got {type(result).__name__}",
+            )
+        return result
+
+    def get_business_context_chain(self) -> dict[str, Any]:
+        """Fetch both organization and project business context together.
+
+        Calls ``GET /api/app/projects/{pid}/business-context/chain`` —
+        a server-side convenience that returns both scopes in a single
+        round-trip, scoped to the current session's project. The org
+        context returned is the one that owns the project.
+
+        Returns:
+            Dictionary of the form
+            ``{"org_context": "<markdown>", "project_context": "<markdown>"}``.
+            Either field may be the empty string when no context is set
+            at that scope.
+
+        Raises:
+            AuthenticationError: Invalid credentials (401).
+            QueryError: Caller lacks project access (403, 404).
+            ServerError: Server-side errors (5xx).
+            MixpanelDataError: Network/connection errors or unexpected
+                response shape.
+
+        Example:
+            ```python
+            with MixpanelAPIClient(session=sess) as client:
+                chain = client.get_business_context_chain()
+                print("ORG:", chain["org_context"])
+                print("PROJECT:", chain["project_context"])
+            ```
+        """
+        path = f"/projects/{self._session.project.id}/business-context/chain"
+        result = self.app_request("GET", path)
+        if not isinstance(result, dict):
+            raise MixpanelDataError(
+                f"Unexpected response from get_business_context_chain: "
+                f"expected dict, got {type(result).__name__}",
+            )
+        return result

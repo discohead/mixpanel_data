@@ -1026,6 +1026,49 @@ class WorkspaceScopeError(MixpanelDataError):
         super().__init__(message, code=code, details=details)
 
 
+# Business Context Validation
+
+
+class BusinessContextValidationError(MixpanelDataError):
+    """Business context content failed client-side validation.
+
+    Raised by ``Workspace.set_business_context()`` when the supplied
+    content exceeds ``BUSINESS_CONTEXT_MAX_CHARS`` (50,000 characters).
+    The check runs before the HTTP call so callers can fail fast and
+    avoid a wasted round-trip — the server enforces the same limit
+    server-side and would otherwise return ``QueryError`` (HTTP 400).
+
+    The ``details`` dict carries ``length`` (the actual content length)
+    and ``max`` (the configured limit) for programmatic recovery.
+
+    Example:
+        ```python
+        try:
+            ws.set_business_context("x" * 60_000, level="project")
+        except BusinessContextValidationError as e:
+            print(f"Too long: {e.details['length']} > {e.details['max']}")
+        ```
+    """
+
+    def __init__(
+        self,
+        message: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        """Initialize BusinessContextValidationError.
+
+        Args:
+            message: Human-readable error message.
+            details: Additional structured data — typically ``length``
+                and ``max``.
+        """
+        super().__init__(
+            message,
+            code="BUSINESS_CONTEXT_TOO_LONG",
+            details=details,
+        )
+
+
 # Bookmark Validation
 
 

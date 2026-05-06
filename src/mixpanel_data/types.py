@@ -12150,6 +12150,118 @@ class UserQueryResult(ResultWithDataFrame):
 
 
 # =============================================================================
+# Business Context (AIE-147)
+# =============================================================================
+# Markdown documentation that grounds AI assistants in an organization's
+# structure and goals. Two scopes — "organization" (shared across all projects)
+# and "project" (per-project). Stored as plain markdown text (no images,
+# structured data, or links). The 50,000-character cap is enforced both
+# server-side and client-side; the same constant ships in
+# webapp/business_context/mutations.py::MAX_CONTENT_LENGTH.
+
+
+BUSINESS_CONTEXT_MAX_CHARS: int = 50_000
+"""Maximum allowed content length for business context, in characters.
+
+Mirrors ``MAX_CONTENT_LENGTH`` in
+``analytics/webapp/business_context/mutations.py`` — the server returns
+HTTP 400 with ``"content exceeds maximum length of 50000 characters"``
+above this threshold."""
+
+
+class BusinessContext(BaseModel):
+    """Business context content at a single scope.
+
+    Returned by ``Workspace.get_business_context()`` and
+    ``Workspace.set_business_context()``. The ``organization_id`` field
+    is populated for ``level="organization"`` and ``project_id`` for
+    ``level="project"`` so callers can identify which scope a value
+    came from when handling both in the same code path.
+
+    Attributes:
+        level: ``"organization"`` (org-wide) or ``"project"``
+            (project-specific).
+        content: The markdown content. Empty string when no context is
+            set at this scope.
+        organization_id: Owning organization ID — populated when
+            ``level="organization"``, ``None`` otherwise.
+        project_id: Owning project ID — populated when ``level="project"``,
+            ``None`` otherwise.
+
+    Example:
+        ```python
+        ws = Workspace()
+        ctx = ws.get_business_context(level="project")
+        if not ctx.is_empty:
+            print(ctx.content[:200], "...")
+            print(f"({ctx.character_count} characters)")
+        ```
+    """
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    level: Literal["organization", "project"]
+    """Which scope this context belongs to."""
+
+    content: str
+    """Markdown content. Empty string when no context is set."""
+
+    organization_id: int | None = None
+    """Owning organization ID (set when ``level="organization"``)."""
+
+    project_id: str | None = None
+    """Owning project ID (set when ``level="project"``)."""
+
+    @property
+    def is_empty(self) -> bool:
+        """``True`` when no content has been set at this scope.
+
+        Returns:
+            ``True`` if ``content`` is the empty string, ``False`` otherwise.
+        """
+        return not self.content
+
+    @property
+    def character_count(self) -> int:
+        """Length of ``content`` in characters.
+
+        Returns:
+            Number of Unicode characters in ``content``. Compare against
+            ``BUSINESS_CONTEXT_MAX_CHARS`` (50,000) to check headroom.
+        """
+        return len(self.content)
+
+
+class BusinessContextChain(BaseModel):
+    """Both organization and project business context returned together.
+
+    Returned by ``Workspace.get_business_context_chain()``, which calls
+    the project-scoped ``/business-context/chain`` endpoint and resolves
+    both scopes in a single round-trip.
+
+    Attributes:
+        organization: Organization-level context (shared across projects).
+        project: Project-level context (specific to the active project).
+
+    Example:
+        ```python
+        ws = Workspace()
+        chain = ws.get_business_context_chain()
+        print("ORG:", chain.organization.content)
+        print("PROJECT:", chain.project.content)
+        ```
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    organization: BusinessContext
+    """Organization-level context (``level="organization"``)."""
+
+    project: BusinessContext
+    """Project-level context (``level="project"``)."""
+
+
+# =============================================================================
 # Auth Architecture Redesign Types (Phase 042)
 # =============================================================================
 # Read-only summary types for the redesigned auth subsystem. These are the

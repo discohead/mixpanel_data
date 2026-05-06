@@ -21,6 +21,7 @@ state-change verb.
 | `reports` | Report/bookmark CRUD (list, create, get, update, delete, bulk ops, history) |
 | `cohorts` | Cohort CRUD (list, create, get, update, delete, bulk ops) |
 | `flags` / `experiments` / `alerts` / `annotations` / `webhooks` / `lexicon` / `drop-filters` / `custom-properties` / `custom-events` / `lookup-tables` / `schemas` | Entity CRUD + data governance for the matching App API surface |
+| `business-context` | Read/write markdown business context at org or project scope (`get`, `set`, `clear`, `chain`) |
 
 **Removed (no shim):** `mp auth`, `mp projects`, `mp workspaces`, `mp context`,
 `mp config`. See `RELEASE_NOTES_0.4.0.md` for the legacy → v3 verb map.

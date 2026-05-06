@@ -23,7 +23,8 @@ MixpanelDataError
 │   ├── ServerError
 │   └── JQLSyntaxError
 ├── OAuthError
-└── WorkspaceScopeError
+├── WorkspaceScopeError
+└── BusinessContextValidationError
 ```
 
 ## Catching Errors
@@ -144,6 +145,21 @@ Raised when workspace resolution fails for App API endpoints.
 | `WORKSPACE_NOT_FOUND` | Specified workspace ID does not exist |
 
 ::: mixpanel_data.WorkspaceScopeError
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+## Business Context Exceptions
+
+Raised by `Workspace.set_business_context()` when content exceeds the 50,000-character cap. The check runs **before** the HTTP call, so callers fail fast and don't waste a round-trip; the server enforces the same limit and would otherwise return `QueryError` (HTTP 400). See the [Business Context guide](../guide/business-context.md) for usage.
+
+| Error Code | Raised When |
+|------------|-------------|
+| `BUSINESS_CONTEXT_TOO_LONG` | `len(content) > BUSINESS_CONTEXT_MAX_CHARS` (50,000) |
+
+The `details` dict carries `length` (the actual content length) and `max` (the configured limit) for programmatic recovery.
+
+::: mixpanel_data.BusinessContextValidationError
     options:
       show_root_heading: true
       show_root_toc_entry: true

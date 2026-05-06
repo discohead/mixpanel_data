@@ -18,6 +18,7 @@ Workspace orchestrates internal services and provides direct App API access:
 - **Feature Management** — Create, read, update, delete feature flags and experiments via Mixpanel App API (project-scoped)
 - **Operational Tooling** — Manage alerts, annotations, and webhooks via Mixpanel App API (workspace-scoped)
 - **Data Governance** — Manage Lexicon definitions, drop filters, custom properties, custom events, lookup tables, schema registry, schema enforcement, data auditing, volume anomalies, and event deletion requests via Mixpanel App API (workspace-scoped)
+- **Business Context** — Read and write the markdown documentation that grounds AI assistants (org and project scopes, 50,000-char cap)
 
 ## Key Features
 
@@ -115,6 +116,29 @@ events = ws.list_custom_events()
 ```
 
 See the [Data Governance guide](../guide/data-governance.md) for complete coverage.
+
+### Business Context
+
+Read and write the markdown documentation that grounds AI assistants. Two scopes (`level="organization"` shared across the org, `level="project"` per-project), 50,000-character cap enforced client-side before any HTTP call.
+
+```python
+import mixpanel_data as mp
+
+ws = mp.Workspace()
+
+# Read
+project_ctx = ws.get_business_context(level="project")
+org_ctx = ws.get_business_context(level="organization")     # auto-resolves org_id
+
+# Read both in one round-trip
+chain = ws.get_business_context_chain()
+
+# Write (full-replace; pass "" to clear)
+ws.set_business_context("# About Acme\n…", level="project")
+ws.clear_business_context(level="organization")
+```
+
+Project-scope writes require `edit_project_info` permission; org-scope writes require `edit_project_info` at the org level. See the [Business Context guide](../guide/business-context.md) for full coverage of input modes, error handling, and cross-project audit patterns.
 
 !!! note "`workspaces()` vs `list_workspaces()`"
     Both methods are exposed. `workspaces()` (recommended) returns `list[WorkspaceRef]` from the cached `/me` response — fast, typed, and consistent with `events()` / `properties()` / `funnels()` / `cohorts()`. `list_workspaces()` is a lower-level escape hatch that calls `GET /api/app/projects/{pid}/workspaces/public` directly and returns `list[PublicWorkspace]`.

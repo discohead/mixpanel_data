@@ -59,6 +59,7 @@ from mixpanel_data.exceptions import (
     APIError,
     AuthenticationError,
     BookmarkValidationError,
+    BusinessContextValidationError,
     ConfigError,
     DateRangeTooLargeError,
     EventNotFoundError,
@@ -73,6 +74,8 @@ from mixpanel_data.exceptions import (
     WorkspaceScopeError,
 )
 from mixpanel_data.types import (
+    # Business Context (AIE-147)
+    BUSINESS_CONTEXT_MAX_CHARS,
     # Auth redesign (042) types
     AccountSummary,
     AccountTestResult,
@@ -116,6 +119,8 @@ from mixpanel_data.types import (
     BulkUpdateCohortEntry,
     BulkUpdateEventsParams,
     BulkUpdatePropertiesParams,
+    BusinessContext,
+    BusinessContextChain,
     Cohort,
     CohortBreakdown,
     CohortCreator,
@@ -367,6 +372,7 @@ __all__ = [
     "DateRangeTooLargeError",
     "OAuthError",
     "WorkspaceScopeError",
+    "BusinessContextValidationError",
     # Result types
     "SegmentationResult",
     "FunnelResult",
@@ -532,6 +538,10 @@ __all__ = [
     "CustomEvent",
     "CustomEventAlternative",
     "CreateCustomEventParams",
+    # Business Context (AIE-147)
+    "BUSINESS_CONTEXT_MAX_CHARS",
+    "BusinessContext",
+    "BusinessContextChain",
     # Query API types (Phase 029)
     "MathType",
     "PerUserAggregation",

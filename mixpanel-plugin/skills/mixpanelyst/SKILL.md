@@ -1,6 +1,6 @@
 ---
 name: mixpanelyst
-description: This skill should be used when the user asks about Mixpanel product analytics, event data, funnel analysis, retention curves, cohort analysis, segmentation queries, user behavior, conversion rates, churn, DAU/MAU, ARPU, revenue metrics, feature adoption, A/B test results, user paths, flow analysis, or any request to query, explore, visualize, or analyze Mixpanel data using Python.
+description: This skill should be used when the user asks about Mixpanel product analytics, event data, funnel analysis, retention curves, cohort analysis, segmentation queries, user behavior, conversion rates, churn, DAU/MAU, ARPU, revenue metrics, feature adoption, A/B test results, user paths, flow analysis, or any request to query, explore, visualize, or analyze Mixpanel data using Python. Also use when the user asks to read, write, or manage Mixpanel "business context" — the markdown documentation that grounds AI assistants in an organization's structure and goals.
 allowed-tools: Bash Read Write WebFetch
 ---
 
@@ -922,6 +922,49 @@ User Guide: `WebFetch(url="https://jaredmcfarland.github.io/mixpanel_data/guide/
 
 **Other:** `get_tracking_metadata`
 
+### Business Context
+
+Read and write the markdown documentation that grounds AI assistants in your organization's structure and goals, exposed as a typed Python API.
+
+Two scopes — `level="organization"` (shared across the whole org) and `level="project"` (per-project). 50,000-character cap enforced **client-side before any HTTP call** so oversize input fails fast. Org-level operations auto-resolve `organization_id` from the cached `/me` response; pass `organization_id=N` to override.
+
+Run `python3 ${CLAUDE_SKILL_DIR}/scripts/help.py search business_context` to see all four methods, two types, and one exception.
+
+```python
+from mixpanel_data import BUSINESS_CONTEXT_MAX_CHARS  # 50_000
+
+# Read
+project_ctx = ws.get_business_context(level="project")
+org_ctx = ws.get_business_context(level="organization")  # auto-resolves org_id
+explicit = ws.get_business_context(level="organization", organization_id=42)
+
+# Read both at once (single round-trip via /business-context/chain)
+chain = ws.get_business_context_chain()
+print(chain.organization.content)
+print(chain.project.content)
+
+# Write (full-replace; pass "" to clear, or use clear_business_context())
+ws.set_business_context("# About Acme\n…", level="project")
+ws.set_business_context("# Org-wide standards", level="organization")
+ws.clear_business_context(level="project")
+
+# All return BusinessContext with: level, content, organization_id, project_id
+# Plus convenience .is_empty and .character_count properties (Python only)
+print(f"{project_ctx.character_count}/{BUSINESS_CONTEXT_MAX_CHARS} chars; "
+      f"empty={project_ctx.is_empty}")
+```
+
+**When to reach for this:**
+
+- User asks "what's the business context for this project/org?" → `get_business_context_chain()`
+- User wants to version-control project context as a `.md` file → `ws.set_business_context(Path("ctx.md").read_text(), level="project")` in CI
+- User asks to "audit which projects have AI context configured" → iterate `ws.projects()` + `ws.use(project=...)` + `ws.get_business_context(level="project")` and check `.is_empty`
+- User asks to seed a new project from the org default → `chain = ws.get_business_context_chain(); ws.set_business_context(chain.organization.content, level="project")`
+
+**Permissions:** project-scope reads need any project access; project-scope writes need `edit_project_info` on the project. Org-scope writes need `edit_project_info` at the org level (typically OAuth, not service account). The `BusinessContextValidationError` exception is raised client-side BEFORE any HTTP call when content exceeds 50,000 chars, so use it to detect oversize input without burning a round-trip.
+
+User Guide: `WebFetch(url="https://jaredmcfarland.github.io/mixpanel_data/guide/business-context/index.md")`
+
 ## Key Types
 
 Run `python3 ${CLAUDE_SKILL_DIR}/scripts/help.py types` for the full list of all types. Use `help.py <TypeName>` for fields, constructors, and enum values.
@@ -1008,6 +1051,7 @@ Full reference: `WebFetch(url="https://jaredmcfarland.github.io/mixpanel_data/ap
 | `BookmarkValidationError` | Params failed validation |
 | `RateLimitError` | Rate limit exceeded (429) |
 | `ServerError` | Mixpanel server error (5xx) |
-| `WorkspaceScopeError` | Workspace resolution error |
+| `WorkspaceScopeError` | Workspace resolution error (also raised when org_id can't be auto-resolved for `level="organization"` business-context calls) |
 | `DateRangeTooLargeError` | Date range exceeds API maximum |
 | `OAuthError` | OAuth flow error |
+| `BusinessContextValidationError` | Business context content exceeds 50,000 chars (client-side, before HTTP) |

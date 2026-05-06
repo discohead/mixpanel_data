@@ -92,6 +92,7 @@ plugins:
           - guide/streaming.md
           - guide/entity-management.md
           - guide/data-governance.md
+          - guide/business-context.md
         API Reference:
           - api/index.md
           - api/workspace.md
@@ -148,6 +149,7 @@ plugins:
           - guide/streaming.md: "Stream events and profiles for ETL"
           - guide/entity-management.md: "Create, update, delete dashboards, reports, and cohorts"
           - guide/data-governance.md: "Manage Lexicon definitions, drop filters, custom properties, custom events, lookup tables, schema registry, enforcement, auditing, anomalies, and event deletion requests"
+          - guide/business-context.md: "Read and write the markdown business context that grounds AI assistants (org and project scopes, 50,000-char cap)"
         API Reference:
           - api/index.md: "Python API overview"
           - api/workspace.md: "Workspace class - main entry point"
@@ -195,6 +197,7 @@ nav:
       - Streaming Data: guide/streaming.md
       - Entity Management: guide/entity-management.md
       - Data Governance: guide/data-governance.md
+      - Business Context: guide/business-context.md
   - API Reference:
       - Overview: api/index.md
       - Workspace: api/workspace.md

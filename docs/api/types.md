@@ -1012,3 +1012,19 @@ Types for managing event deletion requests.
     options:
       show_root_heading: true
       show_root_toc_entry: true
+
+## Business Context Types
+
+Types for the markdown documentation that grounds AI assistants — see the [Business Context guide](../guide/business-context.md). Both org and project scopes return the same `BusinessContext` model; `BusinessContextChain` bundles both for the convenience `get_business_context_chain()` round-trip.
+
+The 50,000-character cap is exposed as the constant `mixpanel_data.BUSINESS_CONTEXT_MAX_CHARS` and enforced both client-side (before any HTTP call) and server-side.
+
+::: mixpanel_data.BusinessContext
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true
+
+::: mixpanel_data.BusinessContextChain
+    options:
+      show_root_heading: true
+      show_root_toc_entry: true

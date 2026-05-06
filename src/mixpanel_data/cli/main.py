@@ -170,6 +170,7 @@ def _register_commands() -> None:
     from mixpanel_data.cli.commands.account import account_app
     from mixpanel_data.cli.commands.alerts import alerts_app
     from mixpanel_data.cli.commands.annotations import annotations_app
+    from mixpanel_data.cli.commands.business_context import business_context_app
     from mixpanel_data.cli.commands.cohorts import cohorts_app
     from mixpanel_data.cli.commands.custom_events import custom_events_app
     from mixpanel_data.cli.commands.custom_properties import custom_properties_app
@@ -227,6 +228,11 @@ def _register_commands() -> None:
         lookup_tables_app,
         name="lookup-tables",
         help="Manage lookup tables.",
+    )
+    app.add_typer(
+        business_context_app,
+        name="business-context",
+        help="Read and write project / organization business context.",
     )
 
 

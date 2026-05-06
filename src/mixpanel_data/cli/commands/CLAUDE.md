@@ -31,6 +31,7 @@ flags.
 | `custom_events.py` | `mp custom-events` | Custom-event CRUD (data governance) |
 | `lookup_tables.py` | `mp lookup-tables` | Lookup-table CRUD + upload/download (data governance) |
 | `schemas.py` | `mp schemas` | Project / workspace JSON schemas |
+| `business_context.py` | `mp business-context` | Read/write markdown business context at org or project scope (`get`, `set`, `clear`, `chain`) |
 
 **Removed (no shim):** `mp auth`, `mp projects`, `mp workspaces`, `mp context`,
 `mp config`. See `RELEASE_NOTES_0.4.0.md` for the legacy → v3 verb map.

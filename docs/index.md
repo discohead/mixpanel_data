@@ -307,4 +307,5 @@ For interactive exploration of the codebase itself, see [DeepWiki](https://deepw
 - [API Reference](api/index.md) — Complete Python API documentation
 - [Entity Management](guide/entity-management.md) — Manage dashboards, reports, cohorts, feature flags, experiments, alerts, annotations, and webhooks
 - [Data Governance](guide/data-governance.md) — Manage Lexicon definitions, drop filters, custom properties, custom events, and lookup tables
+- [Business Context](guide/business-context.md) — Read and write the markdown business context that grounds AI assistants (org and project scopes)
 - [CLI Reference](cli/index.md) — Command-line interface documentation

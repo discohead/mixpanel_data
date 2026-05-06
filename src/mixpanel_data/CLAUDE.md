@@ -138,6 +138,8 @@ with mp.Workspace() as ws:
 
 **Data Governance — Custom Events**: `list_custom_events()`, `create_custom_event()`, `update_custom_event()`, `delete_custom_event()`
 
+**Business Context**: `get_business_context()`, `set_business_context()`, `clear_business_context()`, `get_business_context_chain()` — read/write the markdown documentation that grounds AI assistants (org and project scopes, 50,000-char cap)
+
 **Escape Hatches**: `api` (MixpanelAPIClient)
 
 ## Exception Hierarchy

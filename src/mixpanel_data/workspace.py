@@ -119,14 +119,17 @@ from mixpanel_data._literal_types import (
 from mixpanel_data.exceptions import (
     AuthenticationError,
     BookmarkValidationError,
+    BusinessContextValidationError,
     ConfigError,
     MixpanelDataError,
     QueryError,
     RateLimitError,
     ServerError,
     ValidationError,
+    WorkspaceScopeError,
 )
 from mixpanel_data.types import (
+    BUSINESS_CONTEXT_MAX_CHARS,
     ActivityFeedResult,
     AlertCount,
     AlertHistoryResponse,
@@ -150,6 +153,8 @@ from mixpanel_data.types import (
     BulkUpdateCohortEntry,
     BulkUpdateEventsParams,
     BulkUpdatePropertiesParams,
+    BusinessContext,
+    BusinessContextChain,
     Cohort,
     CohortBreakdown,
     CohortDefinition,
@@ -9944,3 +9949,301 @@ class Workspace:
             val = params["distinct_ids"]
             kwargs["distinct_ids"] = json.loads(val) if isinstance(val, str) else val
         return kwargs
+
+    # =========================================================================
+    # BUSINESS CONTEXT (AIE-147)
+    # =========================================================================
+    # Markdown documentation that grounds AI assistants in the
+    # organization's structure and goals. Two scopes:
+    #   - "organization": shared across all projects
+    #   - "project":      specific to the active project
+    # Backed by /api/app/projects/{pid}/business-context and
+    # /api/app/organizations/{org_id}/business-context. The /chain
+    # endpoint returns both at once. Server enforces a 50,000-char limit
+    # (mirrored client-side as BUSINESS_CONTEXT_MAX_CHARS).
+
+    def _resolve_organization_id(self, explicit: int | None = None) -> int:
+        """Resolve the organization ID for org-scoped business context calls.
+
+        Resolution order:
+
+        1. ``explicit`` argument when not ``None`` (no I/O).
+        2. ``MeResponse.projects[<active project id>].organization_id``
+           via the cached ``/me`` response (24h ``MeCache``).
+        3. The single org in ``MeResponse.organizations`` when exactly
+           one is accessible.
+        4. Raise ``WorkspaceScopeError`` listing the available org IDs.
+
+        Args:
+            explicit: Optional explicit organization ID. When provided,
+                no /me lookup is performed and this value is returned
+                as-is.
+
+        Returns:
+            Numeric organization ID for use in
+            ``/organizations/{org_id}/business-context`` paths.
+
+        Raises:
+            ConfigError: ``/me`` cannot be fetched (e.g. credentials
+                lack /me permission).
+            WorkspaceScopeError: ``explicit`` was not provided AND the
+                current project is not present in ``/me`` AND there is
+                not exactly one accessible organization to fall back to.
+
+        Example:
+            ```python
+            ws = Workspace()
+            org_id = ws._resolve_organization_id()         # auto-resolve
+            org_id = ws._resolve_organization_id(42)       # explicit
+            ```
+        """
+        if explicit is not None:
+            return explicit
+        me = self._me_svc.fetch()
+        project_info = me.projects.get(self._session.project.id)
+        if project_info is not None:
+            return project_info.organization_id
+        if len(me.organizations) == 1:
+            sole = next(iter(me.organizations.values()))
+            return sole.id
+        raise WorkspaceScopeError(
+            f"Cannot auto-resolve organization for project "
+            f"{self._session.project.id!r}. Pass organization_id explicitly. "
+            f"Available organizations: {sorted(me.organizations.keys())}",
+            code="ORGANIZATION_AMBIGUOUS",
+            details={
+                "project_id": self._session.project.id,
+                "available_organizations": sorted(me.organizations.keys()),
+            },
+        )
+
+    def get_business_context(
+        self,
+        *,
+        level: Literal["organization", "project"] = "project",
+        organization_id: int | None = None,
+    ) -> BusinessContext:
+        """Read business context content at the given scope.
+
+        Calls ``GET /api/app/projects/{pid}/business-context`` (when
+        ``level="project"``) or
+        ``GET /api/app/organizations/{org_id}/business-context``
+        (when ``level="organization"``). Returns a populated
+        ``BusinessContext`` with ``content=""`` when no context is set.
+
+        Args:
+            level: ``"project"`` (default) reads the project-level
+                context for the active session's project.
+                ``"organization"`` reads the org-level context shared
+                across all projects in the organization.
+            organization_id: Optional explicit org ID, only honored
+                when ``level="organization"``. When omitted, the org ID
+                is auto-resolved from the cached ``/me`` response — see
+                :meth:`_resolve_organization_id`.
+
+        Returns:
+            ``BusinessContext`` whose ``content`` reflects the server's
+            current state. ``organization_id`` is populated for
+            org-level returns; ``project_id`` for project-level.
+
+        Raises:
+            ConfigError: Credentials are not available.
+            AuthenticationError: Invalid credentials (401).
+            QueryError: API error (400, 403, 404).
+            ServerError: Server-side errors (5xx).
+            WorkspaceScopeError: ``level="organization"`` and the org
+                ID could not be auto-resolved.
+
+        Example:
+            ```python
+            ws = Workspace()
+            project_ctx = ws.get_business_context(level="project")
+            org_ctx = ws.get_business_context(
+                level="organization", organization_id=100,
+            )
+            print(project_ctx.content)
+            ```
+        """
+        client = self._require_api_client()
+        if level == "organization":
+            org_id = self._resolve_organization_id(organization_id)
+            raw = client.get_business_context(organization_id=org_id)
+            return BusinessContext(
+                level="organization",
+                content=raw.get("content", ""),
+                organization_id=org_id,
+            )
+        raw = client.get_business_context()
+        return BusinessContext(
+            level="project",
+            content=raw.get("content", ""),
+            project_id=self._session.project.id,
+        )
+
+    def set_business_context(
+        self,
+        content: str,
+        *,
+        level: Literal["organization", "project"] = "project",
+        organization_id: int | None = None,
+    ) -> BusinessContext:
+        """Replace business context content at the given scope.
+
+        Validates ``len(content) <= BUSINESS_CONTEXT_MAX_CHARS`` (50,000)
+        client-side BEFORE the HTTP call so callers fail fast and avoid
+        a wasted round-trip to the server (which enforces the same limit
+        and returns 400 above it). Then calls
+        ``PUT /api/app/projects/{pid}/business-context`` (project) or
+        ``PUT /api/app/organizations/{org_id}/business-context`` (org).
+
+        The PUT is full-replace — pass an empty string to clear (or use
+        :meth:`clear_business_context` for clarity).
+
+        Args:
+            content: New markdown content. Empty string clears the
+                context at this scope.
+            level: ``"project"`` (default) or ``"organization"``.
+            organization_id: Optional explicit org ID, only honored
+                when ``level="organization"``. Auto-resolved from
+                ``/me`` when omitted.
+
+        Returns:
+            ``BusinessContext`` echoing the server's saved content.
+
+        Raises:
+            BusinessContextValidationError: ``len(content) > 50_000``
+                (client-side check, no HTTP call made).
+            ConfigError: Credentials are not available.
+            AuthenticationError: Invalid credentials (401).
+            QueryError: Caller lacks ``edit_project_info`` permission
+                (403) or other API error (400).
+            ServerError: Server-side errors (5xx).
+            WorkspaceScopeError: ``level="organization"`` and the org
+                ID could not be auto-resolved.
+
+        Example:
+            ```python
+            ws = Workspace()
+            ws.set_business_context("# Acme Corp\\n...", level="project")
+            ws.set_business_context(
+                "# Org-wide context", level="organization",
+            )
+            ```
+        """
+        if len(content) > BUSINESS_CONTEXT_MAX_CHARS:
+            raise BusinessContextValidationError(
+                f"content exceeds maximum length of "
+                f"{BUSINESS_CONTEXT_MAX_CHARS} characters (got {len(content)})",
+                details={
+                    "length": len(content),
+                    "max": BUSINESS_CONTEXT_MAX_CHARS,
+                },
+            )
+        client = self._require_api_client()
+        if level == "organization":
+            org_id = self._resolve_organization_id(organization_id)
+            raw = client.set_business_context(content, organization_id=org_id)
+            return BusinessContext(
+                level="organization",
+                content=raw.get("content", ""),
+                organization_id=org_id,
+            )
+        raw = client.set_business_context(content)
+        return BusinessContext(
+            level="project",
+            content=raw.get("content", ""),
+            project_id=self._session.project.id,
+        )
+
+    def clear_business_context(
+        self,
+        *,
+        level: Literal["organization", "project"] = "project",
+        organization_id: int | None = None,
+    ) -> BusinessContext:
+        """Clear business context at the given scope.
+
+        Convenience wrapper that calls
+        ``set_business_context("", level=..., organization_id=...)``.
+        Useful for documenting intent — equivalent to passing an empty
+        string explicitly.
+
+        Args:
+            level: ``"project"`` (default) or ``"organization"``.
+            organization_id: Optional explicit org ID for
+                ``level="organization"``.
+
+        Returns:
+            ``BusinessContext`` with ``content=""`` (the cleared state
+            echoed back from the server).
+
+        Raises:
+            ConfigError: Credentials are not available.
+            AuthenticationError: Invalid credentials (401).
+            QueryError: Caller lacks ``edit_project_info`` permission
+                (403) or other API error (400).
+            ServerError: Server-side errors (5xx).
+            WorkspaceScopeError: ``level="organization"`` and the org
+                ID could not be auto-resolved.
+
+        Example:
+            ```python
+            ws = Workspace()
+            ws.clear_business_context(level="project")
+            ```
+        """
+        return self.set_business_context(
+            "",
+            level=level,
+            organization_id=organization_id,
+        )
+
+    def get_business_context_chain(self) -> BusinessContextChain:
+        """Read both organization and project business context together.
+
+        Calls ``GET /api/app/projects/{pid}/business-context/chain`` —
+        a server-side convenience that returns both scopes for the
+        active project in a single round-trip. The returned
+        ``organization`` field reflects the org that owns the active
+        project; its ``organization_id`` is auto-resolved via the same
+        path as :meth:`_resolve_organization_id`.
+
+        Returns:
+            ``BusinessContextChain`` with populated ``organization`` and
+            ``project`` fields. Either ``content`` may be empty when no
+            context is set at that scope.
+
+        Raises:
+            ConfigError: Credentials are not available.
+            AuthenticationError: Invalid credentials (401).
+            QueryError: Caller lacks project access (403, 404) or
+                other API error (400).
+            ServerError: Server-side errors (5xx).
+            WorkspaceScopeError: Org ID could not be auto-resolved
+                (the chain endpoint returns content but the response
+                does not echo the org ID, so we resolve it ourselves
+                to populate ``organization.organization_id``).
+
+        Example:
+            ```python
+            ws = Workspace()
+            chain = ws.get_business_context_chain()
+            print("ORG:", chain.organization.content)
+            print("PROJECT:", chain.project.content)
+            ```
+        """
+        client = self._require_api_client()
+        raw = client.get_business_context_chain()
+        org_id = self._resolve_organization_id()
+        return BusinessContextChain(
+            organization=BusinessContext(
+                level="organization",
+                content=raw.get("org_context", ""),
+                organization_id=org_id,
+            ),
+            project=BusinessContext(
+                level="project",
+                content=raw.get("project_context", ""),
+                project_id=self._session.project.id,
+            ),
+        )
