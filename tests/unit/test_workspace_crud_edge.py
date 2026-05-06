@@ -37,6 +37,7 @@ from mixpanel_data.types import (
 )
 from mixpanel_data.workspace import Workspace
 from tests.conftest import make_session
+from tests.unit._bookmark_fixtures import MINIMAL_FUNNEL_PARAMS
 
 # ---- 042 redesign: canonical fake Session for Workspace(session=…) ----
 _TEST_SESSION = Session(
@@ -118,8 +119,6 @@ class TestRequestBodySerialization:
         # validation passes; this test is about request body
         # serialization (``bookmark_type`` → ``type`` alias), not about
         # validation behavior.
-        from tests.unit._bookmark_fixtures import MINIMAL_FUNNEL_PARAMS
-
         ws = _make_workspace(temp_dir, handler)
         ws.create_bookmark(
             CreateBookmarkParams(
