@@ -41,6 +41,7 @@ from mixpanel_headless._literal_types import (
     TimeComparisonUnit,
     TimeUnit,
 )
+from mixpanel_headless.accounts import login_unified
 from mixpanel_headless.auth_types import (
     Account,
     AccountType,
@@ -69,6 +70,7 @@ from mixpanel_headless.exceptions import (
     ProjectNotFoundError,
     QueryError,
     RateLimitError,
+    RegionProbeError,
     ServerError,
     ValidationError,
     WorkspaceScopeError,
@@ -304,6 +306,8 @@ __all__ = [
     "accounts",
     "session",
     "targets",
+    # 043 frictionless-auth orchestrator
+    "login_unified",
     # Auth redesign (042) exceptions
     "AccountInUseError",
     # Validation
@@ -371,6 +375,7 @@ __all__ = [
     "EventNotFoundError",
     "DateRangeTooLargeError",
     "OAuthError",
+    "RegionProbeError",
     "WorkspaceScopeError",
     "BusinessContextValidationError",
     # Result types

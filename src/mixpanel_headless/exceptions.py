@@ -16,7 +16,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from mixpanel_headless._internal.auth.account import Region
 
 
 class MixpanelHeadlessError(Exception):
@@ -985,6 +988,71 @@ class OAuthError(MixpanelHeadlessError):
             details: Additional structured data about the error.
         """
         super().__init__(message, code=code, details=details)
+
+
+class RegionProbeError(OAuthError):
+    """Raised when no region accepts the credential during region probing.
+
+    The region probe walks a configured order (default ``us`` → ``eu`` →
+    ``in``) against ``/api/app/me``, returning the first 200. When every
+    probe attempt fails, this exception is raised carrying the full
+    attempt list for diagnostic and telemetry use.
+
+    A status code of ``0`` indicates the request never reached the server
+    (network error); the third tuple element carries the failure detail
+    (HTTP response text or the network error reason).
+
+    Example:
+        ```python
+        try:
+            result = probe_region(client_factory, headers)
+        except RegionProbeError as exc:
+            for region, status, body in exc.attempts:
+                print(f"{region}: {status} {body}")
+        ```
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        attempts: list[tuple[Region, int, str]],
+    ) -> None:
+        """Initialize RegionProbeError.
+
+        Args:
+            message: Human-readable error message.
+            attempts: Ordered list of ``(region, status_code, error_body)``
+                tuples for every probed region. ``status_code`` is ``0``
+                for network errors; ``error_body`` carries the failure
+                detail.
+        """
+        self._attempts: list[tuple[Region, int, str]] = list(attempts)
+        super().__init__(
+            message,
+            code="OAUTH_REGION_PROBE_FAILED",
+            details={"attempts": [list(a) for a in self._attempts]},
+        )
+
+    @property
+    def attempts(self) -> list[tuple[Region, int, str]]:
+        """Ordered list of ``(region, status_code, error_body)`` tuples."""
+        return list(self._attempts)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the exception to a JSON-friendly dict.
+
+        Includes ``attempts`` at the top level so consumers can inspect
+        the per-region probe outcomes without unpacking ``details``.
+
+        Returns:
+            Dictionary with keys ``code``, ``message``, ``details``, and
+            ``attempts``. Each ``attempts`` entry is a 3-element list
+            ``[region, status_code, error_body]``.
+        """
+        base = super().to_dict()
+        base["attempts"] = [list(a) for a in self._attempts]
+        return base
 
 
 class WorkspaceScopeError(MixpanelHeadlessError):

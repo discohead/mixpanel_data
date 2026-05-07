@@ -405,9 +405,12 @@ class ConfigManager:
     ) -> Account:
         """In-place ``[accounts.NAME]`` insertion shared by ``add_account`` and ``mp.accounts.add``.
 
-        Per FR-004, ``default_project`` is REQUIRED at add-time for
-        ``service_account`` and ``oauth_token``; optional for ``oauth_browser``
-        (backfilled by ``mp account login``).
+        Per 043 FR-001, ``default_project`` is OPTIONAL for every
+        account type at add-time. Service-account and oauth_token
+        callers can backfill it later via ``mp project use ID`` (or the
+        ``mp login`` orchestrator's project picker). The 042 hard
+        requirement was relaxed because ``mp project list`` now
+        bootstraps from ``/me`` without needing a configured project.
 
         Args:
             raw: Parsed TOML dict (mutated in place).
@@ -436,10 +439,6 @@ class ConfigManager:
         if type == "service_account":
             if username is None or secret is None:
                 raise ConfigError("ServiceAccount requires `username` and `secret`.")
-            if default_project is None:
-                raise ConfigError(
-                    "ServiceAccount requires `default_project` at add-time."
-                )
             block["username"] = username
             block["secret"] = (
                 secret.get_secret_value() if isinstance(secret, SecretStr) else secret
@@ -450,10 +449,6 @@ class ConfigManager:
             if (token is None) == (token_env is None):
                 raise ConfigError(
                     "OAuthTokenAccount requires exactly one of `token` or `token_env`."
-                )
-            if default_project is None:
-                raise ConfigError(
-                    "OAuthTokenAccount requires `default_project` at add-time."
                 )
             if token is not None:
                 block["token"] = (

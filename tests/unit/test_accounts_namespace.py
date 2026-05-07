@@ -58,18 +58,27 @@ class TestAdd:
         assert result.type == "service_account"
         assert cm.get_account("team").default_project == "3713224"
 
-    def test_service_account_without_default_project_raises(
+    def test_service_account_without_default_project_succeeds(
         self, cm: ConfigManager
     ) -> None:
-        """SA must provide ``default_project`` per FR-004."""
-        with pytest.raises(ConfigError):
-            accounts_ns.add(
-                "team",
-                type="service_account",
-                region="us",
-                username="u",
-                secret=SecretStr("s"),
-            )
+        """Per 043 FR-001: SA may omit ``default_project`` at add-time.
+
+        Inverts the 042 requirement — a service account can now be
+        created without a project, with the user expected to set the
+        active project later via ``mp project use ID`` or to rely on
+        ``mp project list``'s /me-driven discovery.
+        """
+        result = accounts_ns.add(
+            "team",
+            type="service_account",
+            region="us",
+            username="u",
+            secret=SecretStr("s"),
+        )
+        assert isinstance(result, AccountSummary)
+        assert result.name == "team"
+        assert result.type == "service_account"
+        assert cm.get_account("team").default_project is None
 
     def test_oauth_browser_without_default_project_ok(self, cm: ConfigManager) -> None:
         """``oauth_browser`` may omit ``default_project`` — backfilled at login."""
@@ -107,17 +116,24 @@ class TestAdd:
         )
         assert result.type == "oauth_token"
 
-    def test_oauth_token_without_default_project_raises(
+    def test_oauth_token_without_default_project_succeeds(
         self, cm: ConfigManager
     ) -> None:
-        """oauth_token must provide ``default_project`` per FR-004."""
-        with pytest.raises(ConfigError):
-            accounts_ns.add(
-                "agent",
-                type="oauth_token",
-                region="us",
-                token=SecretStr("ey.x"),
-            )
+        """Per 043 FR-001: oauth_token may omit ``default_project`` at add-time.
+
+        Same relaxation as service_account — the user can configure the
+        active project later. The token credential alone is enough to
+        register the account.
+        """
+        result = accounts_ns.add(
+            "agent",
+            type="oauth_token",
+            region="us",
+            token=SecretStr("ey.x"),
+        )
+        assert isinstance(result, AccountSummary)
+        assert result.type == "oauth_token"
+        assert cm.get_account("agent").default_project is None
 
     def test_first_account_auto_active(self, cm: ConfigManager) -> None:
         """Per FR-045, the first account auto-promotes to ``[active].account``."""
@@ -156,6 +172,69 @@ class TestAdd:
         )
         with pytest.raises(ConfigError):
             accounts_ns.add("x", type="oauth_browser", region="us")
+
+    def test_re_add_with_region_none_does_not_probe(self, cm: ConfigManager) -> None:
+        """``accounts.add(region=None)`` on a duplicate fails fast — no probe.
+
+        Per 043 plan, ``accounts.add()`` is a pure persistence call. The
+        region probe lives in the CLI (``mp account add`` / ``mp login``)
+        so a Python-API caller that passes ``region=None`` for an
+        existing account hits the duplicate-name (or missing-region)
+        error before any HTTP attempt would be made.
+        """
+        accounts_ns.add(
+            "x",
+            type="service_account",
+            region="us",
+            username="u",
+            secret=SecretStr("s"),
+        )
+        # Re-add with region=None must raise — never reach a probe call.
+        with pytest.raises(ConfigError):
+            accounts_ns.add(
+                "x",
+                type="service_account",
+                region=None,
+                username="u",
+                secret=SecretStr("s"),
+            )
+        # First add's region is preserved (no silent rewrite).
+        assert cm.get_account("x").region == "us"
+
+    def test_add_sa_without_region_raises_actionable_error(
+        self, cm: ConfigManager
+    ) -> None:
+        """``accounts.add(region=None)`` for SA → ConfigError naming ``mp login``.
+
+        Per 043 plan §"Library-First": probing is a CLI concern; the
+        Python API refuses to invent a region. The error message points
+        callers at ``mp login`` (the orchestrator) or at supplying
+        ``region=`` explicitly.
+        """
+        with pytest.raises(ConfigError, match="region") as exc_info:
+            accounts_ns.add(
+                "team",
+                type="service_account",
+                region=None,
+                username="u",
+                secret=SecretStr("s"),
+            )
+        # The error mentions the actionable next step.
+        assert (
+            "mp login" in exc_info.value.message or "region=" in exc_info.value.message
+        )
+
+    def test_add_oauth_token_without_region_raises_actionable_error(
+        self, cm: ConfigManager
+    ) -> None:
+        """Same relaxation refusal for oauth_token."""
+        with pytest.raises(ConfigError, match="region"):
+            accounts_ns.add(
+                "ci",
+                type="oauth_token",
+                region=None,
+                token=SecretStr("ey.x"),
+            )
 
 
 class TestUpdate:

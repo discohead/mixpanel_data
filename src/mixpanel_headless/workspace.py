@@ -788,7 +788,10 @@ class Workspace:
 
             cache = MeCache(account_name=self._account_name)
             self._me_service = _MeService(
-                self._require_api_client(), cache, self._session.account.region
+                self._require_api_client(),
+                cache,
+                self._session.account.region,
+                account_type=self._session.account.type,
             )
         return self._me_service
 

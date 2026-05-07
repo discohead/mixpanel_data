@@ -40,6 +40,95 @@ from mixpanel_headless.types import AccountSummary
 _STDIN_SECRET_MAX_BYTES = 64 * 1024
 
 
+def _probe_region_for_credential(
+    *,
+    account_type: str,
+    username: str | None,
+    secret: SecretStr | None,
+    token: SecretStr | None,
+    token_env: str | None,
+) -> Region:
+    """Probe ``us → eu → in`` against ``/me`` and return the resolved region.
+
+    Builds the Authorization header from the supplied SA / oauth_token
+    credentials, hands it to :func:`region_probe.probe_region` with a
+    region-scoped ``httpx.Client`` factory, and returns the first
+    region that returns 200. Prints one stderr line per probe attempt
+    so the user sees the discovery progress in real time.
+
+    Args:
+        account_type: ``"service_account"`` or ``"oauth_token"``.
+        username: Required for service_account.
+        secret: Required for service_account (a :class:`SecretStr`).
+        token: For oauth_token; mutually exclusive with ``token_env``.
+        token_env: For oauth_token; names an env var holding the bearer.
+
+    Returns:
+        The resolved :data:`Region` (``"us"`` / ``"eu"`` / ``"in"``).
+
+    Raises:
+        RegionProbeError: When no region accepts the credential. The
+            ``@handle_errors`` decorator maps this to exit 2 with the
+            error catalog E-1 message.
+    """
+    import base64
+
+    import httpx
+
+    from mixpanel_headless._internal.api_client import ENDPOINTS
+    from mixpanel_headless._internal.auth.region_probe import (
+        RegionProbeResult,
+        probe_region,
+    )
+
+    # Compose the Authorization header without instantiating a full
+    # Account model — Account requires a region we don't have yet.
+    if account_type == "service_account":
+        if username is None or secret is None:
+            err_console.print(
+                "[red]Internal error: service_account probe missing credentials.[/red]"
+            )
+            raise typer.Exit(ExitCode.INVALID_ARGS)
+        raw = f"{username}:{secret.get_secret_value()}".encode()
+        headers = {"Authorization": f"Basic {base64.b64encode(raw).decode('ascii')}"}
+    elif account_type == "oauth_token":
+        if token is not None:
+            bearer = token.get_secret_value()
+        elif token_env is not None:
+            bearer = os.environ.get(token_env, "")
+            if not bearer:
+                err_console.print(
+                    f"[red]--token-env {token_env!r} is unset; cannot probe.[/red]"
+                )
+                raise typer.Exit(ExitCode.INVALID_ARGS)
+        else:  # pragma: no cover — earlier validation prevents this
+            err_console.print(
+                "[red]Internal error: oauth_token probe missing bearer.[/red]"
+            )
+            raise typer.Exit(ExitCode.INVALID_ARGS)
+        headers = {"Authorization": f"Bearer {bearer}"}
+    else:  # pragma: no cover — earlier validation gates this path
+        err_console.print(
+            f"[red]Internal error: cannot probe region for type {account_type!r}.[/red]"
+        )
+        raise typer.Exit(ExitCode.INVALID_ARGS)
+
+    def _factory(region: Region) -> httpx.Client:
+        """Build a region-scoped httpx.Client bound to the API host."""
+        app_url = ENDPOINTS[region]["app"]
+        # ENDPOINTS[*]["app"] is e.g. ``https://mixpanel.com/api/app`` —
+        # strip the path so probe_region can issue ``/api/app/me``.
+        base = app_url[: app_url.index("/api/app")]
+        return httpx.Client(base_url=base)
+
+    err_console.print("Probing regions for /me access ...")
+    result: RegionProbeResult = probe_region(_factory, headers)
+    for region, status in result.attempts:
+        marker = "✓" if status == 200 else "✗"
+        err_console.print(f"  {region}: {status} {marker}")
+    return result.region
+
+
 def _read_secret_from_stdin() -> str:
     """Read a single secret value from stdin (up to 64 KiB).
 
@@ -141,27 +230,45 @@ def list_accounts(
 @handle_errors
 def add_account(
     ctx: typer.Context,
-    name: Annotated[str, typer.Argument(help="Account name (alphanumeric, _, -)")],
+    name: Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "Account name (alphanumeric, _, -). Optional for "
+                "service_account / oauth_token (derived from the "
+                "first /me organization when omitted). For "
+                "oauth_browser, prefer `mp login` for the guided flow."
+            ),
+        ),
+    ] = None,
     type: Annotated[  # noqa: A002
         str,
         typer.Option(
             "--type",
             help="One of: service_account | oauth_browser | oauth_token",
         ),
-    ],
+    ] = ...,  # type: ignore[assignment]  # Typer treats ``...`` as a required option
     region: Annotated[
-        str,
-        typer.Option("--region", help="Mixpanel region: us | eu | in"),
-    ],
+        str | None,
+        typer.Option(
+            "--region",
+            help=(
+                "Mixpanel region: us | eu | in. Optional for "
+                "service_account / oauth_token (probed against /me when "
+                "omitted) and for oauth_browser (defaults to us; the "
+                "post-login /me cross-check catches mismatches)."
+            ),
+        ),
+    ] = None,
     project: Annotated[
         str | None,
         typer.Option(
             "--project",
             help=(
-                "Numeric project ID (default_project). REQUIRED for "
-                "service_account and oauth_token; optional for oauth_browser "
-                "(backfilled by `mp account login`). Falls back to "
-                "MP_PROJECT_ID when omitted."
+                "Project ID (optional; can be set later via "
+                "`mp project use ID`). Falls back to MP_PROJECT_ID when "
+                "omitted. For oauth_browser, also backfilled by "
+                "`mp account login`."
             ),
         ),
     ] = None,
@@ -186,19 +293,25 @@ def add_account(
 ) -> None:
     """Add a new account.
 
-    For ``service_account``, ``--username`` is required, ``--project`` is
-    required, and the secret is read from stdin (when ``--secret-stdin``
-    is set) or from ``MP_SECRET``. For ``oauth_token``, ``--project`` is
-    required; supply ``--token-env`` (recommended) or set
-    ``MP_OAUTH_TOKEN`` and we'll capture it inline. For ``oauth_browser``,
-    ``--project`` is optional and gets backfilled by ``mp account login``.
+    For ``service_account``, ``--username`` is required and the secret
+    is read from stdin (when ``--secret-stdin`` is set) or from
+    ``MP_SECRET``. For ``oauth_token``, supply ``--token-env``
+    (recommended) or set ``MP_OAUTH_TOKEN`` and we'll capture it inline.
+    For every type, ``--project`` is optional — leave it blank and set
+    the active project later via ``mp project use ID`` (or use the
+    guided ``mp login`` flow, which picks one automatically).
+
+    TIP: For new setups, prefer ``mp login`` for a guided flow.
+    ``mp account add`` remains the explicit, scriptable path for CI and
+    automation.
 
     Args:
         ctx: Typer context.
         name: Account name (alphanumeric, ``_``, ``-``).
         type: ``service_account`` | ``oauth_browser`` | ``oauth_token``.
         region: ``us`` | ``eu`` | ``in``.
-        project: Numeric project ID (becomes the account's default_project).
+        project: Project ID (optional; becomes the account's
+            ``default_project``).
         username: Required for ``service_account``.
         secret_stdin: Read secret from stdin instead of env.
         token_env: Env var holding the bearer for ``oauth_token``.
@@ -215,7 +328,7 @@ def add_account(
             f"[red]Invalid --type: {type!r}[/red] (use {' / '.join(valid_types)})"
         )
         raise typer.Exit(ExitCode.INVALID_ARGS)
-    if region not in valid_regions:
+    if region is not None and region not in valid_regions:
         err_console.print(
             f"[red]Invalid --region: {region!r}[/red] (use {' / '.join(valid_regions)})"
         )
@@ -231,12 +344,8 @@ def add_account(
         if not username:
             err_console.print("[red]--username is required for service_account[/red]")
             raise typer.Exit(ExitCode.INVALID_ARGS)
-        if not project:
-            err_console.print(
-                "[red]--project is required for service_account[/red] "
-                "(or set MP_PROJECT_ID)"
-            )
-            raise typer.Exit(ExitCode.INVALID_ARGS)
+        # Per 043 FR-001, --project is optional for SA — the user can
+        # configure the active project later via `mp project use ID`.
         if secret_stdin:
             secret_value = _read_secret_from_stdin()
         else:
@@ -270,12 +379,9 @@ def add_account(
             raise typer.Exit(ExitCode.INVALID_ARGS)
         secret = SecretStr(secret_value)
     elif type == "oauth_token":
-        if not project:
-            err_console.print(
-                "[red]--project is required for oauth_token[/red] "
-                "(or set MP_PROJECT_ID)"
-            )
-            raise typer.Exit(ExitCode.INVALID_ARGS)
+        # Per 043 FR-001, --project is optional for oauth_token — the
+        # user can configure the active project later via
+        # `mp project use ID`.
         if token_env is None:
             env_value = os.environ.get("MP_OAUTH_TOKEN")
             if not env_value:
@@ -284,6 +390,31 @@ def add_account(
                 )
                 raise typer.Exit(ExitCode.INVALID_ARGS)
             token = SecretStr(env_value)
+
+    # 043 / AIE-114: when --region is omitted for SA / oauth_token, probe
+    # us → eu → in against /me and persist the resolved region. Browser
+    # auth keeps its own deferred handling (defaults to us in
+    # accounts.add(); the post-login cross-check surfaces mismatches).
+    if region is None and type in ("service_account", "oauth_token"):
+        region = _probe_region_for_credential(
+            account_type=type,
+            username=username,
+            secret=secret,
+            token=token,
+            token_env=token_env,
+        )
+
+    # 043 / AIE-116: when NAME is omitted, derive it from /me. For
+    # oauth_browser we cannot derive without PKCE, so direct the user
+    # to ``mp login`` instead of duplicating the orchestrator here.
+    derive_name = name is None
+    if derive_name and type == "oauth_browser":
+        err_console.print(
+            "[red]NAME is required for oauth_browser via `mp account add`.[/red]\n"
+            "Use `mp login` for the guided flow that derives the name from /me, "
+            "or pass an explicit NAME to `mp account add`."
+        )
+        raise typer.Exit(ExitCode.INVALID_ARGS)
 
     summary = accounts_ns.add(
         name,
@@ -294,6 +425,7 @@ def add_account(
         secret=secret,
         token=token,
         token_env=token_env,
+        derive_name=derive_name,
     )
     console.print(f"Added account '{summary.name}' ({summary.type}, {summary.region})")
     if summary.is_active:

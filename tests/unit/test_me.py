@@ -537,14 +537,47 @@ class TestMeService:
         assert exc_info.value.details["status_code"] == 401
         assert exc_info.value.details["account_name"] == "personal"
 
-    def test_fetch_403_raises_config_error(self, cache: MeCache) -> None:
-        """403 → ConfigError advising explicit --project / different scope."""
+    def test_fetch_403_for_service_account_surfaces_scope_hint(
+        self, cache: MeCache
+    ) -> None:
+        """SA 403 → ConfigError matching error catalog E-10 verbatim.
+
+        Per 043 FR-014, an SA missing the ``user_details`` scope must be
+        told exactly which scope to enable and where to enable it
+        (Mixpanel Settings → Service Accounts), not the generic 042
+        "lacks /me permission" line.
+        """
         api = MagicMock()
         api.me.side_effect = QueryError("Permission denied", status_code=403)
-        svc = MeService(api, cache, "us")
+        svc = MeService(api, cache, "us", account_type="service_account")
+        with pytest.raises(ConfigError) as exc_info:
+            svc.fetch()
+        # E-10 verbatim — wording, scope name, and Settings reference all
+        # locked down so a copy-edit during refactor breaks CI.
+        expected = (
+            "Service account 'personal' is missing the `user_details` scope.\n\n"
+            "Re-mint the SA in Mixpanel Settings → Service Accounts with "
+            "that scope checked,\n"
+            "or pass --project ID explicitly to skip the /me lookup."
+        )
+        assert exc_info.value.message == expected
+        assert exc_info.value.details["status_code"] == 403
+        assert exc_info.value.details["account_name"] == "personal"
+
+    def test_fetch_403_without_account_type_uses_generic_message(
+        self, cache: MeCache
+    ) -> None:
+        """Non-SA 403 → ConfigError with the generic ``--project`` advice.
+
+        oauth_browser / oauth_token credentials don't have a ``user_details``
+        scope to add via Mixpanel Settings, so the SA-specific E-10
+        wording would be misleading. The generic message stays.
+        """
+        api = MagicMock()
+        api.me.side_effect = QueryError("Permission denied", status_code=403)
+        svc = MeService(api, cache, "us")  # account_type defaults to None
         with pytest.raises(ConfigError, match="lacks /me permission") as exc_info:
             svc.fetch()
-        # 403 error should advise explicit --project or a different account
         assert "--project" in exc_info.value.message
         assert exc_info.value.details["status_code"] == 403
         assert exc_info.value.details["account_name"] == "personal"

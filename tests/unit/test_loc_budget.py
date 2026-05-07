@@ -60,8 +60,15 @@ class TestLocBudget:
     FILE_COUNT_CAP = 20
     """Maximum number of auth-subsystem files. A 21st file fails this test."""
 
-    LOC_CAP = 6500
-    """Maximum total LoC across the auth subsystem (~10% headroom over current)."""
+    LOC_CAP = 6700
+    """Maximum total LoC across the auth subsystem (~10% headroom over current).
+
+    Bumped from 6500 → 6700 by 043 (frictionless-auth) for the two new
+    files (``_internal/auth/region_probe.py``, ``_internal/auth/naming.py``)
+    plus the relaxations in ``accounts.py`` / ``cli/commands/account.py``
+    / ``_internal/config.py`` / ``_internal/me.py``. See
+    ``specs/043-frictionless-auth/plan.md`` §"Scale/Scope".
+    """
 
     def test_file_count_cap(self) -> None:
         """No more than ``FILE_COUNT_CAP`` files comprise the auth subsystem."""

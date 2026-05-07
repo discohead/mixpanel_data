@@ -69,6 +69,20 @@ def _storage_root() -> Path:
     return Path.home() / ".mp"
 
 
+def accounts_root() -> Path:
+    """Return the directory holding every per-account state directory.
+
+    Resolves to ``$MP_OAUTH_STORAGE_DIR/accounts/`` when the env var is
+    set, else ``~/.mp/accounts/``. Used by callers that need to operate
+    on the parent of :func:`account_dir` (placeholder dirs, enumeration)
+    while still honoring the storage-root override.
+
+    Returns:
+        Absolute path to the accounts root. Not created by this call.
+    """
+    return _storage_root() / "accounts"
+
+
 def account_dir(name: str) -> Path:
     """Return the per-account directory for ``name``.
 
@@ -91,7 +105,7 @@ def account_dir(name: str) -> Path:
         raise ValueError(
             f"Invalid account name: {name!r}. Must match `^[a-zA-Z0-9_-]{{1,64}}$`."
         )
-    return _storage_root() / "accounts" / name
+    return accounts_root() / name
 
 
 def ensure_account_dir(name: str) -> Path:

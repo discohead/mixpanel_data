@@ -10,6 +10,7 @@ state-change verb.
 
 | Group | Purpose |
 |-------|---------|
+| `login` | Top-level command — `mp login` orchestrates region probe + project picker + name derivation in one call (043 / AIE-117) |
 | `account` | Account CRUD + lifecycle (`list`, `add`, `remove`, `use`, `show`, `test`, `login`, `logout`, `token`, `export-bridge`, `remove-bridge`) |
 | `project` | Project axis (`list` from `/me`, `use ID`, `show`) |
 | `workspace` | Workspace axis (`list` from `/me`, `use ID`, `show`) |

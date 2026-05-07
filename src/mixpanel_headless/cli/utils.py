@@ -38,6 +38,7 @@ from mixpanel_headless.exceptions import (
     OAuthError,
     QueryError,
     RateLimitError,
+    RegionProbeError,
     ServerError,
     WorkspaceScopeError,
 )
@@ -275,6 +276,38 @@ def handle_errors(func: F) -> F:
                 "Try again in a few moments."
             )
             raise typer.Exit(ExitCode.GENERAL_ERROR) from None
+        except RegionProbeError as e:
+            # Error catalog E-1 — render the per-region attempt table so
+            # users see exactly which clusters rejected the credential.
+            # Exit code 2 because the failure is an authentication
+            # rejection across every cluster, not a generic OAuth glitch.
+            err_console.print(f"[red]ERROR:[/red] {rich_escape(e.message)}")
+            err_console.print("")
+            err_console.print("Probe results:")
+            for region, status, body in e.attempts:
+                if status == 0:
+                    err_console.print(
+                        f"  {rich_escape(region)}: 0 (network error: "
+                        f"{rich_escape(body)})"
+                    )
+                else:
+                    # Render only the first line of the body to keep the
+                    # table compact; full body is in e.attempts for
+                    # programmatic consumers.
+                    short = body.splitlines()[0] if body else ""
+                    err_console.print(
+                        f"  {rich_escape(region)}: {status} {rich_escape(short)}"
+                    )
+            err_console.print("")
+            err_console.print(
+                "If you know the region, pass --region {us|eu|in} explicitly "
+                "to skip the probe."
+            )
+            err_console.print(
+                "If your service account is new, verify the username and "
+                "secret are correct."
+            )
+            raise typer.Exit(ExitCode.AUTH_ERROR) from None
         except OAuthError as e:
             err_console.print(f"[red]OAuth error:[/red] {rich_escape(e.message)}")
             if e.code:

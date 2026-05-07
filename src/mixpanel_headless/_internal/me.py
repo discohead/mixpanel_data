@@ -25,6 +25,7 @@ from mixpanel_headless.exceptions import AuthenticationError, ConfigError, Query
 
 if TYPE_CHECKING:
     from mixpanel_headless._internal.api_client import MixpanelAPIClient
+    from mixpanel_headless._internal.auth.account import AccountType
 
 logger = logging.getLogger(__name__)
 
@@ -404,6 +405,12 @@ class MeService:
         api_client: The API client for making /me requests.
         cache: Disk-based cache for /me responses.
         region: Data residency region (us, eu, in).
+        account_type: Optional account-type discriminator. When set to
+            ``"service_account"``, a 403 from ``/me`` is rendered as the
+            043 error catalog E-10 message (which names the
+            ``user_details`` scope and references Mixpanel Settings →
+            Service Accounts). When ``None`` or any other value, the
+            generic 042 ``"lacks /me permission"`` message is used.
 
     Example:
         ```python
@@ -418,6 +425,7 @@ class MeService:
         api_client: MixpanelAPIClient,
         cache: MeCache,
         region: str,
+        account_type: AccountType | str | None = None,
     ) -> None:
         """Initialize MeService.
 
@@ -425,10 +433,14 @@ class MeService:
             api_client: The API client for making /me requests.
             cache: Disk-based cache for /me responses.
             region: Data residency region (us, eu, in).
+            account_type: Optional account-type discriminator used to
+                pick the right 403 → ConfigError wording. See class
+                docstring for the SA-specific behavior.
         """
         self._api_client = api_client
         self._cache = cache
         self._region = region
+        self._account_type = account_type
         self._cached_response: MeResponse | None = None
 
     def peek(self) -> MeResponse | None:
@@ -511,10 +523,25 @@ class MeService:
             ) from exc
         except QueryError as exc:
             if exc.status_code == 403:
+                if self._account_type == "service_account":
+                    # Error catalog E-10 — wording locked by
+                    # tests/unit/test_me.py and the cli snapshot tests.
+                    message = (
+                        f"Service account '{account_name}' is missing the "
+                        f"`user_details` scope.\n\n"
+                        f"Re-mint the SA in Mixpanel Settings → Service "
+                        f"Accounts with that scope checked,\n"
+                        f"or pass --project ID explicitly to skip the /me "
+                        f"lookup."
+                    )
+                else:
+                    message = (
+                        f"Account '{account_name}' lacks /me permission "
+                        f"(403). Specify --project explicitly, or use an "
+                        f"account whose credentials have /me scope."
+                    )
                 raise ConfigError(
-                    f"Account '{account_name}' lacks /me permission (403). "
-                    f"Specify --project explicitly, or use an account whose "
-                    f"credentials have /me scope.",
+                    message,
                     details={"status_code": 403, "account_name": account_name},
                 ) from exc
             raise

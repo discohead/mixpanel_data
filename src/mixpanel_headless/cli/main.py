@@ -167,6 +167,7 @@ def main(
 # These imports are done here to avoid circular imports
 def _register_commands() -> None:
     """Register all command groups with the main app."""
+    from mixpanel_headless.cli.commands import login as login_cmd
     from mixpanel_headless.cli.commands.account import account_app
     from mixpanel_headless.cli.commands.alerts import alerts_app
     from mixpanel_headless.cli.commands.annotations import annotations_app
@@ -190,6 +191,10 @@ def _register_commands() -> None:
     from mixpanel_headless.cli.commands.webhooks import webhooks_app
     from mixpanel_headless.cli.commands.workspace import workspace_app
 
+    app.command(
+        name="login",
+        help="Add a Mixpanel account with guided region / project / name resolution.",
+    )(login_cmd.login)
     app.add_typer(account_app, name="account", help="Manage accounts.")
     app.add_typer(project_app, name="project", help="Active project.")
     app.add_typer(workspace_app, name="workspace", help="Active workspace.")
