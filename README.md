@@ -352,7 +352,7 @@ Key design features:
 
 ## Claude Code Plugin
 
-This project includes a Claude Code plugin (v5.0) that turns Claude into a senior data analyst. The plugin is **CodeMode-first**: Claude writes Python code using `mixpanel_headless` + `pandas` rather than calling CLI commands or MCP tools.
+This project includes a Claude Code plugin (v5.1) that turns Claude into a senior data analyst. The plugin is **CodeMode-first**: Claude writes Python code using `mixpanel_headless` + `pandas` rather than calling CLI commands or MCP tools.
 
 The plugin is built around the 5-engine query taxonomy — `query()`, `query_funnel()`, `query_retention()`, `query_flow()`, and `query_user()` — with full cohort-scoped query support. Claude translates natural language analytics questions into typed query calls with filters, breakdowns, formulas, cohort definitions, and aggregations, then interprets results as DataFrames.
 

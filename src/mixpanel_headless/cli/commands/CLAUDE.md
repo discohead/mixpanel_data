@@ -34,7 +34,7 @@ flags.
 | `business_context.py` | `mp business-context` | Read/write markdown business context at org or project scope (`get`, `set`, `clear`, `chain`) |
 
 **Removed (no shim):** `mp auth`, `mp projects`, `mp workspaces`, `mp context`,
-`mp config`. See `RELEASE_NOTES_0.4.0.md` for the legacy → v3 verb map.
+`mp config`. See `docs/migration/0.4.0.md` for the legacy → v3 verb map.
 
 ## Command Pattern
 

@@ -1641,6 +1641,27 @@ class TestPublicRequest:
         assert "authorization" in captured_headers
         assert captured_headers["x-custom-header"] == "custom-value"
 
+    def test_request_auto_injects_query_origin(self, test_credentials: Session) -> None:
+        """request() should auto-inject query_origin even when caller omits it.
+
+        Locks the literal value so a future typo or accidental deletion of
+        the telemetry tag is caught at PR time rather than silently
+        corrupting Mixpanel-internal analytics dashboards.
+        """
+        captured_params: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_params.update(dict(request.url.params))
+            return httpx.Response(200, json={})
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.request(
+                "GET",
+                "https://mixpanel.com/api/app/test",
+            )
+
+        assert captured_params["query_origin"] == "mixpanel-headless-cli"
+
     def test_request_does_not_inject_project_id(
         self, test_credentials: Session
     ) -> None:

@@ -624,7 +624,6 @@ class OAuthFlow:
         # scope intentionally omitted — DCR creates apps with an empty scope
         # field, so Django OAuth Toolkit defaults to ["__all__"], granting
         # every scope in OAUTH2_PROVIDER["SCOPES"] (~63 total).
-        # See: mixpanel_headless_rust/docs/016-webapp-oauth-plan.md
         params: dict[str, str] = {
             "response_type": "code",
             "client_id": client_id,

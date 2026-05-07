@@ -216,7 +216,7 @@ Cowork bridge: `~/.claude/mixpanel/auth.json` (default) or `$MP_AUTH_FILE`
 > **Breaking change from 0.3.x:** legacy v1 / v2 configs no longer load. There is no
 > `mp config convert`. To upgrade: delete `~/.mp/config.toml` and re-add accounts via
 > `mp account add NAME --type {service_account|oauth_browser|oauth_token} ...`.
-> Full migration walkthrough in `RELEASE_NOTES_0.4.0.md`.
+> Full migration walkthrough in [`docs/migration/0.4.0.md`](docs/migration/0.4.0.md).
 
 ## Development
 
@@ -289,7 +289,7 @@ Suppressing stderr causes silent failures and makes it impossible to diagnose is
 - Hypothesis (property-based testing), mutmut (mutation testing)
 - uv (package manager), just (command runner)
 
-## mixpanel-headless Plugin (v4.1 — Distilled API Surface + Live Docs)
+## mixpanel-headless Plugin (v5.1)
 
 This project includes a Claude Code plugin in `mixpanel-plugin/`. The plugin provides the `mixpanel_headless` API surface and a live documentation system (`help.py`) for querying and analyzing Mixpanel data with Python.
 
@@ -336,7 +336,7 @@ python help.py Filter                  # type fields + construction patterns + r
 - N/A — query parameter types only, no persistence (040-query-engine-completeness)
 
 ## Recent Changes
-- **0.4.0 (042-auth-architecture-redesign)**: Hard rewrite of the auth subsystem. Single schema, single resolver, three first-class account types (`service_account` / `oauth_browser` / `oauth_token`). New CLI groups: `mp account`, `mp project`, `mp workspace`, `mp target`, `mp session`. New globals: `--account` / `--project` / `--workspace` / `--target`. `Workspace.use(...)` is the single in-session switching method. `MP_OAUTH_TOKEN` env path (PR #125) preserved as the recommended non-interactive mode. Plugin bumped to 5.0.0 with stable JSON contract (`schema_version: 1`). **Breaking**: legacy v1 / v2 configs no longer load — wipe `~/.mp/config.toml` and re-add accounts. Full migration walkthrough in [`RELEASE_NOTES_0.4.0.md`](RELEASE_NOTES_0.4.0.md).
+- **0.4.0 (042-auth-architecture-redesign)**: Hard rewrite of the auth subsystem. Single schema, single resolver, three first-class account types (`service_account` / `oauth_browser` / `oauth_token`). New CLI groups: `mp account`, `mp project`, `mp workspace`, `mp target`, `mp session`. New globals: `--account` / `--project` / `--workspace` / `--target`. `Workspace.use(...)` is the single in-session switching method. `MP_OAUTH_TOKEN` env path (PR #125) preserved as the recommended non-interactive mode. Plugin bumped to 5.0.0 with stable JSON contract (`schema_version: 1`). **Breaking**: legacy v1 / v2 configs no longer load — wipe `~/.mp/config.toml` and re-add accounts. Full migration walkthrough in [`docs/migration/0.4.0.md`](docs/migration/0.4.0.md).
 - 029-insights-query-api: Added Python 3.10+ with full type hints (mypy --strict) + httpx (HTTP client), Pydantic v2 (validation), pandas (DataFrames)
 
 <!-- SPECKIT START -->

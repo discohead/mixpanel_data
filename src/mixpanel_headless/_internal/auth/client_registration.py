@@ -45,7 +45,6 @@ OAUTH_BASE_URLS: dict[str, str] = {
 #: Scopes sent in the DCR request body for server-side validation.
 #: Advisory only — DCR does NOT store these on the application model.
 #: The created app has an empty scope field, meaning all scopes are allowed.
-#: See: mixpanel_headless_rust/docs/016-webapp-oauth-plan.md
 _DEFAULT_SCOPE: str = (
     "projects analysis events insights segmentation retention "
     "data:read funnels flows data_definitions dashboard_reports bookmarks"
