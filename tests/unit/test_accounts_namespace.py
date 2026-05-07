@@ -519,6 +519,69 @@ class TestTest:
         assert result.ok is False
         assert result.error is not None
         assert "invalid credentials" in result.error or "/me" in result.error
+        # The structured fields preserve AuthenticationError's code so
+        # the plugin's auth_manager.py can dispatch on `result.error_code`
+        # instead of substring-matching the human-readable message.
+        assert result.error_code == "AUTH_FAILED"
+
+    def test_probe_failure_preserves_structured_error_details(
+        self, cm: ConfigManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Library-exception details survive the broad-catch into ``error_details``."""
+        accounts_ns.add(
+            "team",
+            type="service_account",
+            region="us",
+            default_project="3713224",
+            username="u",
+            secret=SecretStr("s"),
+        )
+        from mixpanel_headless._internal import api_client as api_client_mod
+        from mixpanel_headless.exceptions import RegionProbeNetworkError
+
+        def _fail_me(self: object) -> dict[str, object]:
+            """Simulate the all-network-error case bubbling up from a probe."""
+            raise RegionProbeNetworkError(
+                "Could not reach any Mixpanel region",
+                attempts=[
+                    ("us", 0, "ConnectError: dns lookup failed"),
+                    ("eu", 0, "ConnectError: dns lookup failed"),
+                    ("in", 0, "ConnectError: dns lookup failed"),
+                ],
+            )
+
+        monkeypatch.setattr(api_client_mod.MixpanelAPIClient, "me", _fail_me)
+        result = accounts_ns.test("team")
+        assert result.ok is False
+        assert result.error_code == "OAUTH_NETWORK_UNREACHABLE"
+        # Structured details survive — callers can read attempts directly
+        # without re-parsing the human-readable error string.
+        assert result.error_details is not None
+        assert "attempts" in result.error_details
+
+    def test_probe_failure_from_non_library_exception_keeps_structured_fields_none(
+        self, cm: ConfigManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-library exceptions populate ``error`` only; structured fields stay None."""
+        accounts_ns.add(
+            "team",
+            type="service_account",
+            region="us",
+            default_project="3713224",
+            username="u",
+            secret=SecretStr("s"),
+        )
+        from mixpanel_headless._internal import api_client as api_client_mod
+
+        def _fail_me(self: object) -> dict[str, object]:
+            """Simulate a programming bug / network OSError leaking through."""
+            raise OSError("simulated low-level network failure")
+
+        monkeypatch.setattr(api_client_mod.MixpanelAPIClient, "me", _fail_me)
+        result = accounts_ns.test("team")
+        assert result.ok is False
+        assert result.error_code is None
+        assert result.error_details is None
 
     def test_active_account_used_when_name_omitted(
         self, cm: ConfigManager, monkeypatch: pytest.MonkeyPatch

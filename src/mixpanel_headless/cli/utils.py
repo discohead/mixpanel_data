@@ -36,9 +36,11 @@ from mixpanel_headless.exceptions import (
     JQLSyntaxError,
     MixpanelHeadlessError,
     OAuthError,
+    ProjectNotFoundError,
     QueryError,
     RateLimitError,
     RegionProbeError,
+    RegionProbeNetworkError,
     ServerError,
     WorkspaceScopeError,
 )
@@ -131,6 +133,14 @@ def handle_errors(func: F) -> F:
                 f"[red]Account exists:[/red] {rich_escape(e.account_name)}"
             )
             raise typer.Exit(ExitCode.GENERAL_ERROR) from None
+        except ProjectNotFoundError as e:
+            err_console.print(
+                f"[red]Project not found:[/red] {rich_escape(e.project_id)}"
+            )
+            if e.available_projects:
+                joined = ", ".join(rich_escape(p) for p in e.available_projects)
+                err_console.print(f"Accessible projects: {joined}")
+            raise typer.Exit(ExitCode.NOT_FOUND) from None
         except RateLimitError as e:
             err_console.print(
                 f"[yellow]Rate limited:[/yellow] {rich_escape(e.message)}"
@@ -276,6 +286,26 @@ def handle_errors(func: F) -> F:
                 "Try again in a few moments."
             )
             raise typer.Exit(ExitCode.GENERAL_ERROR) from None
+        except RegionProbeNetworkError as e:
+            # Subclass dispatch must come BEFORE the generic
+            # RegionProbeError handler — otherwise the network case
+            # falls through to "verify your credentials" advice that
+            # makes no sense when the user is offline.
+            err_console.print(f"[red]ERROR:[/red] {rich_escape(e.message)}")
+            err_console.print("")
+            err_console.print("Probe results:")
+            for region, _status, body in e.attempts:
+                err_console.print(
+                    f"  {rich_escape(region)}: network error ({rich_escape(body)})"
+                )
+            err_console.print("")
+            err_console.print(
+                "Check your network connection (DNS, proxy, captive portal, "
+                "TLS interception) and retry. If you know the region, pass "
+                "--region {us|eu|in} explicitly to limit the probe to one "
+                "host."
+            )
+            raise typer.Exit(ExitCode.AUTH_ERROR) from None
         except RegionProbeError as e:
             # Error catalog E-1 — render the per-region attempt table so
             # users see exactly which clusters rejected the credential.

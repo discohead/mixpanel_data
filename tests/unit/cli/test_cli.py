@@ -359,6 +359,60 @@ class TestAccountAddRegionProbe:
         assert "in: 401" in result.output
         assert "--region" in result.output
 
+    def test_all_network_failures_render_distinct_message(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """All-network probe failure → distinct CLI handler with connectivity hint.
+
+        When every region returns status 0 (DNS / TLS / connect refused),
+        the orchestrator raises :class:`RegionProbeNetworkError`. The
+        CLI's ``RegionProbeNetworkError`` branch must catch it before
+        the generic handler and render "check your network" instead of
+        "verify your credentials". A user who is offline gets
+        misdirected by the credential-flavored hint otherwise.
+        """
+        from mixpanel_headless._internal.auth import region_probe as rp_mod
+        from mixpanel_headless.cli.utils import ExitCode
+        from mixpanel_headless.exceptions import RegionProbeNetworkError
+
+        monkeypatch.setenv("MP_SECRET", "s")
+
+        def _all_network(*args: object, **kwargs: object) -> object:
+            raise RegionProbeNetworkError(
+                "Could not reach any Mixpanel region — every probe failed at "
+                "the network layer (DNS, TLS, or connect refused).",
+                attempts=[
+                    ("us", 0, "ConnectError: dns lookup failed"),
+                    ("eu", 0, "ConnectError: dns lookup failed"),
+                    ("in", 0, "ConnectError: dns lookup failed"),
+                ],
+            )
+
+        monkeypatch.setattr(rp_mod, "probe_region", _all_network)
+
+        result = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "offline-sa",
+                "--type",
+                "service_account",
+                "--username",
+                "u",
+            ],
+        )
+        assert result.exit_code == ExitCode.AUTH_ERROR, result.output
+        # Connectivity hint, not the credential-verify hint.
+        assert "Could not reach any Mixpanel region" in result.output
+        assert "network" in result.output.lower()
+        # Per-region body must surface the network-error reason so the
+        # user can see DNS vs TLS vs connect-refused at a glance.
+        assert "ConnectError" in result.output
+        # The credential-verify hint from the generic handler must NOT
+        # leak into the network case (the whole point of the subclass).
+        assert "verify the username and secret" not in result.output
+
 
 class TestAccountAddDerivedName:
     """Phase 043 / AIE-116: ``mp account add`` derives NAME from /me.

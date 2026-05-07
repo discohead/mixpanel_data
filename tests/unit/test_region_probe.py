@@ -166,6 +166,56 @@ class TestProbeRegionErrorPaths:
         # Body carries the network error reason for diagnostic use.
         assert "DNS lookup failed" in attempts[0][2] or "ConnectError" in attempts[0][2]
 
+    def test_all_network_errors_raise_network_subclass(self) -> None:
+        """All-network failure → :class:`RegionProbeNetworkError` (subclass).
+
+        The CLI catches the subclass before the generic
+        ``RegionProbeError`` so the user gets "check your connection"
+        guidance instead of "verify your credentials" — the latter
+        would mislead someone who is simply offline.
+        """
+        from mixpanel_headless.exceptions import RegionProbeNetworkError
+
+        factory = _factory_for(
+            {
+                "us": _network_error_handler,
+                "eu": _network_error_handler,
+                "in": _network_error_handler,
+            }
+        )
+        with pytest.raises(RegionProbeNetworkError) as exc_info:
+            probe_region(factory, headers={"Authorization": "Basic xxx"})
+        # The subclass must still be a RegionProbeError so existing
+        # `except RegionProbeError` callers keep working.
+        assert isinstance(exc_info.value, RegionProbeError)
+        # Distinct error code so programmatic consumers can branch.
+        assert exc_info.value.code == "OAUTH_NETWORK_UNREACHABLE"
+        # Every attempt must be a network error (status 0) — the
+        # subclass invariant.
+        assert len(exc_info.value.attempts) == 3
+        assert all(status == 0 for _, status, _ in exc_info.value.attempts)
+
+    def test_mixed_network_and_auth_failure_raises_generic(self) -> None:
+        """Network + 401 mix → generic ``RegionProbeError``, not the subclass.
+
+        Only ALL-network failures get the network subclass. A single
+        401 means at least one region was reachable, so the credential
+        is the more likely problem.
+        """
+        from mixpanel_headless.exceptions import RegionProbeNetworkError
+
+        factory = _factory_for(
+            {
+                "us": _network_error_handler,
+                "eu": _network_error_handler,
+                "in": _unauth_handler,
+            }
+        )
+        with pytest.raises(RegionProbeError) as exc_info:
+            probe_region(factory, headers={"Authorization": "Basic xxx"})
+        assert not isinstance(exc_info.value, RegionProbeNetworkError)
+        assert exc_info.value.code == "OAUTH_REGION_PROBE_FAILED"
+
 
 class TestProbeRegionOrdering:
     """The ``order`` parameter is honored verbatim."""

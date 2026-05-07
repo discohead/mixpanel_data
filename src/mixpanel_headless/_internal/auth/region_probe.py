@@ -28,7 +28,7 @@ from dataclasses import dataclass
 import httpx
 
 from mixpanel_headless._internal.auth.account import Region
-from mixpanel_headless.exceptions import RegionProbeError
+from mixpanel_headless.exceptions import RegionProbeError, RegionProbeNetworkError
 
 ClientFactory = Callable[[Region], httpx.Client]
 """Builds an ``httpx.Client`` bound to a given region's API base URL."""
@@ -150,8 +150,17 @@ def probe_region(
         finally:
             client.close()
 
-    # Every region rejected the credential — surface a structured error
-    # so the caller can render the per-region failure table.
+    # Every region failed. Distinguish "credential rejected" from "could
+    # not reach any region at the network layer" so the CLI can pick a
+    # remediation hint that matches the user's actual problem (a 401
+    # tells them to check creds; a string of network errors tells them
+    # to check connectivity).
+    if all(status == 0 for _, status, _ in failure_attempts):
+        raise RegionProbeNetworkError(
+            "Could not reach any Mixpanel region — every probe failed at "
+            "the network layer (DNS, TLS, or connect refused).",
+            attempts=failure_attempts,
+        )
     raise RegionProbeError(
         "Credential not valid in any region.",
         attempts=failure_attempts,

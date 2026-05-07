@@ -14,6 +14,7 @@ import builtins
 import logging
 import shutil
 from pathlib import Path
+from typing import Any
 
 from pydantic import SecretStr
 
@@ -35,7 +36,13 @@ from mixpanel_headless._internal.auth.token import OAuthTokens, token_payload_by
 from mixpanel_headless._internal.auth.token_resolver import OnDiskTokenResolver
 from mixpanel_headless._internal.config import ConfigManager
 from mixpanel_headless._internal.io_utils import atomic_write_bytes
-from mixpanel_headless.exceptions import ConfigError, OAuthError
+from mixpanel_headless.exceptions import (
+    AccountExistsError,
+    ConfigError,
+    MixpanelHeadlessError,
+    OAuthError,
+    ProjectNotFoundError,
+)
 from mixpanel_headless.types import (
     AccountSummary,
     AccountTestResult,
@@ -49,6 +56,42 @@ logger = logging.getLogger(__name__)
 def _config() -> ConfigManager:
     """Return a fresh ConfigManager honoring ``MP_CONFIG_PATH`` / ``$HOME``."""
     return ConfigManager()
+
+
+def _build_test_failure_result(
+    account_name: str, prefix: str, exc: BaseException
+) -> AccountTestResult:
+    """Build an ``AccountTestResult`` for a failed ``/me`` probe.
+
+    Preserves the structured ``code`` / ``details`` payload when ``exc``
+    is a :class:`MixpanelHeadlessError` so downstream consumers can
+    branch on the code rather than parse the human-readable message.
+    For non-library exceptions (network ``OSError``, programming
+    bugs caught by the broad ``except Exception``) ``error_code`` /
+    ``error_details`` stay ``None`` — only the ``error`` string carries
+    diagnostic information.
+
+    Args:
+        account_name: The account that was tested.
+        prefix: Short context prefix prepended to ``str(exc)`` in the
+            human-readable ``error`` field (e.g. ``"/me probe failed"``).
+        exc: The exception that was caught.
+
+    Returns:
+        A populated :class:`AccountTestResult` with ``ok=False``.
+    """
+    error_code: str | None = None
+    error_details: dict[str, Any] | None = None
+    if isinstance(exc, MixpanelHeadlessError):
+        error_code = exc.code
+        error_details = dict(exc.details) if exc.details else None
+    return AccountTestResult(
+        account_name=account_name,
+        ok=False,
+        error=f"{prefix}: {exc}",
+        error_code=error_code,
+        error_details=error_details,
+    )
 
 
 def _safe_rmtree_warn(path: Path) -> None:
@@ -528,18 +571,17 @@ def test(name: str | None = None) -> AccountTestResult:
         try:
             me_raw = api_client.me()
         except Exception as exc:  # noqa: BLE001 — capture every failure mode
-            return AccountTestResult(
-                account_name=summary.name,
-                ok=False,
-                error=f"/me probe failed: {exc}",
-            )
+            # Preserve the structured error context when the underlying
+            # failure was a library exception. Plain ``str(exc)`` loses
+            # the machine-readable code that downstream tooling
+            # (auth_manager.py, JSON consumers) uses to color accounts
+            # as needs_login / needs_token / etc.
+            return _build_test_failure_result(summary.name, "/me probe failed", exc)
         try:
             me_resp = MeResponse.model_validate(me_raw)
         except Exception as exc:  # noqa: BLE001 — malformed payload
-            return AccountTestResult(
-                account_name=summary.name,
-                ok=False,
-                error=f"/me response could not be parsed: {exc}",
+            return _build_test_failure_result(
+                summary.name, "/me response could not be parsed", exc
             )
         user: MeUserInfo | None = None
         if me_resp.user_id is not None and me_resp.user_email is not None:
@@ -610,10 +652,14 @@ def login(
     # write — v3 owns ``~/.mp/accounts/{name}/tokens.json`` exclusively.
     tokens = flow.login(persist=False, open_browser=open_browser)
 
-    tokens_path = _persist_browser_tokens(name, tokens)
-
     # /me probe: validates the freshly minted bearer + backfills the
-    # account's default_project on first login.
+    # account's default_project on first login. The probe runs against
+    # the in-memory token via a one-shot resolver so a cross-check
+    # failure (e.g. user authed to us but the picked project lives in
+    # eu) does not leave wrong-region tokens at the user-visible
+    # ``~/.mp/accounts/{name}/tokens.json``. Tokens persist only after
+    # validation succeeds — same atomic-publish discipline as
+    # ``_login_unified_new_browser``.
     user: MeUserInfo | None = None
     chosen_project = account.default_project
     placeholder_project = chosen_project or "0"
@@ -621,7 +667,27 @@ def login(
         account=account,
         project=Project(id=placeholder_project),
     )
-    api_client = MixpanelAPIClient(session=probe_session)
+    access_token = tokens.access_token.get_secret_value()
+
+    class _StaticBearer:
+        """One-shot resolver returning the freshly minted PKCE bearer.
+
+        Bypasses :class:`OnDiskTokenResolver` so the probe can run
+        before the persist step, preserving the "no wrong-region
+        tokens on disk" invariant when the cross-check raises.
+        """
+
+        def get_browser_token(self, name: str, region: Region) -> str:  # noqa: ARG002
+            """Return the in-memory bearer regardless of arguments."""
+            return access_token
+
+        def get_static_token(self, account: OAuthTokenAccount) -> str:  # noqa: ARG002
+            """Return the in-memory bearer regardless of arguments."""
+            return access_token
+
+    api_client = MixpanelAPIClient(
+        session=probe_session, token_resolver=_StaticBearer()
+    )
     try:
         try:
             me_raw = api_client.me()
@@ -635,15 +701,10 @@ def login(
         if me_resp.user_id is not None and me_resp.user_email is not None:
             user = MeUserInfo(id=me_resp.user_id, email=me_resp.user_email)
         if chosen_project is None and me_resp.projects:
-            # ``me_resp.projects`` keys are str at runtime; cast to ProjectId
-            # to satisfy the typed contract on ``Account.default_project``.
             chosen_project = ProjectId(next(iter(sorted(me_resp.projects))))
-            cm.update_account(name, default_project=chosen_project)
         # 043 / AIE-114: cross-check the picked project's cluster against
         # the auth region. The bearer is region-bound, so a mismatch
         # would surface on every subsequent request as a confusing 401.
-        # Catching it here lets us print error catalog E-2 with the
-        # specific re-run command.
         if chosen_project is not None and chosen_project in me_resp.projects:
             proj_info = me_resp.projects[chosen_project]
             if proj_info.domain:
@@ -660,6 +721,12 @@ def login(
                     )
     finally:
         api_client.close()
+
+    # Validation passed — safe to persist. Backfill default_project too
+    # if the cross-check picked one. Both writes go to disk only now.
+    tokens_path = _persist_browser_tokens(name, tokens)
+    if chosen_project is not None and chosen_project != account.default_project:
+        cm.update_account(name, default_project=chosen_project)
 
     return OAuthLoginResult(
         account_name=name,
@@ -1248,10 +1315,10 @@ def _login_unified_new_browser(
             name if name is not None else default_account_name(me_resp, existing_names)
         )
         if final_name in existing_names:
-            raise ConfigError(
-                f"Derived account name {final_name!r} collides with an existing "
-                f"account. Pass --name explicitly to disambiguate."
-            )
+            # Use the structured AccountExistsError so callers /
+            # downstream tooling (the plugin's auth_manager.py) can
+            # pattern-match by class instead of parsing the message.
+            raise AccountExistsError(final_name)
 
         # Atomic publish: validate the name first so a malicious or
         # path-traversal value (`../foo`, absolute path, etc.) raises BEFORE
@@ -1495,11 +1562,14 @@ def _resolve_project(
 
     Raises:
         ConfigError: ``--project N`` not in /me (E-6), ``MP_PROJECT_ID``
-            stale (warning emitted but does not raise), or non-interactive
-            multi-project context with no picker (E-8).
+            set in the environment but not visible to this account (the
+            stale env var would shadow the picker's choice on every
+            subsequent CLI call via the resolver's env-first priority,
+            silently breaking the next ``mp query`` — surface it now),
+            or non-interactive multi-project context with no picker
+            (E-8).
     """
     import os
-    import sys
 
     projects = me_resp.projects
     project_keys = builtins.list(projects.keys())
@@ -1508,25 +1578,31 @@ def _resolve_project(
     if explicit_project is not None:
         if explicit_project in projects:
             return explicit_project
+        # Use ProjectNotFoundError so the CLI can map it to exit code 4
+        # (NOT_FOUND) and downstream callers can pattern-match by
+        # class. The structured `available_projects` field carries the
+        # same information that was previously embedded in the message.
+        raise ProjectNotFoundError(explicit_project, available_projects=project_keys)
+
+    # Priority 2: MP_PROJECT_ID env. Either it resolves now, or we
+    # hard-fail — falling through silently just defers the failure to
+    # the user's next `mp query` (the resolver reads MP_PROJECT_ID
+    # ahead of the persisted default_project, so the picker's choice
+    # would be shadowed). Better to flag the stale env var here.
+    env_project = os.environ.get("MP_PROJECT_ID")
+    if env_project:
+        if env_project in projects:
+            return env_project
         accessible_lines = "\n".join(
             f"  - {pid} : {info.name} ({info.domain or '(no domain)'})"
             for pid, info in projects.items()
         )
         raise ConfigError(
-            f"Project ID {explicit_project} is not visible to this account.\n\n"
+            f"MP_PROJECT_ID={env_project} is not visible to this account.\n\n"
             f"Accessible projects:\n{accessible_lines}\n\n"
-            f"Pick one and re-run:\n"
-            f"    mp login --project {project_keys[0] if project_keys else 'ID'}"
-        )
-
-    # Priority 2: MP_PROJECT_ID env (soft default; warn-and-fall-through).
-    env_project = os.environ.get("MP_PROJECT_ID")
-    if env_project:
-        if env_project in projects:
-            return env_project
-        sys.stderr.write(
-            f"note: MP_PROJECT_ID={env_project} is not visible to this account; "
-            f"falling through to project picker.\n"
+            f"Either unset MP_PROJECT_ID, or pass --project ID with a "
+            f"visible value. (Subsequent `mp` calls would otherwise read "
+            f"MP_PROJECT_ID first and silently fail with auth errors.)"
         )
 
     # Priority 3: single-project auto-pick.

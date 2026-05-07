@@ -71,6 +71,7 @@ from mixpanel_headless.exceptions import (
     QueryError,
     RateLimitError,
     RegionProbeError,
+    RegionProbeNetworkError,
     ServerError,
     ValidationError,
     WorkspaceScopeError,
@@ -376,6 +377,7 @@ __all__ = [
     "DateRangeTooLargeError",
     "OAuthError",
     "RegionProbeError",
+    "RegionProbeNetworkError",
     "WorkspaceScopeError",
     "BusinessContextValidationError",
     # Result types

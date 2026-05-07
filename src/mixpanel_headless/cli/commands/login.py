@@ -11,7 +11,6 @@ Reference: ``specs/043-frictionless-auth/contracts/cli-commands.md`` §1.
 
 from __future__ import annotations
 
-import os
 import sys
 from typing import TYPE_CHECKING, Annotated
 
@@ -26,6 +25,7 @@ from mixpanel_headless.cli.utils import (
 )
 
 if TYPE_CHECKING:
+    from mixpanel_headless._internal.auth.account import AccountType
     from mixpanel_headless._internal.me import MeProjectInfo, MeResponse
 
 
@@ -106,29 +106,28 @@ def _project_picker_tty(
     raise ConfigError("Could not pick a project after 3 attempts. Aborting.")
 
 
-def _detect_for_validation(service_account: bool, token_env: str | None) -> str:
-    """Best-effort auth-type detection for argument-validation messaging.
+def _flag_to_account_type(
+    service_account: bool, token_env: str | None
+) -> AccountType | None:
+    """Map ``mp login`` CLI flags to the explicit ``account_type`` literal.
 
-    The full detection lives in :func:`accounts._detect_login_type`;
-    this is a copy used only to render meaningful error messages from
-    the validation step (E-12, E-13).
+    Returns ``None`` when neither flag is set so the orchestrator falls
+    through to env-var detection. Used both by the argument-validation
+    step (to render E-12 / E-13 with the right ``Detected auth type``)
+    and by the call into ``login_unified``.
 
     Args:
         service_account: Value of the ``--service-account`` flag.
         token_env: Value of the ``--token-env`` flag (``None`` if unset).
 
     Returns:
-        The detected auth-type literal string.
+        ``"service_account"``, ``"oauth_token"``, or ``None``.
     """
     if service_account:
         return "service_account"
     if token_env is not None:
         return "oauth_token"
-    if os.environ.get("MP_USERNAME") and os.environ.get("MP_SECRET"):
-        return "service_account"
-    if os.environ.get("MP_OAUTH_TOKEN"):
-        return "oauth_token"
-    return "oauth_browser"
+    return None
 
 
 @handle_errors
@@ -223,7 +222,12 @@ def login(
         )
         raise typer.Exit(ExitCode.INVALID_ARGS)
 
-    detected = _detect_for_validation(service_account, token_env)
+    # Detection runs through the orchestrator's own helper so the CLI's
+    # argument-validation messages stay aligned with what `login_unified`
+    # ultimately resolves. Two implementations would drift on the next
+    # priority-order tweak.
+    account_type = _flag_to_account_type(service_account, token_env)
+    detected = accounts_ns._detect_login_type(account_type, token_env)  # noqa: SLF001
 
     if no_browser and detected != "oauth_browser":
         err_console.print(
@@ -248,18 +252,11 @@ def login(
         )
         raise typer.Exit(ExitCode.INVALID_ARGS)
 
-    # Map the validated CLI flags onto login_unified's API.
-    account_type = None
-    if service_account:
-        account_type = "service_account"
-    elif token_env is not None:
-        account_type = "oauth_token"
-
     summary = accounts_ns.login_unified(
         name=name,
         region=region,  # type: ignore[arg-type]  # validated above
         project=project,
-        account_type=account_type,  # type: ignore[arg-type]  # validated literal
+        account_type=account_type,
         no_browser=no_browser,
         secret_stdin=secret_stdin,
         token_env=token_env,

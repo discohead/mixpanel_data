@@ -108,6 +108,35 @@ class TestLoginRegionMismatch:
         assert "eu.mixpanel.com" in message  # project_domain
         assert "mp login --region eu" in message
 
+    def test_region_mismatch_does_not_persist_tokens(
+        self, cm: ConfigManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """E-2 cross-check failure leaves NO tokens.json on disk.
+
+        Pre-fix bug: ``_persist_browser_tokens`` ran BEFORE the
+        cross-check, so a ConfigError on the wrong-region path left
+        wrong-region tokens at ``~/.mp/accounts/{name}/tokens.json``.
+        Subsequent ``mp account test`` would authenticate happily
+        against ``/me`` (which is project-agnostic) but every other
+        request — using the now-cached default_project — would fail
+        with a confusing 401, and the bridge export would propagate
+        the wrong-region token to Cowork.
+        """
+        from mixpanel_headless._internal.auth.storage import account_dir
+
+        accounts_ns.add("personal", type="oauth_browser", region="us")
+        _stub_pkce_flow(monkeypatch)
+        _stub_me_with_eu_project(monkeypatch)
+
+        with pytest.raises(ConfigError):
+            accounts_ns.login("personal")
+
+        # The atomic-publish invariant: cross-check fail → no tokens.json.
+        tokens_path = account_dir("personal") / "tokens.json"
+        assert not tokens_path.exists(), (
+            f"E-2 failure leaked wrong-region tokens at {tokens_path}"
+        )
+
     def test_matching_region_does_not_raise(
         self, cm: ConfigManager, monkeypatch: pytest.MonkeyPatch
     ) -> None:

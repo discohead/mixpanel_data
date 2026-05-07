@@ -1002,6 +1002,11 @@ class RegionProbeError(OAuthError):
     (network error); the third tuple element carries the failure detail
     (HTTP response text or the network error reason).
 
+    See :class:`RegionProbeNetworkError` for the all-network-error
+    subclass — the probe distinguishes "credential rejected" from
+    "could not reach any region" so the CLI can render different
+    remediation hints.
+
     Example:
         ```python
         try:
@@ -1017,6 +1022,7 @@ class RegionProbeError(OAuthError):
         message: str,
         *,
         attempts: list[tuple[Region, int, str]],
+        code: str = "OAUTH_REGION_PROBE_FAILED",
     ) -> None:
         """Initialize RegionProbeError.
 
@@ -1026,11 +1032,15 @@ class RegionProbeError(OAuthError):
                 tuples for every probed region. ``status_code`` is ``0``
                 for network errors; ``error_body`` carries the failure
                 detail.
+            code: Machine-readable error code. Defaults to
+                ``OAUTH_REGION_PROBE_FAILED`` for the generic case;
+                :class:`RegionProbeNetworkError` overrides to
+                ``OAUTH_NETWORK_UNREACHABLE``.
         """
         self._attempts: list[tuple[Region, int, str]] = list(attempts)
         super().__init__(
             message,
-            code="OAUTH_REGION_PROBE_FAILED",
+            code=code,
             details={"attempts": [list(a) for a in self._attempts]},
         )
 
@@ -1053,6 +1063,43 @@ class RegionProbeError(OAuthError):
         base = super().to_dict()
         base["attempts"] = [list(a) for a in self._attempts]
         return base
+
+
+class RegionProbeNetworkError(RegionProbeError):
+    """Raised when every region probe attempt failed at the network layer.
+
+    Subclass of :class:`RegionProbeError` used when ALL recorded
+    attempts have ``status_code == 0`` — i.e. the credential was never
+    actually evaluated because no region was reachable (DNS failure,
+    TLS rejection, captive portal, no internet). The CLI catches this
+    before the generic ``RegionProbeError`` so it can render "could
+    not reach any Mixpanel region" instead of "credential not valid",
+    which would mislead a user who is actually offline.
+
+    Carries the same ``attempts`` shape as the parent so existing
+    consumers can render the per-region detail without changes.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        attempts: list[tuple[Region, int, str]],
+    ) -> None:
+        """Initialize RegionProbeNetworkError.
+
+        Args:
+            message: Human-readable error message.
+            attempts: Ordered list of ``(region, 0, error_body)``
+                tuples — every entry must have status 0 by construction
+                (the probe loop only raises this subclass when that
+                invariant holds).
+        """
+        super().__init__(
+            message,
+            attempts=attempts,
+            code="OAUTH_NETWORK_UNREACHABLE",
+        )
 
 
 class WorkspaceScopeError(MixpanelHeadlessError):

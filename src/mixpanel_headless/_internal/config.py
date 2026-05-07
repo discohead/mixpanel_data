@@ -551,18 +551,22 @@ class ConfigManager:
     ) -> Account:
         """Add an account block to the config.
 
-        Per FR-004, ``default_project`` is REQUIRED at add-time for
-        ``service_account`` and ``oauth_token`` (the user knows the project
-        up-front for both flows). For ``oauth_browser``, ``default_project``
-        is OPTIONAL — it gets backfilled by ``mp account login`` post-PKCE
-        via ``/me``.
+        Per 043 FR-001, ``default_project`` is OPTIONAL for every
+        account type at add-time. Service-account and oauth_token
+        callers can backfill it later via ``mp project use ID`` (or
+        the ``mp login`` orchestrator's project picker). For
+        ``oauth_browser`` the value is also backfilled by
+        ``mp account login`` post-PKCE via ``/me``. The 042 hard
+        requirement was relaxed because ``mp project list`` now
+        bootstraps from ``/me`` without a configured project.
 
         Args:
             name: Account name (must match ``^[a-zA-Z0-9_-]{1,64}$``).
             type: One of ``service_account`` / ``oauth_browser`` / ``oauth_token``.
             region: One of ``us`` / ``eu`` / ``in``.
-            default_project: Numeric project ID. Required for SA and oauth_token;
-                optional (backfilled later) for oauth_browser.
+            default_project: Numeric project ID. Optional for every type;
+                populated later via ``mp project use``, ``mp login``, or
+                (for oauth_browser) ``mp account login``.
             username: Required for ``service_account``.
             secret: Required for ``service_account``.
             token: For ``oauth_token`` (mutually exclusive with ``token_env``).

@@ -196,6 +196,115 @@ class TestMpLoginServiceAccount:
         assert cm.get_account("eu-corp").region == "eu"
 
 
+class TestMpLoginOAuthToken:
+    """New-account flow for ``oauth_token`` via ``mp login --token-env``.
+
+    The orchestrator's re-login path is exercised by
+    ``TestMpLoginReloginCredentialUpdate``. Until this class landed,
+    the *new-account* oauth_token branches (``--token-env CUSTOM_VAR``,
+    ``MP_OAUTH_TOKEN`` inline persist, missing env-var rejection) had
+    no direct coverage — the production code was reached only by the
+    re-login fixtures, which always have an existing account on disk.
+    """
+
+    def test_token_env_persists_env_pointer_not_inline_value(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``--token-env CUSTOM_VAR`` persists the env-var name, not the bearer.
+
+        The user wants the token to stay in the env (typically a
+        secrets manager) rather than land in ``config.toml``. The
+        orchestrator must record ``token_env=CUSTOM_VAR`` and leave
+        the inline ``token`` field unset.
+        """
+        from mixpanel_headless._internal.auth.account import OAuthTokenAccount
+
+        monkeypatch.setenv("MY_CI_TOKEN", "ey.fake-bearer.value")
+        _stub_me(
+            monkeypatch,
+            {
+                "user_id": 1,
+                "user_email": "ci@example.com",
+                "organizations": {"100": {"id": 100, "name": "CI Corp"}},
+                "projects": {"42": {"name": "Build", "organization_id": 100}},
+            },
+        )
+        result = runner.invoke(
+            app,
+            [
+                "login",
+                "--token-env",
+                "MY_CI_TOKEN",
+                "--region",
+                "us",
+                "--name",
+                "ci-bot",
+                "--project",
+                "42",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        cm = ConfigManager()
+        account = cm.get_account("ci-bot")
+        assert isinstance(account, OAuthTokenAccount)
+        # The pointer-not-inline invariant: token_env set, token unset.
+        assert account.token_env == "MY_CI_TOKEN"
+        assert account.token is None
+
+    def test_inline_mp_oauth_token_persists_bearer_value(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``MP_OAUTH_TOKEN=...`` (no ``--token-env``) persists the bearer inline.
+
+        When the user has set ``MP_OAUTH_TOKEN`` directly without
+        naming a custom env var, the orchestrator captures the bearer
+        into ``config.toml`` so it survives the env disappearing.
+        """
+        from mixpanel_headless._internal.auth.account import OAuthTokenAccount
+
+        monkeypatch.setenv("MP_OAUTH_TOKEN", "ey.inline-bearer")
+        _stub_me(
+            monkeypatch,
+            {
+                "user_id": 1,
+                "user_email": "user@example.com",
+                "organizations": {"100": {"id": 100, "name": "Inline Corp"}},
+                "projects": {"42": {"name": "P", "organization_id": 100}},
+            },
+        )
+        result = runner.invoke(
+            app, ["login", "--region", "us", "--name", "inline-tok", "--project", "42"]
+        )
+        assert result.exit_code == 0, result.output
+        cm = ConfigManager()
+        account = cm.get_account("inline-tok")
+        assert isinstance(account, OAuthTokenAccount)
+        # Inline persistence: token field set; token_env unset.
+        assert account.token is not None
+        assert account.token.get_secret_value() == "ey.inline-bearer"
+        assert account.token_env is None
+
+    def test_token_env_pointing_at_unset_var_raises(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``--token-env MISSING_VAR`` with the env unset → ConfigError naming the var.
+
+        The orchestrator must surface the specific env-var name so the
+        user knows what to ``export`` — generic "no token" advice
+        wastes a debugging round-trip.
+        """
+        # Make sure MP_OAUTH_TOKEN doesn't accidentally satisfy the probe.
+        monkeypatch.delenv("MP_OAUTH_TOKEN", raising=False)
+        monkeypatch.delenv("MISSING_VAR", raising=False)
+        result = runner.invoke(
+            app, ["login", "--token-env", "MISSING_VAR", "--region", "us"]
+        )
+        assert result.exit_code != 0, result.output
+        # The unset env-var name must appear in the error so the user
+        # knows what to set without opening the source code.
+        assert "MISSING_VAR" in result.output
+
+
 class TestMpLoginRelogin:
     """Re-login state-machine refusals (E-3, E-4) from data-model.md §4."""
 
@@ -251,7 +360,15 @@ class TestMpLoginProjectVisibility:
     def test_project_not_visible_lists_accessible(
         self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """--project N where N is not in /me → exit 1 with project list."""
+        """--project N where N is not in /me → exit 4 with the accessible list.
+
+        The orchestrator now raises the structured ``ProjectNotFoundError``
+        rather than a plain ``ConfigError``, which the CLI maps to exit
+        code 4 (NOT_FOUND) — distinct from generic config errors so
+        scripts can react.
+        """
+        from mixpanel_headless.cli.utils import ExitCode
+
         monkeypatch.setenv("MP_USERNAME", "svc")
         monkeypatch.setenv("MP_SECRET", "secret")
         _stub_me(
@@ -276,9 +393,11 @@ class TestMpLoginProjectVisibility:
                 "99999",
             ],
         )
-        assert result.exit_code != 0, result.output
-        # E-6 message lists accessible projects so the user can pick one.
-        assert "is not visible to this account" in result.output
+        assert result.exit_code == ExitCode.NOT_FOUND, result.output
+        # ProjectNotFoundError handler renders both the requested ID
+        # and the accessible alternatives.
+        assert "Project not found" in result.output
+        assert "99999" in result.output
         assert "11111" in result.output
         assert "22222" in result.output
 
@@ -588,6 +707,42 @@ class TestMpLoginPostRenameRollback:
 
         # Restore the patched add for any later tests that share the module.
         monkeypatch.setattr(accounts_ns, "add", original_add)
+
+
+class TestMpLoginStaleEnvProject:
+    """``MP_PROJECT_ID`` set in env but not visible → hard-fail at login."""
+
+    def test_stale_mp_project_id_raises_at_login(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Login with stale MP_PROJECT_ID exits non-zero with the env-var name.
+
+        Pre-fix behavior: warned to stderr, fell through to the picker,
+        persisted picker's choice as default_project. Subsequent `mp
+        query` then read MP_PROJECT_ID first (env > config in the
+        resolver) and silently failed with an auth error pointing at
+        the wrong place. The hard-fail surfaces the misconfiguration
+        at the moment the user is most likely to fix it.
+        """
+        monkeypatch.setenv("MP_USERNAME", "svc")
+        monkeypatch.setenv("MP_SECRET", "secret")
+        monkeypatch.setenv("MP_PROJECT_ID", "999")
+        _stub_me(
+            monkeypatch,
+            {
+                "user_id": 1,
+                "user_email": "svc@example.com",
+                "organizations": {"100": {"id": 100, "name": "Acme Corp"}},
+                "projects": {"42": {"name": "Demo", "organization_id": 100}},
+            },
+        )
+        result = runner.invoke(app, ["login", "--service-account", "--region", "us"])
+        assert result.exit_code != 0, result.output
+        # The error must surface BOTH the stale env-var name AND the
+        # accessible alternatives so the user can fix without a second probe.
+        assert "MP_PROJECT_ID" in result.output
+        assert "999" in result.output
+        assert "42" in result.output
 
 
 class TestProjectPickerTTY:
