@@ -24,6 +24,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from mixpanel_headless._internal.auth.account import AccountName
 from mixpanel_headless._internal.me import MeResponse
 
 _SLUG_MAX_LEN = 32
@@ -81,7 +82,7 @@ def slugify(value: str | None) -> str:
     return dashed[:_SLUG_MAX_LEN].rstrip("-")
 
 
-def default_account_name(me: MeResponse, existing: set[str]) -> str:
+def default_account_name(me: MeResponse, existing: set[str]) -> AccountName:
     """Pick a default account name from ``/me``, suffixing on collision.
 
     Picks the first organization from ``me.organizations`` (insertion
@@ -99,19 +100,20 @@ def default_account_name(me: MeResponse, existing: set[str]) -> str:
             as immutable; not modified.
 
     Returns:
-        A unique account name matching ``^[a-zA-Z0-9_-]{1,64}$``.
+        A unique :data:`AccountName` matching ``^[a-zA-Z0-9_-]{1,64}$``.
+        Wrapped in the NewType so callers that thread the value
+        through typed signatures (``ConfigManager._apply_add_account``,
+        the orchestrator helpers) keep mypy's discrimination between
+        "any string" and "validated account name".
 
     Example:
         ```python
         # me.organizations == {"100": MeOrgInfo(id=100, name="Acme Corp")}
         default_account_name(me, set())
-        # "acme-corp"
+        # AccountName("acme-corp")
 
         default_account_name(me, {"acme-corp"})
-        # "acme-corp-2"
-
-        default_account_name(me, {"acme-corp", "acme-corp-2"})
-        # "acme-corp-3"
+        # AccountName("acme-corp-2")
         ```
     """
     if not me.organizations:
@@ -122,10 +124,10 @@ def default_account_name(me: MeResponse, existing: set[str]) -> str:
         if not base:
             base = f"org-{first_org_id}"
     if base not in existing:
-        return base
+        return AccountName(base)
     suffix = 2
     while True:
         candidate = f"{base}-{suffix}"
         if candidate not in existing:
-            return candidate
+            return AccountName(candidate)
         suffix += 1

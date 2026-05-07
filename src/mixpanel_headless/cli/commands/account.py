@@ -43,13 +43,13 @@ def _probe_region_for_credential(
     token: SecretStr | None,
     token_env: str | None,
 ) -> Region:
-    """Probe ``us → eu → in`` against ``/me`` and return the resolved region.
+    """CLI wrapper around :func:`probe_region_for_credential` with stderr narration.
 
-    Builds the Authorization header from the supplied SA / oauth_token
-    credentials, hands it to :func:`region_probe.probe_region` with a
-    region-scoped ``httpx.Client`` factory, and returns the first
-    region that returns 200. Prints one stderr line per probe attempt
-    so the user sees the discovery progress in real time.
+    Routes through the shared library helper so the SA / oauth_token
+    header construction, ``probe_region`` call, and per-attempt
+    progress lines stay in one place. The CLI passes
+    ``narrate=err_console.print`` to surface probe progress; the
+    library leaves ``narrate`` ``None`` for silent operation.
 
     Args:
         account_type: ``"service_account"`` or ``"oauth_token"``.
@@ -62,66 +62,34 @@ def _probe_region_for_credential(
         The resolved :data:`Region` (``"us"`` / ``"eu"`` / ``"in"``).
 
     Raises:
+        typer.Exit: Credential material missing for the given
+            ``account_type`` (``ConfigError`` from the helper is
+            converted to ``INVALID_ARGS`` so the exit code matches
+            other CLI argument-validation failures).
         RegionProbeError: When no region accepts the credential. The
             ``@handle_errors`` decorator maps this to exit 2 with the
             error catalog E-1 message.
     """
-    import base64
-
-    import httpx
-
-    from mixpanel_headless._internal.api_client import ENDPOINTS
-    from mixpanel_headless._internal.auth.region_probe import (
-        RegionProbeResult,
-        probe_region,
+    from mixpanel_headless._internal.auth.account import (
+        AccountType as _AccountType,
     )
+    from mixpanel_headless._internal.auth.region_probe import (
+        probe_region_for_credential,
+    )
+    from mixpanel_headless.exceptions import ConfigError
 
-    # Compose the Authorization header without instantiating a full
-    # Account model — Account requires a region we don't have yet.
-    if account_type == "service_account":
-        if username is None or secret is None:
-            err_console.print(
-                "[red]Internal error: service_account probe missing credentials.[/red]"
-            )
-            raise typer.Exit(ExitCode.INVALID_ARGS)
-        raw = f"{username}:{secret.get_secret_value()}".encode()
-        headers = {"Authorization": f"Basic {base64.b64encode(raw).decode('ascii')}"}
-    elif account_type == "oauth_token":
-        if token is not None:
-            bearer = token.get_secret_value()
-        elif token_env is not None:
-            bearer = os.environ.get(token_env, "")
-            if not bearer:
-                err_console.print(
-                    f"[red]--token-env {token_env!r} is unset; cannot probe.[/red]"
-                )
-                raise typer.Exit(ExitCode.INVALID_ARGS)
-        else:  # pragma: no cover — earlier validation prevents this
-            err_console.print(
-                "[red]Internal error: oauth_token probe missing bearer.[/red]"
-            )
-            raise typer.Exit(ExitCode.INVALID_ARGS)
-        headers = {"Authorization": f"Bearer {bearer}"}
-    else:  # pragma: no cover — earlier validation gates this path
-        err_console.print(
-            f"[red]Internal error: cannot probe region for type {account_type!r}.[/red]"
+    try:
+        return probe_region_for_credential(
+            account_type=typing.cast("_AccountType", account_type),
+            username=username,
+            secret=secret,
+            token=token,
+            token_env=token_env,
+            narrate=err_console.print,
         )
-        raise typer.Exit(ExitCode.INVALID_ARGS)
-
-    def _factory(region: Region) -> httpx.Client:
-        """Build a region-scoped httpx.Client bound to the API host."""
-        app_url = ENDPOINTS[region]["app"]
-        # ENDPOINTS[*]["app"] is e.g. ``https://mixpanel.com/api/app`` —
-        # strip the path so probe_region can issue ``/api/app/me``.
-        base = app_url[: app_url.index("/api/app")]
-        return httpx.Client(base_url=base)
-
-    err_console.print("Probing regions for /me access ...")
-    result: RegionProbeResult = probe_region(_factory, headers)
-    for region, status in result.attempts:
-        marker = "✓" if status == 200 else "✗"
-        err_console.print(f"  {region}: {status} {marker}")
-    return result.region
+    except ConfigError as exc:
+        err_console.print(f"[red]{exc.message}[/red]")
+        raise typer.Exit(ExitCode.INVALID_ARGS) from None
 
 
 def _read_secret_from_stdin() -> str:
@@ -379,10 +347,10 @@ def add_account(
                 raise typer.Exit(ExitCode.INVALID_ARGS)
             token = SecretStr(env_value)
 
-    # 043 / AIE-114: when --region is omitted for SA / oauth_token, probe
-    # us → eu → in against /me and persist the resolved region. Browser
-    # auth keeps its own deferred handling (defaults to us in
-    # accounts.add(); the post-login cross-check surfaces mismatches).
+    # When --region is omitted for SA / oauth_token, probe us → eu → in
+    # against /me and persist the resolved region. Browser auth keeps
+    # its own deferred handling (defaults to us in accounts.add(); the
+    # post-login cross-check surfaces mismatches).
     if region is None and type in ("service_account", "oauth_token"):
         region = _probe_region_for_credential(
             account_type=type,
@@ -392,9 +360,9 @@ def add_account(
             token_env=token_env,
         )
 
-    # 043 / AIE-116: when NAME is omitted, derive it from /me. For
-    # oauth_browser we cannot derive without PKCE, so direct the user
-    # to ``mp login`` instead of duplicating the orchestrator here.
+    # When NAME is omitted, derive it from /me. For oauth_browser we
+    # cannot derive without PKCE, so direct the user to ``mp login``
+    # instead of duplicating the orchestrator here.
     derive_name = name is None
     if derive_name and type == "oauth_browser":
         err_console.print(

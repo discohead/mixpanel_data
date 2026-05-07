@@ -26,6 +26,7 @@ from mixpanel_headless._internal.auth.account import (
     ProjectId,
     Region,
     ServiceAccount,
+    TokenResolver,
 )
 from mixpanel_headless._internal.auth.storage import (
     account_dir,
@@ -56,6 +57,157 @@ logger = logging.getLogger(__name__)
 def _config() -> ConfigManager:
     """Return a fresh ConfigManager honoring ``MP_CONFIG_PATH`` / ``$HOME``."""
     return ConfigManager()
+
+
+class _FreshBrowserBearer:
+    """One-shot :class:`TokenResolver` returning a freshly minted PKCE bearer.
+
+    Used by both the legacy :func:`login` and the new
+    :func:`_login_unified_new_browser` flows to run the post-PKCE
+    ``/me`` probe BEFORE the access token is persisted to disk. Going
+    through :class:`OnDiskTokenResolver` would require persisting
+    first, which is exactly what we want to avoid (the probe might
+    surface a region mismatch — wrong-region tokens should never land
+    at the user-visible account path).
+
+    Annotated as :class:`TokenResolver` so mypy verifies protocol
+    conformance at the definition site rather than relying on
+    structural typing at the call site.
+    """
+
+    def __init__(self, access_token: str) -> None:
+        """Capture the in-memory bearer for the resolver methods.
+
+        Args:
+            access_token: The plaintext PKCE bearer just returned from
+                :meth:`OAuthFlow.login`.
+        """
+        self._access_token = access_token
+
+    def get_browser_token(self, name: str, region: Region) -> str:  # noqa: ARG002
+        """Return the captured bearer; ``name`` and ``region`` are unused."""
+        return self._access_token
+
+    def get_static_token(self, account: OAuthTokenAccount) -> str:  # noqa: ARG002
+        """Return the captured bearer; ``account`` is unused."""
+        return self._access_token
+
+
+# Runtime check that _FreshBrowserBearer satisfies the protocol — fails
+# at import if a future TokenResolver method is added without updating
+# this class. Cheaper than waiting for the call site mypy error.
+_: TokenResolver = _FreshBrowserBearer("_")
+del _
+
+
+def _narrate(msg: str) -> None:
+    """Write ``msg`` to stderr with a trailing newline.
+
+    Single chokepoint for the ``mp login`` orchestrator's progress
+    narration (region-probe attempts, re-login informational notes).
+    Concentrating the writes here means a future ``narrate=False``
+    kwarg or a Rich console swap stays a one-line change. Library
+    callers who don't want stderr noise can redirect ``2>/dev/null``;
+    this is documented on :func:`login_unified`.
+
+    Args:
+        msg: Single-line message. The trailing newline is appended.
+    """
+    import sys
+
+    sys.stderr.write(f"{msg}\n")
+
+
+def _fetch_me(
+    account: Account,
+    *,
+    token_resolver: TokenResolver | None = None,
+    placeholder_project: str = "0",
+) -> MeResponse:
+    """Run a one-shot ``/me`` probe against ``account`` and return the parsed response.
+
+    Five different orchestrator paths (derive-name, ``test``, legacy
+    ``login``, the two ``_login_unified_new_*`` flows) used to inline
+    the same ``Session/MixpanelAPIClient/try-me-finally-close`` block.
+    Concentrating it here keeps the lifecycle (always close the
+    client) and the placeholder-project handling consistent.
+
+    Args:
+        account: The account to authenticate as. ``account.default_project``
+            is used as the session project if set; otherwise
+            ``placeholder_project`` (default ``"0"``).
+        token_resolver: Override the resolver used by
+            :class:`MixpanelAPIClient`. Pass :class:`_FreshBrowserBearer`
+            for the post-PKCE pre-persist case so the bearer comes from
+            memory, not from disk.
+        placeholder_project: Fallback project ID when
+            ``account.default_project`` is unset (e.g. brand-new
+            ``oauth_browser`` accounts before their first /me).
+
+    Returns:
+        The parsed :class:`MeResponse`.
+
+    Raises:
+        AuthenticationError / OAuthError / QueryError: Propagated from
+            the underlying ``api_client.me()`` call.
+        pydantic.ValidationError: Propagated from
+            ``MeResponse.model_validate``.
+    """
+    from mixpanel_headless._internal.api_client import MixpanelAPIClient
+    from mixpanel_headless._internal.auth.session import Project, Session
+    from mixpanel_headless._internal.me import MeResponse as _MeResponse
+
+    project_id = account.default_project or placeholder_project
+    probe_session = Session(account=account, project=Project(id=project_id))
+    kwargs: dict[str, Any] = {}
+    if token_resolver is not None:
+        kwargs["token_resolver"] = token_resolver
+    api_client = MixpanelAPIClient(session=probe_session, **kwargs)
+    try:
+        return _MeResponse.model_validate(api_client.me())
+    finally:
+        api_client.close()
+
+
+def _assert_project_region_matches(
+    me_resp: MeResponse,
+    chosen_project: str | None,
+    auth_region: Region,
+) -> None:
+    """Raise ``ConfigError`` E-2 when a project lives in a different cluster.
+
+    The OAuth bearer is region-bound, so a successful ``/me`` plus a
+    project from a different cluster would surface as a confusing 401
+    on every subsequent request. Catching it here lets the caller
+    print a structured error with the specific re-run command. No-op
+    when ``chosen_project`` is unset, missing from ``/me``, or carries
+    no ``domain`` field (older payloads).
+
+    Args:
+        me_resp: Parsed :class:`MeResponse`.
+        chosen_project: The project ID the orchestrator selected.
+        auth_region: The region the credential authenticated against.
+
+    Raises:
+        ConfigError: Mismatch between ``auth_region`` and the project's
+            cluster (E-2 catalog wording).
+    """
+    if chosen_project is None or chosen_project not in me_resp.projects:
+        return
+    proj_info = me_resp.projects[chosen_project]
+    if not proj_info.domain:
+        return
+    project_region = _domain_to_region(proj_info.domain)
+    if project_region is None or project_region == auth_region:
+        return
+    raise ConfigError(
+        f"Region mismatch.\n\n"
+        f"You authenticated against the {auth_region} cluster, but project "
+        f"{chosen_project} ({proj_info.name}) lives in the "
+        f"{project_region} cluster ({proj_info.domain}).\n\n"
+        f"Re-run with the correct region:\n"
+        f"    mp login --region {project_region}"
+    )
 
 
 def _build_test_failure_result(
@@ -120,6 +272,16 @@ def _safe_rmtree_warn(path: Path) -> None:
         )
 
 
+_DOMAIN_TO_REGION: dict[str, Region] = {
+    "mixpanel.com": "us",
+    "eu.mixpanel.com": "eu",
+    "in.mixpanel.com": "in",
+}
+"""Lookup table for :func:`_domain_to_region` — module-level so we don't
+rebuild it on every call. Lives here (rather than in ``ENDPOINTS``) so
+the cross-check stays decoupled from the API host configuration."""
+
+
 def _domain_to_region(domain: str) -> Region | None:
     """Map a Mixpanel project ``domain`` string to its region.
 
@@ -155,12 +317,7 @@ def _domain_to_region(domain: str) -> Region | None:
         host = host[len("data-") :]
     elif host == "data.mixpanel.com":
         host = "mixpanel.com"
-    table: dict[str, Region] = {
-        "mixpanel.com": "us",
-        "eu.mixpanel.com": "eu",
-        "in.mixpanel.com": "in",
-    }
-    return table.get(host)
+    return _DOMAIN_TO_REGION.get(host)
 
 
 def list() -> builtins.list[AccountSummary]:  # noqa: A001 — public namespace shadow
@@ -196,7 +353,7 @@ def add(
     Per FR-045, the first account added auto-promotes to
     ``[active].account``. Subsequent accounts do not.
 
-    ## Derived naming (043 / AIE-116)
+    ## Derived naming (specs/043-frictionless-auth)
 
     Pass ``derive_name=True`` (and leave ``name=None``) to have the
     function fetch ``/me`` against the supplied credentials and pick a
@@ -256,7 +413,7 @@ def add(
         )
     # ``oauth_browser`` may default to ``us`` when no explicit region is
     # supplied — the PKCE flow commits to the account's stored region at
-    # login time, and the post-callback ``/me`` cross-check (T022) will
+    # login time, and the post-callback ``/me`` cross-check will
     # surface a mismatch with an actionable error if the user picks a
     # project from a different cluster.
     resolved_region: Region = region if region is not None else "us"
@@ -336,18 +493,23 @@ def _derive_account_name_for_credential(
         A unique account name suitable for persistence.
 
     Raises:
-        ConfigError: Credential collection failed or ``/me`` did not
-            return parseable orgs.
+        ConfigError: Credential collection failed (missing ``username``
+            / ``secret`` for ``service_account``, missing ``token`` /
+            ``token_env`` for ``oauth_token``).
+        AuthenticationError / OAuthError / QueryError: Propagated from
+            the underlying ``/me`` call when the supplied credential is
+            rejected or the API errors out. (Empty ``/me.organizations``
+            is NOT an error here — :func:`naming.default_account_name`
+            falls back to the literal ``"account"``.)
+        pydantic.ValidationError: Propagated when ``/me`` returns a
+            payload that doesn't match :class:`MeResponse`.
     """
-    from mixpanel_headless._internal.api_client import MixpanelAPIClient
     from mixpanel_headless._internal.auth.account import (
         OAuthTokenAccount,
         ProjectId,
         ServiceAccount,
     )
     from mixpanel_headless._internal.auth.naming import default_account_name
-    from mixpanel_headless._internal.auth.session import Project, Session
-    from mixpanel_headless._internal.me import MeResponse
 
     placeholder_name = "_tmp_naming_"
     placeholder_project = ProjectId("0")
@@ -391,16 +553,7 @@ def _derive_account_name_for_credential(
             f"derive_name not supported for account type {account_type!r}."
         )
 
-    probe_session = Session(
-        account=temp_account, project=Project(id=placeholder_project)
-    )
-    api_client = MixpanelAPIClient(session=probe_session)
-    try:
-        me_raw = api_client.me()
-        me_resp = MeResponse.model_validate(me_raw)
-    finally:
-        api_client.close()
-
+    me_resp = _fetch_me(temp_account)
     existing_names: set[str] = {summary.name for summary in cm.list_accounts()}
     return default_account_name(me_resp, existing_names)
 
@@ -641,11 +794,8 @@ def login(
             f"'{name}' is type '{account.type}'."
         )
 
-    # Lazy imports — pull in OAuthFlow / Workspace only when actually logging in.
-    from mixpanel_headless._internal.api_client import MixpanelAPIClient
+    # Lazy import — OAuthFlow pulls in browser / threading machinery.
     from mixpanel_headless._internal.auth.flow import OAuthFlow
-    from mixpanel_headless._internal.auth.session import Project, Session
-    from mixpanel_headless._internal.me import MeResponse
 
     flow = OAuthFlow(region=account.region)
     # ``persist=False`` skips the v2 ``~/.mp/oauth/tokens_{region}.json``
@@ -654,7 +804,7 @@ def login(
 
     # /me probe: validates the freshly minted bearer + backfills the
     # account's default_project on first login. The probe runs against
-    # the in-memory token via a one-shot resolver so a cross-check
+    # the in-memory token via _FreshBrowserBearer so a cross-check
     # failure (e.g. user authed to us but the picked project lives in
     # eu) does not leave wrong-region tokens at the user-visible
     # ``~/.mp/accounts/{name}/tokens.json``. Tokens persist only after
@@ -662,65 +812,24 @@ def login(
     # ``_login_unified_new_browser``.
     user: MeUserInfo | None = None
     chosen_project = account.default_project
-    placeholder_project = chosen_project or "0"
-    probe_session = Session(
-        account=account,
-        project=Project(id=placeholder_project),
-    )
-    access_token = tokens.access_token.get_secret_value()
-
-    class _StaticBearer:
-        """One-shot resolver returning the freshly minted PKCE bearer.
-
-        Bypasses :class:`OnDiskTokenResolver` so the probe can run
-        before the persist step, preserving the "no wrong-region
-        tokens on disk" invariant when the cross-check raises.
-        """
-
-        def get_browser_token(self, name: str, region: Region) -> str:  # noqa: ARG002
-            """Return the in-memory bearer regardless of arguments."""
-            return access_token
-
-        def get_static_token(self, account: OAuthTokenAccount) -> str:  # noqa: ARG002
-            """Return the in-memory bearer regardless of arguments."""
-            return access_token
-
-    api_client = MixpanelAPIClient(
-        session=probe_session, token_resolver=_StaticBearer()
-    )
+    bearer = _FreshBrowserBearer(tokens.access_token.get_secret_value())
     try:
-        try:
-            me_raw = api_client.me()
-            me_resp = MeResponse.model_validate(me_raw)
-        except Exception as exc:  # noqa: BLE001 — re-raise as OAuthError below
-            raise OAuthError(
-                f"Login succeeded but `/me` probe failed: {exc}",
-                code="OAUTH_TOKEN_ERROR",
-                details={"account_name": name, "region": account.region},
-            ) from exc
-        if me_resp.user_id is not None and me_resp.user_email is not None:
-            user = MeUserInfo(id=me_resp.user_id, email=me_resp.user_email)
-        if chosen_project is None and me_resp.projects:
-            chosen_project = ProjectId(next(iter(sorted(me_resp.projects))))
-        # 043 / AIE-114: cross-check the picked project's cluster against
-        # the auth region. The bearer is region-bound, so a mismatch
-        # would surface on every subsequent request as a confusing 401.
-        if chosen_project is not None and chosen_project in me_resp.projects:
-            proj_info = me_resp.projects[chosen_project]
-            if proj_info.domain:
-                project_region = _domain_to_region(proj_info.domain)
-                if project_region is not None and project_region != account.region:
-                    raise ConfigError(
-                        f"Region mismatch.\n\n"
-                        f"You authenticated against the {account.region} "
-                        f"cluster, but project {chosen_project} "
-                        f"({proj_info.name}) lives in the "
-                        f"{project_region} cluster ({proj_info.domain}).\n\n"
-                        f"Re-run with the correct region:\n"
-                        f"    mp login --region {project_region}"
-                    )
-    finally:
-        api_client.close()
+        me_resp = _fetch_me(account, token_resolver=bearer)
+    except Exception as exc:  # noqa: BLE001 — re-raise as OAuthError below
+        raise OAuthError(
+            f"Login succeeded but `/me` probe failed: {exc}",
+            code="OAUTH_TOKEN_ERROR",
+            details={"account_name": name, "region": account.region},
+        ) from exc
+    if me_resp.user_id is not None and me_resp.user_email is not None:
+        user = MeUserInfo(id=me_resp.user_id, email=me_resp.user_email)
+    if chosen_project is None and me_resp.projects:
+        chosen_project = ProjectId(next(iter(sorted(me_resp.projects))))
+    # E-2 cross-check: the picked project must live in the same
+    # cluster the bearer was minted against, otherwise every
+    # subsequent request 401s with no obvious connection back to
+    # the region choice.
+    _assert_project_region_matches(me_resp, chosen_project, account.region)
 
     # Validation passed — safe to persist. Backfill default_project too
     # if the cross-check picked one. Both writes go to disk only now.
@@ -766,8 +875,13 @@ def _client_info_path(region: Region) -> Path:
 
     Returns:
         Absolute path to the client info JSON (may not exist yet).
+        Honors ``MP_OAUTH_STORAGE_DIR`` so a hermetic test environment
+        or Cowork-style sandbox sees the override-path; the prior
+        hard-coded ``~/.mp/oauth/`` lied to callers under override.
     """
-    return Path.home() / ".mp" / "oauth" / f"client_{region}.json"
+    from mixpanel_headless._internal.auth.storage import OAuthStorage
+
+    return OAuthStorage._default_storage_dir() / f"client_{region}.json"  # noqa: SLF001
 
 
 def logout(name: str) -> None:
@@ -894,9 +1008,8 @@ def login_unified(
     secret_stdin: bool = False,
     token_env: str | None = None,
     project_picker: ProjectPicker | None = None,
-    org_picker: OrgPicker | None = None,  # noqa: ARG001 — reserved for multi-org expansion in a follow-on iteration
 ) -> AccountSummary:
-    """Add and activate a Mixpanel account in one orchestrated call (043 / AIE-117).
+    """Add and activate a Mixpanel account in one orchestrated call.
 
     The conversational entry point for ``mp login``. Composes the helpers
     landed in earlier 043 commits (region probe, name derivation, SA
@@ -935,6 +1048,14 @@ def login_unified(
     - Region change → refused (E-3).
     - Auth-type change → refused (E-4).
 
+    ## Output
+
+    Progress narration (region-probe attempts, the E-5 re-login note)
+    is written to ``stderr`` via :func:`_narrate`. Library callers who
+    want it suppressed can redirect the parent process's ``stderr``;
+    the function does not currently expose a programmatic
+    ``narrate=False`` toggle.
+
     Args:
         name: Explicit local account name. Wins over derived names.
         region: Explicit region. ``None`` triggers the probe (SA / token)
@@ -951,21 +1072,24 @@ def login_unified(
             resolves. Returns the chosen project ID. The CLI supplies a
             TTY-aware picker; library callers can supply their own or
             leave it ``None`` to fail-fast non-interactively.
-        org_picker: Analogous picker for org selection when
-            ``len(me.organizations) > 1`` AND no explicit ``name`` was
-            supplied. Returns the chosen org ID.
 
     Returns:
         :class:`AccountSummary` for the newly added (or refreshed) account.
 
     Raises:
-        TypeError: ``account_type`` set to an unknown literal.
         ConfigError: Project not visible (E-6), region mismatch (E-2 / E-3),
             type mismatch (E-4), missing required env (cred collection),
             or non-interactive context with no project / org default
             (E-8 / E-9).
+        AccountExistsError: Derived account name collides with an
+            existing account (browser flow); pass ``name=`` to
+            disambiguate.
+        ProjectNotFoundError: Explicit ``project=`` not visible to
+            ``/me``.
         OAuthError: PKCE failure or all-region probe failure
             (raised as :class:`RegionProbeError` subclass).
+        RegionProbeNetworkError: All probe attempts failed at the
+            network layer (subclass of :class:`RegionProbeError`).
 
     Example:
         ```python
@@ -1037,7 +1161,6 @@ if TYPE_CHECKING:
     ProjectPicker = Callable[
         ["MeResponse", builtins.list[tuple[str, "MeProjectInfo"]]], str
     ]
-    OrgPicker = Callable[["MeResponse"], str]
 
 
 def _detect_login_type(
@@ -1107,12 +1230,11 @@ def _login_unified_relogin(
             re-login path.
     """
     import os
-    import sys
 
     existing_account = existing
     name = existing_account.name
 
-    # E-4: refuse auth-type change.
+    # Refuse auth-type change on re-login (cross-account swaps).
     if requested_type != existing_account.type:
         existing_type = existing_account.type
         flag_map = {
@@ -1128,7 +1250,7 @@ def _login_unified_relogin(
             f"    mp login {flag_map.get(requested_type, '')}".rstrip()
         )
 
-    # E-3: refuse region change.
+    # Refuse region change on re-login.
     if requested_region is not None and requested_region != existing_account.region:
         existing_region = existing_account.region
         raise ConfigError(
@@ -1139,13 +1261,13 @@ def _login_unified_relogin(
             f"    mp login --region {requested_region}"
         )
 
-    # E-5: emit informational note when --project / MP_PROJECT_ID is set.
+    # Informational note when --project is passed but ignored.
     if project is not None:
         existing_project = existing_account.default_project
-        sys.stderr.write(
+        _narrate(
             f"note: --project ignored on re-login; use 'mp project use "
             f"{project}' to change the active project (currently "
-            f"{existing_project}).\n"
+            f"{existing_project})."
         )
 
     # Refresh path branches per type. Browser → re-run PKCE. SA / oauth_token
@@ -1204,10 +1326,16 @@ def _login_unified_new_browser(
     """Run the oauth_browser new-account flow with placeholder-then-rename.
 
     Implements the data-model.md §5 atomic-publish pattern: PKCE writes
-    tokens to a hidden ``.tmp-{nonce}/`` directory, ``/me`` populates
-    the cache there, and only after the final name is resolved does the
+    tokens to a hidden ``.tmp-{nonce}/`` directory, ``/me`` is probed
+    in memory via :class:`_FreshBrowserBearer` to resolve the project
+    and account name, and only after the cross-check passes does the
     placeholder rename to ``~/.mp/accounts/{final_name}/``. Failure
-    before the rename removes the placeholder.
+    before the rename removes the placeholder; failure inside ``add()``
+    after the rename rolls ``final_dir`` back via ``_safe_rmtree_warn``.
+
+    The ``/me`` cache (``me.json`` under the account dir) is NOT
+    written by this flow — it stays empty until the next
+    ``Workspace.me()`` call writes through :class:`MeCache`.
 
     Args:
         cm: The config manager.
@@ -1223,12 +1351,9 @@ def _login_unified_new_browser(
     import os
     import secrets
 
-    from mixpanel_headless._internal.api_client import MixpanelAPIClient
     from mixpanel_headless._internal.auth.flow import OAuthFlow
     from mixpanel_headless._internal.auth.naming import default_account_name
-    from mixpanel_headless._internal.auth.session import Project, Session
     from mixpanel_headless._internal.io_utils import atomic_write_bytes
-    from mixpanel_headless._internal.me import MeResponse
 
     auth_region: Region = region if region is not None else "us"
 
@@ -1236,11 +1361,19 @@ def _login_unified_new_browser(
     # Routed through accounts_root() so MP_OAUTH_STORAGE_DIR overrides reach
     # the placeholder tree — otherwise tokens land under $HOME but the
     # resolver looks under the override and the new account never works.
+    # Wrap in os.umask(0o077) so any intermediate parent (typically
+    # ``~/.mp/`` on a fresh machine) is created with restrictive
+    # permissions too — ``mkdir(mode=0o700)`` only applies the mode
+    # to the leaf, leaving intermediate parents at the process umask.
     nonce = secrets.token_hex(4)
     accounts_root_dir = accounts_root()
-    accounts_root_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-    placeholder_dir = accounts_root_dir / f".tmp-{nonce}"
-    placeholder_dir.mkdir(mode=0o700)
+    old_umask = os.umask(0o077)
+    try:
+        accounts_root_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        placeholder_dir = accounts_root_dir / f".tmp-{nonce}"
+        placeholder_dir.mkdir(mode=0o700)
+    finally:
+        os.umask(old_umask)
 
     try:
         # PKCE flow → in-memory tokens (persist=False keeps OAuthFlow from
@@ -1254,38 +1387,17 @@ def _login_unified_new_browser(
         atomic_write_bytes(placeholder_dir / "tokens.json", token_payload_bytes(tokens))
 
         # /me probe via temporary OAuthBrowserAccount with placeholder name.
+        # The placeholder dir isn't wired to OnDiskTokenResolver yet, so we
+        # inject the freshly minted bearer via _FreshBrowserBearer.
         temp_account = OAuthBrowserAccount(
             name="_tmp_login_unified_",
             region=auth_region,
             default_project=ProjectId("0"),
         )
-        # Bypass the on-disk resolver for the probe — we have the
-        # freshly minted bearer in memory, and the placeholder dir is
-        # not yet wired to OnDiskTokenResolver's lookup path. Inject a
-        # one-shot resolver that returns the bearer directly.
-        access_token = tokens.access_token.get_secret_value()
-        probe_session = Session(
-            account=temp_account,
-            project=Project(id=ProjectId("0")),
+        me_resp = _fetch_me(
+            temp_account,
+            token_resolver=_FreshBrowserBearer(tokens.access_token.get_secret_value()),
         )
-
-        class _StaticBearer:
-            """One-shot token resolver yielding the freshly minted PKCE bearer."""
-
-            def get_browser_token(self, name: str, region: Region) -> str:  # noqa: ARG002
-                return access_token
-
-            def get_static_token(self, account: OAuthTokenAccount) -> str:  # noqa: ARG002
-                return access_token
-
-        api_client = MixpanelAPIClient(
-            session=probe_session, token_resolver=_StaticBearer()
-        )
-        try:
-            me_raw = api_client.me()
-            me_resp = MeResponse.model_validate(me_raw)
-        finally:
-            api_client.close()
 
         # Resolve the project (priority chain).
         chosen_project = _resolve_project(
@@ -1294,20 +1406,9 @@ def _login_unified_new_browser(
             project_picker=project_picker,
         )
 
-        # Cross-check region against picked project's domain (E-2).
-        if chosen_project is not None and chosen_project in me_resp.projects:
-            proj_info = me_resp.projects[chosen_project]
-            if proj_info.domain:
-                project_region = _domain_to_region(proj_info.domain)
-                if project_region is not None and project_region != auth_region:
-                    raise ConfigError(
-                        f"Region mismatch.\n\n"
-                        f"You authenticated against the {auth_region} cluster, "
-                        f"but project {chosen_project} ({proj_info.name}) lives "
-                        f"in the {project_region} cluster ({proj_info.domain}).\n\n"
-                        f"Re-run with the correct region:\n"
-                        f"    mp login --region {project_region}"
-                    )
+        # E-2 cross-check via the shared helper (same wording as the
+        # legacy `login()` path).
+        _assert_project_region_matches(me_resp, chosen_project, auth_region)
 
         # Resolve the account name (--name wins; otherwise derive).
         existing_names = {s.name for s in cm.list_accounts()}
@@ -1395,11 +1496,6 @@ def _login_unified_new_credential(
         :class:`AccountSummary` for the new account.
     """
     import os
-    import sys
-
-    from mixpanel_headless._internal.api_client import MixpanelAPIClient
-    from mixpanel_headless._internal.auth.session import Project, Session
-    from mixpanel_headless._internal.me import MeResponse
 
     # Credential collection.
     username: str | None = None
@@ -1442,43 +1538,26 @@ def _login_unified_new_credential(
         else:
             token = SecretStr(bearer)
 
-    # Region resolution (probe when None).
+    # Region resolution (probe when None). The shared helper handles
+    # the SA / oauth_token header construction and per-attempt
+    # narration; this site just supplies the credentials and the
+    # narrate callback.
     resolved_region: Region
     if region is not None:
         resolved_region = region
     else:
-        import httpx
+        from mixpanel_headless._internal.auth.region_probe import (
+            probe_region_for_credential,
+        )
 
-        from mixpanel_headless._internal.api_client import ENDPOINTS
-        from mixpanel_headless._internal.auth.region_probe import probe_region
-
-        if detected_type == "service_account":
-            import base64
-
-            assert username is not None and secret is not None
-            raw = f"{username}:{secret.get_secret_value()}".encode()
-            headers = {
-                "Authorization": f"Basic {base64.b64encode(raw).decode('ascii')}"
-            }
-        else:  # oauth_token
-            bearer_value = (
-                token.get_secret_value()
-                if token is not None
-                else os.environ.get(resolved_token_env or "", "")
-            )
-            headers = {"Authorization": f"Bearer {bearer_value}"}
-
-        def _factory(probe_region_arg: Region) -> httpx.Client:
-            app_url = ENDPOINTS[probe_region_arg]["app"]
-            base = app_url[: app_url.index("/api/app")]
-            return httpx.Client(base_url=base)
-
-        sys.stderr.write("Probing regions for /me access ...\n")
-        result = probe_region(_factory, headers)
-        for region_name, status in result.attempts:
-            marker = "✓" if status == 200 else "✗"
-            sys.stderr.write(f"  {region_name}: {status} {marker}\n")
-        resolved_region = result.region
+        resolved_region = probe_region_for_credential(
+            account_type=detected_type,
+            username=username,
+            secret=secret,
+            token=token,
+            token_env=resolved_token_env,
+            narrate=_narrate,
+        )
 
     # /me lookup using temporary credentialed account.
     placeholder_name = "_tmp_login_unified_"
@@ -1509,13 +1588,7 @@ def _login_unified_new_credential(
                 default_project=ProjectId("0"),
             )
 
-    probe_session = Session(account=temp_account, project=Project(id=ProjectId("0")))
-    api_client = MixpanelAPIClient(session=probe_session)
-    try:
-        me_raw = api_client.me()
-        me_resp = MeResponse.model_validate(me_raw)
-    finally:
-        api_client.close()
+    me_resp = _fetch_me(temp_account)
 
     chosen_project = _resolve_project(
         me_resp=me_resp,
@@ -1524,11 +1597,14 @@ def _login_unified_new_credential(
     )
 
     # Resolve final name (--name wins; otherwise derive from /me).
+    final_name: str
     if name is None:
         from mixpanel_headless._internal.auth.naming import default_account_name
 
         existing_names = {s.name for s in cm.list_accounts()}
-        final_name = default_account_name(me_resp, existing_names)
+        # ``default_account_name`` returns ``AccountName`` (a str
+        # NewType); add() accepts plain str, so widen explicitly here.
+        final_name = str(default_account_name(me_resp, existing_names))
     else:
         final_name = name
 

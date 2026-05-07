@@ -22,13 +22,20 @@ Reference: ``specs/043-frictionless-auth/contracts/python-api.md`` §2.1.
 
 from __future__ import annotations
 
+import base64
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import httpx
+from pydantic import SecretStr
 
-from mixpanel_headless._internal.auth.account import Region
-from mixpanel_headless.exceptions import RegionProbeError, RegionProbeNetworkError
+from mixpanel_headless._internal.auth.account import AccountType, Region
+from mixpanel_headless.exceptions import (
+    ConfigError,
+    RegionProbeError,
+    RegionProbeNetworkError,
+)
 
 ClientFactory = Callable[[Region], httpx.Client]
 """Builds an ``httpx.Client`` bound to a given region's API base URL."""
@@ -165,3 +172,94 @@ def probe_region(
         "Credential not valid in any region.",
         attempts=failure_attempts,
     )
+
+
+def probe_region_for_credential(
+    *,
+    account_type: AccountType,
+    username: str | None,
+    secret: SecretStr | None,
+    token: SecretStr | None,
+    token_env: str | None,
+    narrate: Callable[[str], None] | None = None,
+) -> Region:
+    """Build the credential header, probe ``us → eu → in``, return the region.
+
+    Replaces the two near-identical inlined blocks that
+    ``cli/commands/account.py::_probe_region_for_credential`` and
+    ``accounts.py::_login_unified_new_credential`` used to carry. Both
+    sites now call into this single helper; CLI passes ``narrate=`` to
+    surface per-attempt progress on stderr, the library defaults to
+    silent.
+
+    Args:
+        account_type: ``"service_account"`` or ``"oauth_token"``. Other
+            types are rejected because there is no credential to test.
+        username: Service-account username (required when
+            ``account_type == "service_account"``).
+        secret: Service-account secret (required when
+            ``account_type == "service_account"``).
+        token: Inline ``oauth_token`` bearer (mutually exclusive with
+            ``token_env``).
+        token_env: Env-var name carrying the ``oauth_token`` bearer
+            (mutually exclusive with ``token``). The env-var lookup
+            runs at call time; an unset value raises ``ConfigError``.
+        narrate: Optional callback invoked with one human-readable
+            message per probe step. CLI passes ``err_console.print``
+            or ``sys.stderr.write``-style helpers; library callers
+            leave it ``None`` for silent operation.
+
+    Returns:
+        The first region whose ``/me`` returned 200.
+
+    Raises:
+        ConfigError: Missing credential material for the given
+            ``account_type``, or ``token_env`` points at an unset
+            variable.
+        RegionProbeError / RegionProbeNetworkError: Propagated from
+            :func:`probe_region` when no region accepts the credential.
+    """
+    from mixpanel_headless._internal.api_client import ENDPOINTS
+
+    if account_type == "service_account":
+        if username is None or secret is None:
+            raise ConfigError(
+                "service_account region probe requires `username` and `secret`."
+            )
+        raw = f"{username}:{secret.get_secret_value()}".encode()
+        headers = {"Authorization": f"Basic {base64.b64encode(raw).decode('ascii')}"}
+    elif account_type == "oauth_token":
+        if token is not None:
+            bearer = token.get_secret_value()
+        elif token_env is not None:
+            bearer = os.environ.get(token_env, "")
+            if not bearer:
+                raise ConfigError(
+                    f"--token-env {token_env!r} is unset; cannot probe region."
+                )
+        else:  # pragma: no cover — caller validated upstream
+            raise ConfigError(
+                "oauth_token region probe requires `token` or `token_env`."
+            )
+        headers = {"Authorization": f"Bearer {bearer}"}
+    else:  # pragma: no cover — typed signature gates this
+        raise ConfigError(
+            f"Region probe is not defined for account type {account_type!r}."
+        )
+
+    def _factory(region: Region) -> httpx.Client:
+        """Build a region-scoped ``httpx.Client`` bound to the API host."""
+        app_url = ENDPOINTS[region]["app"]
+        # ENDPOINTS[*]["app"] is e.g. ``https://mixpanel.com/api/app`` —
+        # strip the suffix so probe_region can issue ``/api/app/me``.
+        base = app_url[: app_url.index("/api/app")]
+        return httpx.Client(base_url=base)
+
+    if narrate is not None:
+        narrate("Probing regions for /me access ...")
+    result = probe_region(_factory, headers)
+    if narrate is not None:
+        for region_name, status in result.attempts:
+            marker = "✓" if status == 200 else "✗"
+            narrate(f"  {region_name}: {status} {marker}")
+    return result.region

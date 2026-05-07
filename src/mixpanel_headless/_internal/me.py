@@ -229,7 +229,7 @@ class MeCache:
 
     Args:
         account_name: Account name — drives the per-account cache
-            directory layout (T043 of the 042 plan).
+            directory layout introduced by the 042 auth redesign.
         storage_dir: Override the cache directory entirely. When provided,
             the cache file lives at ``{storage_dir}/me.json`` regardless
             of ``account_name``. Tests use this to point at a tmp dir.
@@ -405,16 +405,16 @@ class MeService:
         api_client: The API client for making /me requests.
         cache: Disk-based cache for /me responses.
         region: Data residency region (us, eu, in).
-        account_type: Optional account-type discriminator. When set to
-            ``"service_account"``, a 403 from ``/me`` is rendered as the
-            043 error catalog E-10 message (which names the
-            ``user_details`` scope and references Mixpanel Settings →
-            Service Accounts). When ``None`` or any other value, the
-            generic 042 ``"lacks /me permission"`` message is used.
+        account_type: Optional :data:`AccountType` discriminator. When
+            set to ``"service_account"``, a 403 from ``/me`` is
+            rendered as the 043 error catalog E-10 message (which
+            names the ``user_details`` scope and references Mixpanel
+            Settings → Service Accounts). When ``None``, the generic
+            042 ``"lacks /me permission"`` message is used.
 
     Example:
         ```python
-        svc = MeService(api_client, MeCache(), "us")
+        svc = MeService(api_client, MeCache(account_name="personal"), "us")
         me = svc.fetch()
         projects = svc.list_projects()
         ```
@@ -425,7 +425,7 @@ class MeService:
         api_client: MixpanelAPIClient,
         cache: MeCache,
         region: str,
-        account_type: AccountType | str | None = None,
+        account_type: AccountType | None = None,
     ) -> None:
         """Initialize MeService.
 
@@ -435,7 +435,10 @@ class MeService:
             region: Data residency region (us, eu, in).
             account_type: Optional account-type discriminator used to
                 pick the right 403 → ConfigError wording. See class
-                docstring for the SA-specific behavior.
+                docstring for the SA-specific behavior. Kept narrowed
+                to the literal so a typo at the call site fails mypy
+                rather than silently falling through to the generic
+                403 message.
         """
         self._api_client = api_client
         self._cache = cache

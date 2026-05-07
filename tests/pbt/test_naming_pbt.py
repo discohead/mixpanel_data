@@ -136,7 +136,11 @@ def test_collision_suffix_starts_at_2_not_1(me: MeResponse) -> None:
 def test_collision_suffixes_are_monotonic(me: MeResponse) -> None:
     """Successive collisions produce ``-2``, ``-3``, ... in order."""
     base = default_account_name(me, set())
-    existing = {base}
+    # ``default_account_name`` returns an ``AccountName`` NewType; widen
+    # to ``set[str]`` so mypy keeps the function-signature contract
+    # (the function takes ``set[str]`` because callers populate it from
+    # ``ConfigManager.list_accounts()`` which yields plain strings).
+    existing: set[str] = {str(base)}
     seen_suffixes: list[int] = []
     for _ in range(5):
         next_name = default_account_name(me, existing)
@@ -144,7 +148,7 @@ def test_collision_suffixes_are_monotonic(me: MeResponse) -> None:
             suffix_str = next_name[len(base) + 1 :]
             if suffix_str.isdigit():
                 seen_suffixes.append(int(suffix_str))
-        existing.add(next_name)
+        existing.add(str(next_name))
     # Suffixes are strictly ascending.
     assert seen_suffixes == sorted(seen_suffixes)
     assert len(seen_suffixes) == len(set(seen_suffixes))
