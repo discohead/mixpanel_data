@@ -1,11 +1,11 @@
-# mixpanel-data — CodeMode Analyst Plugin
+# mixpanel-headless — CodeMode Analyst Plugin
 
 Query and analyze Mixpanel data with Python. Provides the `mixpanel_headless` API surface (5 query engines, discovery, entity CRUD) with a live documentation system (`help.py`) for method signatures, type lookup, fuzzy search, and hosted docs. Ask questions in natural language — Claude writes and executes Python to answer them.
 
 ## Quick Start
 
 ```
-1. /mixpanel-data:setup              # Install deps, verify auth
+1. /mixpanel-headless:setup              # Install deps, verify auth
 2. "How many signups last week?"      # Insights query
 3. "Where do users drop off?"         # Funnel analysis
 4. "Do users retain after onboarding?"# Retention curve
@@ -102,8 +102,8 @@ python help.py exceptions              # list all exceptions
 
 | Type | Name | Invocation |
 |------|------|------------|
-| Command | auth | `/mixpanel-data:auth` — manage account / project / workspace / target / session / bridge |
-| Skill | setup | `/mixpanel-data:setup` — install deps, verify auth |
+| Command | auth | `/mixpanel-headless:auth` — manage account / project / workspace / target / session / bridge |
+| Skill | setup | `/mixpanel-headless:setup` — install deps, verify auth |
 | Skill | mixpanelyst | Auto-triggered on analytics questions |
 | Skill | dashboard-expert | Auto-triggered on dashboard analysis, creation, and modification |
 
@@ -132,7 +132,7 @@ All entity methods require a workspace ID. Use `ws.resolve_workspace_id()` to au
 Three account types — `service_account` (Basic Auth), `oauth_browser` (PKCE
 browser flow), and `oauth_token` (static bearer for CI / agents) — managed
 through a single Account → Project → Workspace hierarchy. Run
-`/mixpanel-data:setup` for first-time configuration, or `/mixpanel-data:auth`
+`/mixpanel-headless:setup` for first-time configuration, or `/mixpanel-headless:auth`
 to switch accounts, projects, workspaces, or saved targets after initial setup.
 
 ### Breaking changes from 4.x → 5.0
@@ -159,7 +159,7 @@ Plugin 5.0.0 ships against the `mixpanel_headless` 0.4.0 auth surface:
 
 ```bash
 /plugin marketplace add mixpanel/mixpanel-headless
-/plugin install mixpanel-data@mixpanel-data-marketplace
+/plugin install mixpanel-headless@mixpanel-headless-marketplace
 ```
 
 ### Local development
@@ -184,7 +184,7 @@ mixpanel-plugin/
 │   └── plugin.json                     # Plugin manifest
 ├── skills/
 │   ├── setup/
-│   │   ├── SKILL.md                    # /mixpanel-data:setup
+│   │   ├── SKILL.md                    # /mixpanel-headless:setup
 │   │   └── scripts/
 │   │       └── setup.sh               # Dependency installer
 │   ├── dashboard-expert/
@@ -200,7 +200,7 @@ mixpanel-plugin/
 │           ├── help.py                 # Live API documentation lookup
 │           └── auth_manager.py         # Auth status and management
 ├── commands/
-│   └── auth.md                         # /mixpanel-data:auth command
+│   └── auth.md                         # /mixpanel-headless:auth command
 ├── docs/
 │   ├── quickstart-claude-code.md       # Getting started (Claude Code)
 │   ├── quickstart-claude-cowork.md     # Getting started (Cowork)

@@ -84,7 +84,7 @@ mp account export-bridge --to ~/.claude/mixpanel/auth.json --workspace 3448413
 Open a Cowork session and run the setup skill:
 
 ```
-/mixpanel-data:setup
+/mixpanel-headless:setup
 ```
 
 The setup script automatically detects the Cowork environment and reads credentials from the bridge file. You'll see output like:

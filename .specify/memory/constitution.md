@@ -30,7 +30,7 @@ Templates Requiring Updates:
 Follow-up TODOs: None
 -->
 
-# mixpanel-data Constitution
+# mixpanel-headless Constitution
 
 ## Core Principles
 
@@ -38,7 +38,7 @@ Follow-up TODOs: None
 
 Every capability MUST be accessible programmatically before being exposed via CLI.
 
-- The Python library (`mixpanel_data`) is the source of truth; the CLI is a thin wrapper
+- The Python library (`mixpanel_headless`) is the source of truth; the CLI is a thin wrapper
 - Library functions MUST be independently usable in scripts, notebooks, and other tools
 - CLI commands MUST delegate to library functions for all logic; CLI handles only I/O formatting
 - All public API methods MUST have type hints and docstrings
@@ -158,7 +158,7 @@ Before any PR merge:
 ### Package Structure
 
 ```text
-src/mixpanel_data/
+src/mixpanel_headless/
 ├── __init__.py              # Public API exports only
 ├── workspace.py             # Workspace facade class
 ├── auth.py                  # Public auth module
@@ -178,7 +178,7 @@ src/mixpanel_data/
 
 ### Amendment Process
 
-This Constitution supersedes all other development practices for mixpanel-data.
+This Constitution supersedes all other development practices for mixpanel-headless.
 
 1. **Proposal**: Create issue describing proposed amendment with rationale
 2. **Discussion**: Allow minimum 48 hours for review

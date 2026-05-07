@@ -362,7 +362,7 @@ Add the plugin from the `mixpanel-plugin/` directory, then restart Claude Code.
 
 **What you get:**
 
-- **Command**: `/mixpanel-data:auth` — Manage credentials, accounts, OAuth login, project discovery
+- **Command**: `/mixpanel-headless:auth` — Manage credentials, accounts, OAuth login, project discovery
 - **Skills**:
   - `setup` — Install dependencies and verify authentication
   - `mixpanelyst` — Auto-triggered on analytics questions; teaches 5-engine query patterns, analytical methodology (parameter sensitivity, statistical traps, counting modes), inline custom properties, cohort definitions, frequency analysis, and live API docs via `help.py`

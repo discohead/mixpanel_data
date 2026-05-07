@@ -19,17 +19,17 @@ Open Claude Code and run:
 
 ```
 /plugin marketplace add mixpanel/mixpanel-headless
-/plugin install mixpanel-data@mixpanel-data-marketplace
+/plugin install mixpanel-headless@mixpanel-headless-marketplace
 ```
 
-This installs the `mixpanel-data` plugin, which teaches Claude how to be a Mixpanel analytics expert.
+This installs the `mixpanel-headless` plugin, which teaches Claude how to be a Mixpanel analytics expert.
 
 ---
 
 ## Step 2: Run Setup
 
 ```
-/mixpanel-data:setup
+/mixpanel-headless:setup
 ```
 
 This installs the `mixpanel_headless` Python package and all analysis dependencies (pandas, matplotlib, networkx, etc.). It takes about a minute.
@@ -44,10 +44,10 @@ You only need to do this once. Choose the method that works best for you.
 
 ### Option A: Service Account (Recommended)
 
-Run the `/mixpanel-data:auth` command:
+Run the `/mixpanel-headless:auth` command:
 
 ```
-/mixpanel-data:auth account add my-project
+/mixpanel-headless:auth account add my-project
 ```
 
 Claude will walk you through it step by step:
@@ -60,16 +60,16 @@ Claude will walk you through it step by step:
 
 Your secret is never visible in the conversation.
 
-> If your account has access to multiple projects, you can switch later with `/mixpanel-data:auth project use <id>`. Run `/mixpanel-data:auth project list` to see what's available.
+> If your account has access to multiple projects, you can switch later with `/mixpanel-headless:auth project use <id>`. Run `/mixpanel-headless:auth project list` to see what's available.
 
 ### Option B: OAuth Login (Browser-Based)
 
 ```
-/mixpanel-data:auth account add personal --type oauth_browser --region us
-/mixpanel-data:auth account login personal
+/mixpanel-headless:auth account add personal --type oauth_browser --region us
+/mixpanel-headless:auth account login personal
 ```
 
-The first command registers an OAuth browser account; the second opens a browser window where you log in with your Mixpanel credentials. After login, your default project is backfilled automatically from the post-login `/me` probe. Use `/mixpanel-data:auth project list` then `/mixpanel-data:auth project use <id>` to switch if you have multiple projects.
+The first command registers an OAuth browser account; the second opens a browser window where you log in with your Mixpanel credentials. After login, your default project is backfilled automatically from the post-login `/me` probe. Use `/mixpanel-headless:auth project list` then `/mixpanel-headless:auth project use <id>` to switch if you have multiple projects.
 
 ### Option C: Raw OAuth Bearer Token (CI / Agents)
 
@@ -86,7 +86,7 @@ The full service-account env-var set (`MP_USERNAME` + `MP_SECRET` + `MP_PROJECT_
 ### Verify It Worked
 
 ```
-/mixpanel-data:auth account test
+/mixpanel-headless:auth account test
 ```
 
 You should see confirmation that Claude connected successfully and found events in your project.
@@ -172,33 +172,33 @@ You never need to write this yourself, but it's helpful to know what's possible.
 ### Check current session (active account / project / workspace)
 
 ```
-/mixpanel-data:auth session
+/mixpanel-headless:auth session
 ```
 
 ### Switch between accounts
 
 ```
-/mixpanel-data:auth account list
-/mixpanel-data:auth account use production
+/mixpanel-headless:auth account list
+/mixpanel-headless:auth account use production
 ```
 
 ### Discover accessible projects
 
 ```
-/mixpanel-data:auth project list
+/mixpanel-headless:auth project list
 ```
 
 ### Switch projects
 
 ```
-/mixpanel-data:auth project use 67890
+/mixpanel-headless:auth project use 67890
 ```
 
 ### Switch workspaces
 
 ```
-/mixpanel-data:auth workspace list
-/mixpanel-data:auth workspace use 3448414
+/mixpanel-headless:auth workspace list
+/mixpanel-headless:auth workspace use 3448414
 ```
 
 ### Remove an account
@@ -220,8 +220,8 @@ shell prefix inside Claude Code):
 ### Save a named target (account + project + optional workspace)
 
 ```
-/mixpanel-data:auth target add ecom --account team --project 3018488
-/mixpanel-data:auth target use ecom
+/mixpanel-headless:auth target add ecom --account team --project 3018488
+/mixpanel-headless:auth target use ecom
 ```
 
 ---
@@ -230,24 +230,24 @@ shell prefix inside Claude Code):
 
 ### "No credentials configured"
 
-Run `/mixpanel-data:auth account add my-project` and follow the prompts, or `/mixpanel-data:auth account add personal --type oauth_browser --region us` followed by `/mixpanel-data:auth account login personal` for OAuth.
+Run `/mixpanel-headless:auth account add my-project` and follow the prompts, or `/mixpanel-headless:auth account add personal --type oauth_browser --region us` followed by `/mixpanel-headless:auth account login personal` for OAuth.
 
 ### "Authentication failed"
 
 - Check that your service account username and secret are correct (Mixpanel Settings > Service Accounts)
 - Verify your project ID matches the project the service account has access to
 - Make sure the region matches your project's data residency
-- Run `/mixpanel-data:auth account test` for detailed error information
+- Run `/mixpanel-headless:auth account test` for detailed error information
 
 ### "OAuth token expired" or OAuth login stopped working
 
-Run `/mixpanel-data:auth account login <name>` again to refresh your tokens. If you switch to a service account instead, run `/mixpanel-data:auth account add <name> --type service_account ...` — service account credentials don't expire.
+Run `/mixpanel-headless:auth account login <name>` again to refresh your tokens. If you switch to a service account instead, run `/mixpanel-headless:auth account add <name> --type service_account ...` — service account credentials don't expire.
 
 ### Plugin not appearing
 
 1. Make sure plugins are enabled in your Claude Code settings
 2. Restart Claude Code after installing the plugin
-3. Run `/mixpanel-data:setup` again
+3. Run `/mixpanel-headless:setup` again
 
 ### Setup fails to install packages
 

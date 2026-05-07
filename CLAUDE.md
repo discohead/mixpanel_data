@@ -289,7 +289,7 @@ Suppressing stderr causes silent failures and makes it impossible to diagnose is
 - Hypothesis (property-based testing), mutmut (mutation testing)
 - uv (package manager), just (command runner)
 
-## mixpanel-data Plugin (v4.1 — Distilled API Surface + Live Docs)
+## mixpanel-headless Plugin (v4.1 — Distilled API Surface + Live Docs)
 
 This project includes a Claude Code plugin in `mixpanel-plugin/`. The plugin provides the `mixpanel_headless` API surface and a live documentation system (`help.py`) for querying and analyzing Mixpanel data with Python.
 
@@ -297,8 +297,8 @@ This project includes a Claude Code plugin in `mixpanel-plugin/`. The plugin pro
 
 | Type | Name | Invocation |
 |------|------|------------|
-| **Command** | `mixpanel-data:auth` | `/mixpanel-data:auth` — manage credentials, accounts, OAuth |
-| **Skill** | `mixpanel-data:setup` | `/mixpanel-data:setup` — install deps, verify auth |
+| **Command** | `mixpanel-headless:auth` | `/mixpanel-headless:auth` — manage credentials, accounts, OAuth |
+| **Skill** | `mixpanel-headless:setup` | `/mixpanel-headless:setup` — install deps, verify auth |
 | **Skill** | `mixpanelyst` | Auto-triggered on analytics questions |
 | **Skill** | `dashboard-expert` | Auto-triggered on dashboard analysis, creation, modification |
 | **Script** | `help.py` | `python help.py Workspace.query` — live API docs with fuzzy search |
@@ -308,7 +308,7 @@ This project includes a Claude Code plugin in `mixpanel-plugin/`. The plugin pro
 
 ```
 # Setup
-/mixpanel-data:setup
+/mixpanel-headless:setup
 
 # API lookup
 python help.py Workspace.query        # method signature + docstring + referenced types

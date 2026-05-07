@@ -2,7 +2,7 @@
 # Install mixpanel_headless and pandas for CodeMode analytics
 set -euo pipefail
 
-echo "=== Mixpanel Data — CodeMode Setup ==="
+echo "=== mixpanel-headless — CodeMode Setup ==="
 echo ""
 
 # Find Python 3.10+

@@ -1,5 +1,5 @@
 {
-  "name": "mixpanel_data",
+  "name": "mixpanel_headless",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "..",
@@ -51,11 +51,11 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
   "workspaceFolder": "/workspace",
   "mounts": [
-    "source=mixpanel-data-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
-    "source=mixpanel-data-claude-config-${devcontainerId},target=/home/vscode/.claude,type=volume",
-    "source=mixpanel-data-mp-config-${devcontainerId},target=/home/vscode/.mp,type=volume",
-    "source=mixpanel-data-gh-config-${devcontainerId},target=/home/vscode/.config/gh,type=volume",
-    "source=mixpanel-data-gcloud-config-${devcontainerId},target=/home/vscode/.config/gcloud,type=volume"
+    "source=mixpanel-headless-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
+    "source=mixpanel-headless-claude-config-${devcontainerId},target=/home/vscode/.claude,type=volume",
+    "source=mixpanel-headless-mp-config-${devcontainerId},target=/home/vscode/.mp,type=volume",
+    "source=mixpanel-headless-gh-config-${devcontainerId},target=/home/vscode/.config/gh,type=volume",
+    "source=mixpanel-headless-gcloud-config-${devcontainerId},target=/home/vscode/.config/gcloud,type=volume"
   ],
   "containerEnv": {
     "PYTHONDONTWRITEBYTECODE": "1",

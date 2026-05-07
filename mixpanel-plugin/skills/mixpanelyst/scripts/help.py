@@ -895,7 +895,7 @@ def main() -> None:
         importlib.import_module("mixpanel_headless")
     except ImportError:
         print("Error: mixpanel_headless is not installed.")
-        print("Run /mixpanel-data:setup to install it.")
+        print("Run /mixpanel-headless:setup to install it.")
         sys.exit(1)
 
     if query == "search":

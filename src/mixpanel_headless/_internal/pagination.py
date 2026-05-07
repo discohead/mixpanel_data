@@ -113,7 +113,7 @@ def paginate_all(
         # Build request params with query_origin
         request_params: dict[str, str] = {
             "page_size": str(page_size),
-            "query_origin": "mixpanel-data-cli",
+            "query_origin": "mixpanel-headless-cli",
         }
         if params:
             request_params.update(params)

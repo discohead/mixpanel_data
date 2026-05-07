@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Setting up mixpanel_data development environment..."
+echo "Setting up mixpanel_headless development environment..."
 
 cd /workspace
 

@@ -1,7 +1,7 @@
 # Codex pull request review
 
 You are reviewing a pull request in the `mixpanel-headless` repository — the
-home of the `mixpanel_data` Python package and CLI for the Mixpanel analytics
+home of the `mixpanel_headless` Python package and CLI for the Mixpanel analytics
 platform.
 
 Read `CLAUDE.md` at the repo root before forming your review. Apply its
@@ -37,7 +37,7 @@ feedback on:
 ## How to respond
 
 - Be concrete. Reference file paths and line numbers (e.g.
-  `src/mixpanel_data/workspace.py:142`).
+  `src/mixpanel_headless/workspace.py:142`).
 - Group findings by severity: **Blocking** → **Important** → **Nit**.
 - Lead with the highest-impact issues.
 - If the diff is clean, say so explicitly — do not invent issues to fill

@@ -353,7 +353,7 @@ In your Claude Code session, run:
 
 ```
 /plugin marketplace add mixpanel/mixpanel-headless
-/plugin install mixpanel-data@mixpanel-data-marketplace
+/plugin install mixpanel-headless@mixpanel-headless-marketplace
 ```
 
 ### Run the Setup Skill
@@ -361,7 +361,7 @@ In your Claude Code session, run:
 After installing, run the setup skill to install dependencies and verify authentication:
 
 ```
-/mixpanel-data:setup
+/mixpanel-headless:setup
 ```
 
 This will:
@@ -373,13 +373,13 @@ This will:
 
 ### Configure Credentials (If Not Already Done)
 
-If the setup skill reports that no credentials are found, use the `/mixpanel-data:auth` command:
+If the setup skill reports that no credentials are found, use the `/mixpanel-headless:auth` command:
 
 ```
-/mixpanel-data:auth account add my-project
+/mixpanel-headless:auth account add my-project
 ```
 
-Claude will guide you through entering your service account username, project ID, and region. You'll be prompted to run a shell command that securely collects your secret. For OAuth, use `/mixpanel-data:auth account add personal --type oauth_browser --region us` followed by `/mixpanel-data:auth account login personal`.
+Claude will guide you through entering your service account username, project ID, and region. You'll be prompted to run a shell command that securely collects your secret. For OAuth, use `/mixpanel-headless:auth account add personal --type oauth_browser --region us` followed by `/mixpanel-headless:auth account login personal`.
 
 ### Ask Analytics Questions
 
@@ -405,11 +405,11 @@ The plugin ships three skills that Claude loads automatically when relevant:
 
 | Skill | Trigger | What It Does |
 |-------|---------|--------------|
-| **setup** | `/mixpanel-data:setup` (manual) | Installs `mixpanel_headless` + analytics dependencies and verifies credentials. |
+| **setup** | `/mixpanel-headless:setup` (manual) | Installs `mixpanel_headless` + analytics dependencies and verifies credentials. |
 | **mixpanelyst** | Auto-loads on analytics questions | Distilled `Workspace` API reference, discovery workflow, exploratory analysis playbook, and live `help.py` lookup for method signatures, types, and enums. |
 | **dashboard-expert** | Auto-loads on dashboard questions | Four-mode workflow (Analyze, Build, Modify, Explain) for Mixpanel dashboards, with 9 design templates, chart-type selection, and layout reference. |
 
-The `/mixpanel-data:auth` slash command provides a guided wrapper around `mp account / project / workspace / target / session / bridge` for managing credentials without leaving the conversation.
+The `/mixpanel-headless:auth` slash command provides a guided wrapper around `mp account / project / workspace / target / session / bridge` for managing credentials without leaving the conversation.
 
 ---
 
@@ -455,7 +455,7 @@ This shows the resolved account, project, workspace, and any pinned headers from
 Inside a Cowork session, run the setup skill:
 
 ```
-/mixpanel-data:setup
+/mixpanel-headless:setup
 ```
 
 The setup script automatically detects the Cowork environment and reads credentials from the bridge file. No additional configuration is needed.
@@ -595,15 +595,15 @@ mp account login <name>
 ### Plugin Not Working in Claude Code
 
 1. Make sure plugins are enabled in your Claude Code settings
-2. Run `/mixpanel-data:setup` to install dependencies
-3. Check auth with `/mixpanel-data:auth session`
+2. Run `/mixpanel-headless:setup` to install dependencies
+3. Check auth with `/mixpanel-headless:auth session`
 4. If the plugin doesn't appear, try restarting Claude Code
 
 ### Cowork VM Can't Find Credentials
 
 1. On your **local machine**, run: `mp account export-bridge --to ~/.claude/mixpanel/auth.json`
 2. Verify with: `mp session --bridge`
-3. Inside the Cowork session, run: `/mixpanel-data:setup`
+3. Inside the Cowork session, run: `/mixpanel-headless:setup`
 
 ---
 

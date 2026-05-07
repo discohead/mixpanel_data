@@ -1,5 +1,5 @@
 ---
-name: mixpanel-data:auth
+name: mixpanel-headless:auth
 description: Manage Mixpanel authentication — check session, list/add/use accounts, OAuth login, switch projects/workspaces, manage targets, check the Cowork bridge. Use with no arguments for a one-line session summary.
 argument-hint: [session|account|project|workspace|target|bridge] [...]
 ---
@@ -34,7 +34,7 @@ Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/mixpanelyst/scripts/auth_manager.py s
 Switch on `state`:
 - **`ok`** — show one line: "Active: `account.name` → project `project.id`"
   (add workspace `workspace.id` if non-null). Mention that
-  `/mixpanel-data:auth account list` and `/mixpanel-data:auth project list`
+  `/mixpanel-headless:auth account list` and `/mixpanel-headless:auth project list`
   exist if the user wants to switch.
 - **`needs_account`** — no account configured. Show the first
   `next[0].command` as the recommended onboarding step (OAuth browser flow);
@@ -130,7 +130,7 @@ Run: `python3 ${CLAUDE_PLUGIN_ROOT}/skills/mixpanelyst/scripts/auth_manager.py p
 
 Present `items` as a table: organization, project name, project ID. Mark the
 active project (`is_active: true`) with a star. Suggest
-`/mixpanel-data:auth project use <id>` to switch.
+`/mixpanel-headless:auth project use <id>` to switch.
 
 ### "project use <id>"
 

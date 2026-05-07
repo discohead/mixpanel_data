@@ -509,7 +509,7 @@ class MixpanelAPIClient:
         request_body = json_data or form_data
         if params is None:
             params = {}
-        params["query_origin"] = "mixpanel-data-cli"
+        params["query_origin"] = "mixpanel-headless-cli"
         request_headers = self._request_headers(headers)
 
         for attempt in range(self._max_retries + 1):

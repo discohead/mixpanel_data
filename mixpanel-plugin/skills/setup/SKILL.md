@@ -1,11 +1,11 @@
 ---
-name: mixpanel-data:setup
+name: mixpanel-headless:setup
 description: This skill installs mixpanel_headless, pandas, numpy, matplotlib, seaborn, networkx, anytree, scipy (and pyarrow on Python 3.11+), then verifies Mixpanel credentials. It should be invoked when setting up a new environment for Mixpanel data analysis, when dependencies are missing, or when configuring service account or OAuth credentials for the first time.
 disable-model-invocation: true
 allowed-tools: Bash
 ---
 
-# Mixpanel Data — Setup
+# mixpanel-headless — Setup
 
 Install dependencies and verify credentials for CodeMode analytics.
 
@@ -41,7 +41,7 @@ If no credentials are configured, guide the user to one of these methods:
 
 ### Recommended: Guided Setup
 
-Tell the user to run `/mixpanel-data:auth account add` for a step-by-step
+Tell the user to run `/mixpanel-headless:auth account add` for a step-by-step
 walkthrough that securely collects credentials. The slash command never
 prompts for secrets in conversation — it instructs the user to run
 `! mp account add ...` themselves so the secret is read with hidden input.
@@ -108,7 +108,7 @@ Tell the user:
 >
 > Then **start a new Cowork session** — credentials will be available automatically.
 
-Do NOT suggest `/mixpanel-data:auth account login`, `/mixpanel-data:auth account add`, or interactive flows — these won't work inside Cowork.
+Do NOT suggest `/mixpanel-headless:auth account login`, `/mixpanel-headless:auth account add`, or interactive flows — these won't work inside Cowork.
 
 ### If Bridge File Found But Token Expired
 
@@ -131,16 +131,16 @@ python3 ${CLAUDE_SKILL_DIR}/../mixpanelyst/scripts/auth_manager.py account test
 
 The subcommand never raises — read `result.ok` to determine outcome.
 - `result.ok: true` → setup is complete; the user can ask analytics questions.
-- `result.ok: false` → suggest `/mixpanel-data:auth account test` for detailed diagnostics.
+- `result.ok: false` → suggest `/mixpanel-headless:auth account test` for detailed diagnostics.
 
 ## Post-Setup: Explore Your Data
 
 Once authenticated, these slash commands help orient the user:
 
-- `/mixpanel-data:auth project list` — discover all accessible projects via `/me`
-- `/mixpanel-data:auth session` — see active account / project / workspace
-- `/mixpanel-data:auth project use <id>` — switch to a different project
-- `/mixpanel-data:auth target add NAME --account A --project P` — save a named cursor position
+- `/mixpanel-headless:auth project list` — discover all accessible projects via `/me`
+- `/mixpanel-headless:auth session` — see active account / project / workspace
+- `/mixpanel-headless:auth project use <id>` — switch to a different project
+- `/mixpanel-headless:auth target add NAME --account A --project P` — save a named cursor position
 
 The user can also construct a Workspace targeting a specific account / project /
 workspace directly:

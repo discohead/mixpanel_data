@@ -1611,7 +1611,7 @@ class TestPublicRequest:
                 json_body={
                     "name": "test",
                     "value": 123,
-                    "query_origin": "mixpanel-data-cli",
+                    "query_origin": "mixpanel-headless-cli",
                 },
             )
 
@@ -1619,7 +1619,7 @@ class TestPublicRequest:
         assert captured_body == {
             "name": "test",
             "value": 123,
-            "query_origin": "mixpanel-data-cli",
+            "query_origin": "mixpanel-headless-cli",
         }
 
     def test_request_with_custom_headers(self, test_credentials: Session) -> None:
