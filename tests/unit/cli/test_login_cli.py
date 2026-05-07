@@ -19,6 +19,7 @@ Reference: ``specs/043-frictionless-auth/contracts/cli-commands.md`` §6.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from pydantic import SecretStr
@@ -26,6 +27,9 @@ from typer.testing import CliRunner
 
 from mixpanel_headless._internal.config import ConfigManager
 from mixpanel_headless.cli.main import app
+
+if TYPE_CHECKING:
+    from mixpanel_headless._internal.me import MeProjectInfo, MeResponse
 
 
 @pytest.fixture(autouse=True)
@@ -496,3 +500,211 @@ class TestMpLoginNameValidation:
                 p for p in accounts_dir.iterdir() if p.name.startswith(".tmp-")
             ]
             assert leftovers == [], f"placeholder leak: {leftovers}"
+
+
+class TestMpLoginPostRenameRollback:
+    """``add()`` failure after the placeholder rename rolls back the on-disk publish.
+
+    The pre-fix bug: after ``os.rename(placeholder_dir, final_dir)``
+    succeeded, the cleanup branch's ``startswith(".tmp-")`` guard turned
+    into a no-op for ``final_dir``. Any subsequent failure inside
+    ``add()`` (TOML write fault, race that added the same name in
+    another process) would leak ``~/.mp/accounts/{name}/tokens.json``
+    with no matching ``[accounts.NAME]`` block — breaking
+    ``mp account remove {name}`` and blocking the next ``mp login``.
+    """
+
+    def test_add_failure_rolls_back_final_dir(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """If ``add()`` raises after rename, ``final_dir`` is removed."""
+        from datetime import datetime, timedelta, timezone
+
+        from mixpanel_headless import accounts as accounts_ns
+        from mixpanel_headless._internal.auth import flow as flow_mod
+        from mixpanel_headless._internal.auth.token import OAuthTokens
+        from mixpanel_headless.exceptions import ConfigError
+
+        def _fake_pkce(
+            self: object,
+            project_id: str | None = None,
+            *,
+            persist: bool = True,
+            open_browser: bool = True,
+        ) -> OAuthTokens:
+            return OAuthTokens(
+                access_token=SecretStr("brw-tok"),
+                refresh_token=SecretStr("brw-refresh"),
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                scope="read:project",
+                token_type="Bearer",
+            )
+
+        monkeypatch.setattr(flow_mod.OAuthFlow, "login", _fake_pkce)
+        _stub_me(
+            monkeypatch,
+            {
+                "user_id": 1,
+                "organizations": {"100": {"id": 100, "name": "Rollback Corp"}},
+                "projects": {"42": {"name": "Demo", "organization_id": 100}},
+            },
+        )
+
+        # Force ``accounts.add`` to fail AFTER the orchestrator has
+        # renamed the placeholder dir into place. The orchestrator
+        # imports ``add`` at module top-level, so we patch the binding
+        # in the accounts module itself.
+        original_add = accounts_ns.add
+
+        def _failing_add(*args: object, **kwargs: object) -> object:
+            del args, kwargs
+            raise ConfigError("simulated post-rename add() failure")
+
+        monkeypatch.setattr(accounts_ns, "add", _failing_add)
+
+        result = runner.invoke(app, ["login", "--project", "42"])
+        assert result.exit_code != 0, result.output
+        assert "simulated post-rename add() failure" in result.output
+
+        # ``final_dir`` (~/.mp/accounts/rollback-corp/) must be gone —
+        # the rollback should have removed the directory the rename
+        # published, not just left the cleanup as a no-op.
+        final_dir = tmp_path / ".mp" / "accounts" / "rollback-corp"
+        assert not final_dir.exists(), (
+            f"post-rename rollback failed; final_dir survived: "
+            f"{list(final_dir.iterdir()) if final_dir.exists() else []}"
+        )
+
+        # And no orphan placeholders either.
+        accounts_dir = tmp_path / ".mp" / "accounts"
+        if accounts_dir.exists():
+            leftovers = [
+                p for p in accounts_dir.iterdir() if p.name.startswith(".tmp-")
+            ]
+            assert leftovers == [], f"placeholder leak: {leftovers}"
+
+        # Restore the patched add for any later tests that share the module.
+        monkeypatch.setattr(accounts_ns, "add", original_add)
+
+
+class TestProjectPickerTTY:
+    """Direct-call coverage for ``_project_picker_tty`` (login.py).
+
+    The orchestrator wires this into ``login_unified`` only when /me has
+    more than one accessible project. The CLI tests above mostly stub
+    /me to a single-project payload, so the picker's behavior was
+    exercised entirely by the production codepath without any focused
+    assertions. These tests call the picker directly so the priority
+    chain (default-on-empty, numeric pick, retry, non-TTY refusal,
+    closed-stdin EOFError) is locked.
+    """
+
+    def _make_me_with_projects(
+        self, project_count: int
+    ) -> tuple[MeResponse, list[tuple[str, MeProjectInfo]]]:
+        """Build a MeResponse and pre-sorted project list with ``project_count`` entries.
+
+        Args:
+            project_count: How many projects to fabricate.
+
+        Returns:
+            ``(me_response, sorted_projects_list)`` ready to pass to the picker.
+        """
+        from mixpanel_headless._internal.me import (
+            MeOrgInfo,
+            MeProjectInfo,
+            MeResponse,
+        )
+
+        orgs = {"100": MeOrgInfo(id=100, name="Acme Corp")}
+        projects = {
+            str(1000 + idx): MeProjectInfo(
+                name=f"Project {idx}",
+                organization_id=100,
+                domain="mixpanel.com",
+            )
+            for idx in range(project_count)
+        }
+        me = MeResponse(organizations=orgs, projects=projects)
+        sorted_list = sorted(projects.items(), key=lambda kv: kv[1].name.lower())
+        return me, sorted_list
+
+    def test_returns_default_on_empty_input(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty input (just Enter) returns the first project in the sorted list."""
+        from mixpanel_headless.cli.commands.login import _project_picker_tty
+
+        me, sorted_projects = self._make_me_with_projects(3)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda _prompt: "")
+
+        result = _project_picker_tty(me, sorted_projects)
+        assert result == sorted_projects[0][0]
+
+    def test_returns_indexed_pick(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Numeric input returns the project at that 1-based index."""
+        from mixpanel_headless.cli.commands.login import _project_picker_tty
+
+        me, sorted_projects = self._make_me_with_projects(3)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda _prompt: "2")
+
+        result = _project_picker_tty(me, sorted_projects)
+        assert result == sorted_projects[1][0]
+
+    def test_three_invalid_attempts_raise_config_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Three garbage inputs raise ConfigError mentioning 'after 3 attempts'."""
+        from mixpanel_headless.cli.commands.login import _project_picker_tty
+        from mixpanel_headless.exceptions import ConfigError
+
+        me, sorted_projects = self._make_me_with_projects(3)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda _prompt: "garbage")
+
+        with pytest.raises(ConfigError) as exc_info:
+            _project_picker_tty(me, sorted_projects)
+        assert "3 attempts" in exc_info.value.message
+
+    def test_non_tty_raises_config_error_with_accessible_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-TTY context raises ConfigError listing accessible projects (E-9)."""
+        from mixpanel_headless.cli.commands.login import _project_picker_tty
+        from mixpanel_headless.exceptions import ConfigError
+
+        me, sorted_projects = self._make_me_with_projects(3)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+        with pytest.raises(ConfigError) as exc_info:
+            _project_picker_tty(me, sorted_projects)
+        msg = exc_info.value.message
+        assert "Multiple projects accessible" in msg
+        assert "MP_PROJECT_ID" in msg
+        # All three project IDs must appear in the accessible list.
+        for pid, _ in sorted_projects:
+            assert pid in msg
+
+    def test_eof_during_input_raises_config_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``input()`` raising ``EOFError`` is mapped to ConfigError, not a traceback."""
+        from mixpanel_headless.cli.commands.login import _project_picker_tty
+        from mixpanel_headless.exceptions import ConfigError
+
+        me, sorted_projects = self._make_me_with_projects(3)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+        def _raise_eof(_prompt: str) -> str:
+            raise EOFError("simulated stdin close")
+
+        monkeypatch.setattr("builtins.input", _raise_eof)
+
+        with pytest.raises(ConfigError) as exc_info:
+            _project_picker_tty(me, sorted_projects)
+        assert "stdin closed" in exc_info.value.message

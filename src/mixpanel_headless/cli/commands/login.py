@@ -46,7 +46,11 @@ def _project_picker_tty(
         The chosen project ID.
 
     Raises:
-        ConfigError: Three consecutive invalid responses (E-14).
+        ConfigError: Non-TTY context (E-9), stdin closed mid-prompt
+            (``EOFError`` re-raised as ``ConfigError`` so the
+            ``@handle_errors`` decorator can render a structured
+            message instead of a Python traceback), or three
+            consecutive invalid responses (E-14).
     """
     from mixpanel_headless.exceptions import ConfigError
 
@@ -79,7 +83,18 @@ def _project_picker_tty(
         )
 
     for _attempt in range(3):
-        raw = input("Which project? [1]: ").strip()
+        try:
+            raw = input("Which project? [1]: ").strip()
+        except EOFError:
+            # stdin closed between the isatty() check above and the read
+            # (e.g. shell redirected `< /dev/null` after the harness
+            # snapshotted isatty). Surface as ConfigError so
+            # @handle_errors renders a structured exit instead of a
+            # bare Python traceback.
+            raise ConfigError(
+                "stdin closed during project picker prompt. "
+                "Pass --project ID or set MP_PROJECT_ID and re-run."
+            ) from None
         if not raw:
             return sorted_projects[0][0]
         if raw.isdigit() and 1 <= int(raw) <= len(sorted_projects):

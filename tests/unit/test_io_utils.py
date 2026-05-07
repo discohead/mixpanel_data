@@ -1,8 +1,10 @@
-"""Unit tests for the atomic-write helper.
+"""Unit tests for the atomic-write helper and the stdin secret reader.
 
 Tests :func:`mixpanel_headless._internal.io_utils.atomic_write_bytes`, the
 foundation under all token / config writes that must survive a mid-write
-crash without leaving the on-disk file in a partial state.
+crash without leaving the on-disk file in a partial state, and
+:func:`read_capped_secret_from_stdin`, the bounded reader shared by
+``mp account add --secret-stdin`` and the ``mp login`` orchestrator.
 
 Verifies:
 - Writes bytes to a fresh path with default 0o600 mode
@@ -15,10 +17,14 @@ Verifies:
 - O_EXCL prevents collision with a stale tmp from same pid+tid
 - Empty payload still produces a file (not a missing one)
 - Missing parent directory propagates a FileNotFoundError to the caller
+- Stdin reader returns whitespace-stripped value at the cap boundary
+- Stdin reader rejects payloads exceeding the cap with ConfigError
+- Stdin reader rejects empty / whitespace-only stdin with ConfigError
 """
 
 from __future__ import annotations
 
+import io
 import os
 import platform
 import stat
@@ -28,7 +34,12 @@ from unittest.mock import patch
 
 import pytest
 
-from mixpanel_headless._internal.io_utils import atomic_write_bytes
+from mixpanel_headless._internal.io_utils import (
+    SECRET_STDIN_MAX_BYTES,
+    atomic_write_bytes,
+    read_capped_secret_from_stdin,
+)
+from mixpanel_headless.exceptions import ConfigError
 
 
 def _tmp_glob(target: Path) -> list[Path]:
@@ -240,3 +251,52 @@ class TestAtomicWriteResilience:
         final = target.read_bytes()
         assert final == b"A" * 1024 or final == b"B" * 1024
         assert _tmp_glob(target) == []
+
+
+def _stub_stdin(monkeypatch: pytest.MonkeyPatch, payload: bytes) -> None:
+    """Replace ``sys.stdin.buffer`` with a BytesIO carrying ``payload``."""
+    import sys
+
+    fake = io.BytesIO(payload)
+
+    class _FakeStdin:
+        buffer = fake
+
+    monkeypatch.setattr(sys, "stdin", _FakeStdin())
+
+
+class TestReadCappedSecretFromStdin:
+    """Tests for :func:`read_capped_secret_from_stdin`."""
+
+    def test_returns_stripped_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A normal piped secret is returned with surrounding whitespace stripped."""
+        _stub_stdin(monkeypatch, b"  s3cret-value\n")
+        assert read_capped_secret_from_stdin() == "s3cret-value"
+
+    def test_accepts_payload_at_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A payload exactly at the cap is accepted (boundary check)."""
+        payload = b"A" * SECRET_STDIN_MAX_BYTES
+        _stub_stdin(monkeypatch, payload)
+        result = read_capped_secret_from_stdin()
+        assert len(result) == SECRET_STDIN_MAX_BYTES
+
+    def test_rejects_payload_over_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A payload exceeding the cap raises ConfigError mentioning the limit."""
+        _stub_stdin(monkeypatch, b"A" * (SECRET_STDIN_MAX_BYTES + 1))
+        with pytest.raises(ConfigError) as exc_info:
+            read_capped_secret_from_stdin()
+        assert str(SECRET_STDIN_MAX_BYTES) in exc_info.value.message
+        assert "key bundle" in exc_info.value.message
+
+    def test_rejects_empty_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An empty stdin raises ConfigError with the empty-secret message."""
+        _stub_stdin(monkeypatch, b"")
+        with pytest.raises(ConfigError) as exc_info:
+            read_capped_secret_from_stdin()
+        assert "empty" in exc_info.value.message.lower()
+
+    def test_rejects_whitespace_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Whitespace-only stdin (newlines / tabs) is treated as empty."""
+        _stub_stdin(monkeypatch, b"   \n\t\n")
+        with pytest.raises(ConfigError):
+            read_capped_secret_from_stdin()

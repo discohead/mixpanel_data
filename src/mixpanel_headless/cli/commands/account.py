@@ -22,6 +22,7 @@ from pydantic import SecretStr
 from mixpanel_headless import accounts as accounts_ns
 from mixpanel_headless._internal.auth.account import AccountType as _AccountTypeLiteral
 from mixpanel_headless._internal.auth.account import Region
+from mixpanel_headless._internal.io_utils import read_capped_secret_from_stdin
 from mixpanel_headless.cli.utils import (
     ExitCode,
     console,
@@ -32,12 +33,6 @@ from mixpanel_headless.exceptions import (
     AccountInUseError,
 )
 from mixpanel_headless.types import AccountSummary
-
-# Cap stdin reads at 64 KiB. Real service-account secrets are < 1 KiB
-# and OAuth tokens are < 8 KiB; anything larger is almost certainly the
-# wrong file being piped in (a key bundle, a JSON dump, etc.). Reject
-# loudly rather than silently swallowing it.
-_STDIN_SECRET_MAX_BYTES = 64 * 1024
 
 
 def _probe_region_for_credential(
@@ -130,33 +125,26 @@ def _probe_region_for_credential(
 
 
 def _read_secret_from_stdin() -> str:
-    """Read a single secret value from stdin (up to 64 KiB).
+    """Read a capped secret from stdin and surface failures as ``typer.Exit``.
 
-    Replaces the prior 4096-byte ``os.read(0, 4096)`` which silently
-    truncated long OAuth tokens / passwords piped from password
-    managers. Reads ALL bytes, strips trailing whitespace (which
-    ``pass``, ``cat``, etc. typically append), and rejects payloads
-    larger than ``_STDIN_SECRET_MAX_BYTES`` instead of returning a
-    quietly-corrupted prefix.
+    Thin wrapper around :func:`read_capped_secret_from_stdin` that maps
+    its :class:`ConfigError` to the legacy ``INVALID_ARGS`` exit code so
+    existing CLI snapshots / contract tests keep their exit-code shape.
+    New call sites should import the underlying helper directly.
 
     Returns:
-        The decoded secret string (whitespace-stripped).
+        The decoded, whitespace-stripped secret.
 
     Raises:
         typer.Exit: When stdin is empty or exceeds the cap.
     """
-    raw = sys.stdin.buffer.read(_STDIN_SECRET_MAX_BYTES + 1)
-    if len(raw) > _STDIN_SECRET_MAX_BYTES:
-        err_console.print(
-            f"[red]stdin payload exceeds {_STDIN_SECRET_MAX_BYTES} bytes; "
-            f"refusing to truncate. Pipe a single secret, not a key bundle.[/red]"
-        )
-        raise typer.Exit(ExitCode.INVALID_ARGS)
-    value = raw.decode("utf-8", errors="strict").strip()
-    if not value:
-        err_console.print("[red]Secret is empty.[/red]")
-        raise typer.Exit(ExitCode.INVALID_ARGS)
-    return value
+    from mixpanel_headless.exceptions import ConfigError
+
+    try:
+        return read_capped_secret_from_stdin()
+    except ConfigError as exc:
+        err_console.print(f"[red]{exc.message}[/red]")
+        raise typer.Exit(ExitCode.INVALID_ARGS) from None
 
 
 account_app = typer.Typer(

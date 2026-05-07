@@ -11,6 +11,8 @@ Reference: specs/042-auth-architecture-redesign/contracts/python-api.md §5.
 from __future__ import annotations
 
 import builtins
+import logging
+import shutil
 from pathlib import Path
 
 from pydantic import SecretStr
@@ -41,10 +43,38 @@ from mixpanel_headless.types import (
     OAuthLoginResult,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _config() -> ConfigManager:
     """Return a fresh ConfigManager honoring ``MP_CONFIG_PATH`` / ``$HOME``."""
     return ConfigManager()
+
+
+def _safe_rmtree_warn(path: Path) -> None:
+    """``shutil.rmtree(path)`` that logs a warning on failure instead of swallowing it.
+
+    Used to clean up credential-bearing placeholder / rolled-back account
+    directories. The prior ``shutil.rmtree(..., ignore_errors=True)`` was
+    silent, leaving OAuth tokens on disk under a directory the user
+    couldn't easily locate when cleanup itself failed (NFS lag, locked
+    file, permission anomaly).
+
+    Args:
+        path: Directory to remove. Missing-path is a no-op.
+    """
+    if not path.exists():
+        return
+    try:
+        shutil.rmtree(path)
+    except OSError as cleanup_exc:
+        logger.warning(
+            "Failed to clean up %s containing OAuth tokens: %s. "
+            "Run `rm -rf %s` manually to remove them.",
+            path,
+            cleanup_exc,
+            path,
+        )
 
 
 def _domain_to_region(domain: str) -> Region | None:
@@ -1066,7 +1096,11 @@ def _login_unified_relogin(
                 "MP_USERNAME in the environment."
             )
         if secret_stdin:
-            secret_raw = sys.stdin.read().strip()
+            from mixpanel_headless._internal.io_utils import (
+                read_capped_secret_from_stdin,
+            )
+
+            secret_raw = read_capped_secret_from_stdin()
         else:
             secret_raw = os.environ.get("MP_SECRET", "")
         if not secret_raw:
@@ -1121,7 +1155,6 @@ def _login_unified_new_browser(
     """
     import os
     import secrets
-    import shutil
 
     from mixpanel_headless._internal.api_client import MixpanelAPIClient
     from mixpanel_headless._internal.auth.flow import OAuthFlow
@@ -1239,20 +1272,32 @@ def _login_unified_new_browser(
                 f"`mp account remove {final_name}` first or pass --name."
             )
         os.rename(placeholder_dir, final_dir)
-        placeholder_dir = final_dir  # so failure cleanup below is a no-op
+        placeholder_dir = final_dir
 
-        # Persist the account record.
-        return add(
-            final_name,
-            type="oauth_browser",
-            region=auth_region,
-            default_project=chosen_project,
-        )
+        # Persist the account record. If add() raises (a race added the
+        # same name between list_accounts() and now, the TOML write
+        # failed, etc.), roll back the on-disk publish so the user is
+        # not left with tokens at the user-visible name and no
+        # [accounts.NAME] block — that combination breaks
+        # `mp account remove` and blocks the next `mp login`.
+        try:
+            return add(
+                final_name,
+                type="oauth_browser",
+                region=auth_region,
+                default_project=chosen_project,
+            )
+        except Exception:
+            _safe_rmtree_warn(final_dir)
+            raise
 
     except Exception:
-        # On any failure before successful add(), clean up the placeholder.
-        if placeholder_dir.exists() and placeholder_dir.name.startswith(".tmp-"):
-            shutil.rmtree(placeholder_dir, ignore_errors=True)
+        # Failure before the rename — placeholder still has the
+        # ``.tmp-`` prefix. (The post-rename rollback above handles
+        # add() failure inline; this branch only fires when something
+        # earlier in the try block raised.)
+        if placeholder_dir.name.startswith(".tmp-"):
+            _safe_rmtree_warn(placeholder_dir)
         raise
 
 
@@ -1304,7 +1349,11 @@ def _login_unified_new_credential(
                 "to supply explicit credentials."
             )
         if secret_stdin:
-            secret_raw = sys.stdin.read().strip()
+            from mixpanel_headless._internal.io_utils import (
+                read_capped_secret_from_stdin,
+            )
+
+            secret_raw = read_capped_secret_from_stdin()
         else:
             secret_raw = os.environ.get("MP_SECRET", "")
         if not secret_raw:
