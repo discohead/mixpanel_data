@@ -10,6 +10,7 @@ flags.
 
 | File | Command Group | Purpose |
 |------|---------------|---------|
+| `login.py` | `mp login` | Guided account add (region probe, project picker, name derivation) — orchestrator landed in 043 / AIE-117 |
 | `account.py` | `mp account` | Account CRUD + lifecycle (`list`, `add`, `update`, `remove`, `use`, `show`, `test`, `login`, `logout`, `token`, `export-bridge`, `remove-bridge`) |
 | `project.py` | `mp project` | Project axis (`list` from `/me`, `use ID`, `show`) |
 | `workspace.py` | `mp workspace` | Workspace axis (`list`, `use ID`, `show`) |

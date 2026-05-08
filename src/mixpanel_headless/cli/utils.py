@@ -33,11 +33,15 @@ from mixpanel_headless.exceptions import (
     ConfigError,
     DateRangeTooLargeError,
     EventNotFoundError,
+    InvalidArgumentError,
     JQLSyntaxError,
     MixpanelHeadlessError,
     OAuthError,
+    ProjectNotFoundError,
     QueryError,
     RateLimitError,
+    RegionProbeError,
+    RegionProbeNetworkError,
     ServerError,
     WorkspaceScopeError,
 )
@@ -130,6 +134,14 @@ def handle_errors(func: F) -> F:
                 f"[red]Account exists:[/red] {rich_escape(e.account_name)}"
             )
             raise typer.Exit(ExitCode.GENERAL_ERROR) from None
+        except ProjectNotFoundError as e:
+            err_console.print(
+                f"[red]Project not found:[/red] {rich_escape(e.project_id)}"
+            )
+            if e.available_projects:
+                joined = ", ".join(rich_escape(p) for p in e.available_projects)
+                err_console.print(f"Accessible projects: {joined}")
+            raise typer.Exit(ExitCode.NOT_FOUND) from None
         except RateLimitError as e:
             err_console.print(
                 f"[yellow]Rate limited:[/yellow] {rich_escape(e.message)}"
@@ -275,6 +287,58 @@ def handle_errors(func: F) -> F:
                 "Try again in a few moments."
             )
             raise typer.Exit(ExitCode.GENERAL_ERROR) from None
+        except RegionProbeNetworkError as e:
+            # Subclass dispatch must come BEFORE the generic
+            # RegionProbeError handler — otherwise the network case
+            # falls through to "verify your credentials" advice that
+            # makes no sense when the user is offline.
+            err_console.print(f"[red]ERROR:[/red] {rich_escape(e.message)}")
+            err_console.print("")
+            err_console.print("Probe results:")
+            for region, _status, body in e.attempts:
+                err_console.print(
+                    f"  {rich_escape(region)}: network error ({rich_escape(body)})"
+                )
+            err_console.print("")
+            err_console.print(
+                "Check your network connection (DNS, proxy, captive portal, "
+                "TLS interception) and retry. If you know the region, pass "
+                "--region {us|eu|in} explicitly to limit the probe to one "
+                "host."
+            )
+            raise typer.Exit(ExitCode.AUTH_ERROR) from None
+        except RegionProbeError as e:
+            # Error catalog E-1 — render the per-region attempt table so
+            # users see exactly which clusters rejected the credential.
+            # Exit code 2 because the failure is an authentication
+            # rejection across every cluster, not a generic OAuth glitch.
+            err_console.print(f"[red]ERROR:[/red] {rich_escape(e.message)}")
+            err_console.print("")
+            err_console.print("Probe results:")
+            for region, status, body in e.attempts:
+                if status == 0:
+                    err_console.print(
+                        f"  {rich_escape(region)}: 0 (network error: "
+                        f"{rich_escape(body)})"
+                    )
+                else:
+                    # Render only the first line of the body to keep the
+                    # table compact; full body is in e.attempts for
+                    # programmatic consumers.
+                    short = body.splitlines()[0] if body else ""
+                    err_console.print(
+                        f"  {rich_escape(region)}: {status} {rich_escape(short)}"
+                    )
+            err_console.print("")
+            err_console.print(
+                "If you know the region, pass --region {us|eu|in} explicitly "
+                "to skip the probe."
+            )
+            err_console.print(
+                "If your service account is new, verify the username and "
+                "secret are correct."
+            )
+            raise typer.Exit(ExitCode.AUTH_ERROR) from None
         except OAuthError as e:
             err_console.print(f"[red]OAuth error:[/red] {rich_escape(e.message)}")
             if e.code:
@@ -285,6 +349,13 @@ def handle_errors(func: F) -> F:
             if e.code:
                 err_console.print(f"  [dim]Code:[/dim] {rich_escape(e.code)}")
             raise typer.Exit(ExitCode.GENERAL_ERROR) from None
+        except InvalidArgumentError as e:
+            # Subclass of ConfigError — must be caught BEFORE the
+            # generic ConfigError handler so flag-misuse exits 3
+            # (INVALID_ARGS) instead of 1 (GENERAL_ERROR). Matches the
+            # 043 cli-commands.md §1.5 contract for `mp login`.
+            err_console.print(f"[red]ERROR:[/red] {rich_escape(e.message)}")
+            raise typer.Exit(ExitCode.INVALID_ARGS) from None
         except ConfigError as e:
             # Escape the message so block names like ``[accounts.NAME]`` are
             # rendered literally instead of being parsed as Rich markup.

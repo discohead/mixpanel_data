@@ -12338,6 +12338,31 @@ class AccountSummary(BaseModel):
     referenced_by_targets: list[str] = Field(default_factory=list)
     """Names of targets that reference this account."""
 
+    user_email: str | None = None
+    """Authenticated user email, populated by ``login_unified()`` from ``/me``.
+
+    Persisted in the per-account ``MeCache`` (not in ``config.toml``), so
+    it survives across processes once login has run. ``None`` when the
+    account was added via ``mp account add`` (no ``/me`` round-trip) or
+    when ``/me`` did not return a ``user_email``.
+    """
+
+    project_id: str | None = None
+    """Project ID resolved at login time.
+
+    Mirror of the persisted ``default_project`` for convenience — exposed
+    on ``AccountSummary`` so the ``mp login`` success line can render
+    ``Logged in as ... → ... · {project_name}`` without a second
+    ``ConfigManager`` round-trip. ``None`` when no default project is set.
+    """
+
+    project_name: str | None = None
+    """Human-readable project name from ``/me`` for the resolved project.
+
+    Populated alongside ``project_id`` by ``login_unified()``. ``None``
+    when no project is configured or the project is not in ``/me``.
+    """
+
 
 class MeUserInfo(BaseModel):
     """Subset of the ``/api/app/me`` response identifying the principal.
@@ -12368,6 +12393,14 @@ class AccountTestResult(BaseModel):
     and a non-empty ``error`` (or ``ok=False`` and ``error=None``) raises
     :class:`pydantic.ValidationError` to prevent ambiguous result states
     that would force callers to guess the right field to read.
+
+    When the underlying failure is a :class:`MixpanelHeadlessError`,
+    ``error_code`` and ``error_details`` carry the structured fields
+    so downstream callers (the plugin's ``auth_manager.py``, JSON
+    consumers) can dispatch on the code instead of parsing the
+    ``error`` message string. Both default to ``None`` for the
+    success path and for failures captured from a non-library
+    exception (network OSError, programming bug, etc.).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -12387,6 +12420,12 @@ class AccountTestResult(BaseModel):
     error: str | None = None
     """Human-readable failure reason when ``ok`` is ``False``."""
 
+    error_code: str | None = None
+    """Machine-readable error code (only set when the cause was a ``MixpanelHeadlessError``)."""
+
+    error_details: dict[str, Any] | None = None
+    """Structured ``details`` payload from the underlying ``MixpanelHeadlessError``, if any."""
+
     @model_validator(mode="after")
     def _ok_iff_no_error(self) -> AccountTestResult:
         """Enforce ``ok=True`` ⟺ ``error is None``.
@@ -12395,12 +12434,20 @@ class AccountTestResult(BaseModel):
             ``self`` (no mutation).
 
         Raises:
-            ValueError: When ``ok``/``error`` disagree.
+            ValueError: When ``ok``/``error`` disagree, or when
+                ``ok=True`` is paired with a non-None error_code /
+                error_details (those fields belong to the failure
+                arm only).
         """
         if self.ok and self.error is not None:
             raise ValueError("AccountTestResult: ok=True implies error is None.")
         if not self.ok and self.error is None:
             raise ValueError("AccountTestResult: ok=False requires a non-empty error.")
+        if self.ok and (self.error_code is not None or self.error_details is not None):
+            raise ValueError(
+                "AccountTestResult: error_code/error_details only meaningful "
+                "when ok=False."
+            )
         return self
 
 

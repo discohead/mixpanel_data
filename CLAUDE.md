@@ -329,4 +329,10 @@ python help.py Filter                  # type fields + construction patterns + r
 - Python 3.10+ (mypy --strict) + httpx (HTTP), Pydantic v2 (validation), pandas (DataFrames), Hypothesis (PBT) (039-query-user-engine)
 - Python 3.10+ + httpx, Pydantic v2, Typer, Rich, pandas, Hypothesis (040-query-engine-completeness)
 - N/A — query parameter types only, no persistence (040-query-engine-completeness)
+- Python 3.10+ (mypy --strict) + httpx, Pydantic v2, Typer, Rich, Hypothesis, mutmut (043-frictionless-auth)
+- TOML config (`~/.mp/config.toml`) + per-account state at `~/.mp/accounts/{name}/{tokens,client,me}.json` — schema unchanged from 042 (043-frictionless-auth)
+
+<!-- SPECKIT START -->
+**Active plan**: [`specs/043-frictionless-auth/plan.md`](specs/043-frictionless-auth/plan.md) — Frictionless Auth (`mp login` and `/me`-driven discovery). Single PR landing AIE-114/115/116/117 together.
+<!-- SPECKIT END -->
 

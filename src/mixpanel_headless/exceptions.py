@@ -16,7 +16,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from mixpanel_headless._internal.auth.account import Region
 
 
 class MixpanelHeadlessError(Exception):
@@ -346,6 +349,82 @@ class AccountExistsError(ConfigError):
     def account_name(self) -> str:
         """The conflicting account name."""
         return str(self._details.get("account_name", ""))
+
+
+class InvalidArgumentError(ConfigError):
+    """Raised when a public API call combines mutually incompatible arguments.
+
+    Carries a ``violation`` discriminator and the resolved
+    ``detected_auth_type`` so non-CLI callers (Cowork's ``auth_manager.py``,
+    JSON consumers) can dispatch programmatically without parsing the
+    human message. The CLI ``handle_errors`` decorator maps this subclass
+    to ``ExitCode.INVALID_ARGS`` (3) instead of the generic
+    ``GENERAL_ERROR`` (1) that ``ConfigError`` would otherwise produce.
+
+    Used by ``accounts.login_unified`` for the three documented
+    flag-combination rejections (043 contract, ``cli-commands.md`` §5):
+    ``--service-account`` + ``--token-env``, ``--no-browser`` against a
+    non-browser auth type, and ``--secret-stdin`` against a non-SA
+    auth type.
+
+    Example:
+        ```python
+        try:
+            accounts.login_unified(service_account=True, token_env="X")
+        except InvalidArgumentError as exc:
+            assert exc.violation == "mutually_exclusive"
+            assert exc.detected_auth_type == "service_account"
+        ```
+    """
+
+    _VALID_VIOLATIONS = (
+        "mutually_exclusive",
+        "no_browser_misuse",
+        "secret_stdin_misuse",
+    )
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        violation: Literal[
+            "mutually_exclusive", "no_browser_misuse", "secret_stdin_misuse"
+        ],
+        detected_auth_type: str | None = None,
+    ) -> None:
+        """Initialize InvalidArgumentError.
+
+        Args:
+            message: Human-readable error message.
+            violation: Discriminator for the kind of misuse. One of
+                ``"mutually_exclusive"``, ``"no_browser_misuse"``,
+                ``"secret_stdin_misuse"``.
+            detected_auth_type: The auth type the orchestrator resolved
+                from the supplied flags / env. ``None`` only when the
+                violation was caught BEFORE detection ran (currently
+                no such case, but kept optional for future-proofing).
+        """
+        if violation not in self._VALID_VIOLATIONS:
+            raise ValueError(
+                f"Invalid violation {violation!r}; must be one of "
+                f"{self._VALID_VIOLATIONS}."
+            )
+        details: dict[str, Any] = {"violation": violation}
+        if detected_auth_type is not None:
+            details["detected_auth_type"] = detected_auth_type
+        super().__init__(message, details=details)
+        self._code = "INVALID_ARGUMENT"
+
+    @property
+    def violation(self) -> str:
+        """The kind of misuse — see ``_VALID_VIOLATIONS``."""
+        return str(self._details.get("violation", ""))
+
+    @property
+    def detected_auth_type(self) -> str | None:
+        """The auth type the orchestrator resolved (or ``None`` if pre-detection)."""
+        value = self._details.get("detected_auth_type")
+        return str(value) if value is not None else None
 
 
 class AccountInUseError(ConfigError):
@@ -985,6 +1064,118 @@ class OAuthError(MixpanelHeadlessError):
             details: Additional structured data about the error.
         """
         super().__init__(message, code=code, details=details)
+
+
+class RegionProbeError(OAuthError):
+    """Raised when no region accepts the credential during region probing.
+
+    The region probe walks a configured order (default ``us`` → ``eu`` →
+    ``in``) against ``/api/app/me``, returning the first 200. When every
+    probe attempt fails, this exception is raised carrying the full
+    attempt list for diagnostic and telemetry use.
+
+    A status code of ``0`` indicates the request never reached the server
+    (network error); the third tuple element carries the failure detail
+    (HTTP response text or the network error reason).
+
+    See :class:`RegionProbeNetworkError` for the all-network-error
+    subclass — the probe distinguishes "credential rejected" from
+    "could not reach any region" so the CLI can render different
+    remediation hints.
+
+    Example:
+        ```python
+        try:
+            result = probe_region(client_factory, headers)
+        except RegionProbeError as exc:
+            for region, status, body in exc.attempts:
+                print(f"{region}: {status} {body}")
+        ```
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        attempts: list[tuple[Region, int, str]],
+        code: str = "OAUTH_REGION_PROBE_FAILED",
+    ) -> None:
+        """Initialize RegionProbeError.
+
+        Args:
+            message: Human-readable error message.
+            attempts: Ordered list of ``(region, status_code, error_body)``
+                tuples for every probed region. ``status_code`` is ``0``
+                for network errors; ``error_body`` carries the failure
+                detail.
+            code: Machine-readable error code. Defaults to
+                ``OAUTH_REGION_PROBE_FAILED`` for the generic case;
+                :class:`RegionProbeNetworkError` overrides to
+                ``OAUTH_NETWORK_UNREACHABLE``.
+        """
+        self._attempts: list[tuple[Region, int, str]] = list(attempts)
+        super().__init__(
+            message,
+            code=code,
+            details={"attempts": [list(a) for a in self._attempts]},
+        )
+
+    @property
+    def attempts(self) -> list[tuple[Region, int, str]]:
+        """Ordered list of ``(region, status_code, error_body)`` tuples."""
+        return list(self._attempts)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the exception to a JSON-friendly dict.
+
+        Includes ``attempts`` at the top level so consumers can inspect
+        the per-region probe outcomes without unpacking ``details``.
+
+        Returns:
+            Dictionary with keys ``code``, ``message``, ``details``, and
+            ``attempts``. Each ``attempts`` entry is a 3-element list
+            ``[region, status_code, error_body]``.
+        """
+        base = super().to_dict()
+        base["attempts"] = [list(a) for a in self._attempts]
+        return base
+
+
+class RegionProbeNetworkError(RegionProbeError):
+    """Raised when every region probe attempt failed at the network layer.
+
+    Subclass of :class:`RegionProbeError` used when ALL recorded
+    attempts have ``status_code == 0`` — i.e. the credential was never
+    actually evaluated because no region was reachable (DNS failure,
+    TLS rejection, captive portal, no internet). The CLI catches this
+    before the generic ``RegionProbeError`` so it can render "could
+    not reach any Mixpanel region" instead of "credential not valid",
+    which would mislead a user who is actually offline.
+
+    Carries the same ``attempts`` shape as the parent so existing
+    consumers can render the per-region detail without changes.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        attempts: list[tuple[Region, int, str]],
+    ) -> None:
+        """Initialize RegionProbeNetworkError.
+
+        Args:
+            message: Human-readable error message.
+            attempts: Ordered list of ``(region, 0, error_body)``
+                tuples — every entry must have status 0 by construction
+                (the probe loop only raises this subclass when that
+                invariant holds).
+        """
+        super().__init__(
+            message,
+            attempts=attempts,
+            code="OAUTH_NETWORK_UNREACHABLE",
+        )
 
 
 class WorkspaceScopeError(MixpanelHeadlessError):

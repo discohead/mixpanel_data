@@ -156,6 +156,457 @@ class TestAccountCli:
         assert result.exit_code == 0
 
 
+class TestAccountAdd043Relaxations:
+    """Phase 043 relaxations to ``mp account add``.
+
+    Per AIE-115 (US3), ``--project`` is optional for ``service_account``
+    and ``oauth_token`` types — the user can leave it blank and configure
+    the active project later via ``mp project use ID``.
+    """
+
+    def test_service_account_without_project_succeeds(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SA add without ``--project`` works; account has no default_project."""
+        # Make sure MP_PROJECT_ID isn't set in the test env, so the absence
+        # of --project really exercises the no-project path.
+        monkeypatch.delenv("MP_PROJECT_ID", raising=False)
+        monkeypatch.setenv("MP_SECRET", "team-secret")
+        result = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "team",
+                "--type",
+                "service_account",
+                "--region",
+                "us",
+                "--username",
+                "u",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        cm = ConfigManager()
+        assert cm.get_account("team").default_project is None
+
+    def test_oauth_token_without_project_succeeds(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """oauth_token add without ``--project`` works; no default_project."""
+        monkeypatch.delenv("MP_PROJECT_ID", raising=False)
+        monkeypatch.setenv("MP_OAUTH_TOKEN", "ey.x")
+        result = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "ci",
+                "--type",
+                "oauth_token",
+                "--region",
+                "us",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        cm = ConfigManager()
+        assert cm.get_account("ci").default_project is None
+
+    def test_account_add_help_includes_login_tip(self, runner: CliRunner) -> None:
+        """``mp account add --help`` epilog mentions ``mp login``.
+
+        Per cli-commands.md §2.2, the help epilog steers new users toward
+        the guided ``mp login`` while keeping ``mp account add`` available
+        for scripted setups.
+        """
+        result = runner.invoke(app, ["account", "add", "--help"])
+        assert result.exit_code == 0, result.output
+        # Match the catalog wording loosely — exact phrasing locked by
+        # the implementation, not the test.
+        assert "mp login" in result.output
+        assert "guided" in result.output.lower() or "tip" in result.output.lower()
+
+
+class TestAccountAddRegionProbe:
+    """``mp account add`` without ``--region`` probes us → eu → in (043 / AIE-114).
+
+    The CLI builds the credential header, hands it to
+    :func:`region_probe.probe_region` with a region-scoped
+    ``client_factory``, prints one stderr line per attempt, and persists
+    the resolved region. With ``--region`` supplied, the probe is
+    skipped entirely.
+    """
+
+    def test_sa_without_region_probes_and_persists_resolved_region(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No ``--region`` → CLI probes; account record reflects probed region."""
+        from mixpanel_headless._internal.auth import region_probe as rp_mod
+
+        monkeypatch.setenv("MP_SECRET", "team-secret")
+        captured: dict[str, object] = {}
+
+        def _spy_probe(
+            client_factory: object,
+            headers: dict[str, str],
+            *,
+            timeout_seconds: float = 5.0,
+            order: tuple[str, ...] = ("us", "eu", "in"),
+        ) -> rp_mod.RegionProbeResult:
+            captured["headers"] = dict(headers)
+            captured["order"] = order
+            return rp_mod.RegionProbeResult(
+                region="eu", attempts=[("us", 401), ("eu", 200)]
+            )
+
+        monkeypatch.setattr(rp_mod, "probe_region", _spy_probe)
+
+        result = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "my-eu-sa",
+                "--type",
+                "service_account",
+                "--username",
+                "u",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        cm = ConfigManager()
+        assert cm.get_account("my-eu-sa").region == "eu"
+        # Header carries the SA Basic auth value.
+        headers = captured["headers"]
+        assert isinstance(headers, dict)
+        assert "Authorization" in headers
+        auth_value = headers["Authorization"]
+        assert isinstance(auth_value, str)
+        assert auth_value.startswith("Basic ")
+
+    def test_sa_with_explicit_region_skips_probe(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Explicit ``--region us`` → ``probe_region`` is never called."""
+        from mixpanel_headless._internal.auth import region_probe as rp_mod
+
+        monkeypatch.setenv("MP_SECRET", "s")
+        called = {"count": 0}
+
+        def _no_probe(*args: object, **kwargs: object) -> object:
+            called["count"] += 1
+            raise AssertionError("probe_region must not be called when --region is set")
+
+        monkeypatch.setattr(rp_mod, "probe_region", _no_probe)
+
+        result = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "team",
+                "--type",
+                "service_account",
+                "--region",
+                "us",
+                "--username",
+                "u",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert called["count"] == 0
+
+    def test_probe_failure_surfaces_e1_message(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """All-region probe failure → exit 2 with E-1 wording in stderr."""
+        from mixpanel_headless._internal.auth import region_probe as rp_mod
+        from mixpanel_headless.exceptions import RegionProbeError
+
+        monkeypatch.setenv("MP_SECRET", "s")
+
+        def _fail(*args: object, **kwargs: object) -> object:
+            raise RegionProbeError(
+                "Credential not valid in any region.",
+                attempts=[
+                    ("us", 401, "Unauthorized"),
+                    ("eu", 401, "Unauthorized"),
+                    ("in", 401, "Unauthorized"),
+                ],
+            )
+
+        monkeypatch.setattr(rp_mod, "probe_region", _fail)
+
+        result = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "bad-sa",
+                "--type",
+                "service_account",
+                "--username",
+                "u",
+            ],
+        )
+        # E-1 is an AuthenticationError-class failure → exit 2.
+        from mixpanel_headless.cli.utils import ExitCode
+
+        assert result.exit_code == ExitCode.AUTH_ERROR, result.output
+        # E-1 phrasing — the per-region attempts and the suggested fix.
+        assert "us: 401" in result.output
+        assert "eu: 401" in result.output
+        assert "in: 401" in result.output
+        assert "--region" in result.output
+
+    def test_all_network_failures_render_distinct_message(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """All-network probe failure → distinct CLI handler with connectivity hint.
+
+        When every region returns status 0 (DNS / TLS / connect refused),
+        the orchestrator raises :class:`RegionProbeNetworkError`. The
+        CLI's ``RegionProbeNetworkError`` branch must catch it before
+        the generic handler and render "check your network" instead of
+        "verify your credentials". A user who is offline gets
+        misdirected by the credential-flavored hint otherwise.
+        """
+        from mixpanel_headless._internal.auth import region_probe as rp_mod
+        from mixpanel_headless.cli.utils import ExitCode
+        from mixpanel_headless.exceptions import RegionProbeNetworkError
+
+        monkeypatch.setenv("MP_SECRET", "s")
+
+        def _all_network(*args: object, **kwargs: object) -> object:
+            raise RegionProbeNetworkError(
+                "Could not reach any Mixpanel region — every probe failed at "
+                "the network layer (DNS, TLS, or connect refused).",
+                attempts=[
+                    ("us", 0, "ConnectError: dns lookup failed"),
+                    ("eu", 0, "ConnectError: dns lookup failed"),
+                    ("in", 0, "ConnectError: dns lookup failed"),
+                ],
+            )
+
+        monkeypatch.setattr(rp_mod, "probe_region", _all_network)
+
+        result = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "offline-sa",
+                "--type",
+                "service_account",
+                "--username",
+                "u",
+            ],
+        )
+        assert result.exit_code == ExitCode.AUTH_ERROR, result.output
+        # Connectivity hint, not the credential-verify hint.
+        assert "Could not reach any Mixpanel region" in result.output
+        assert "network" in result.output.lower()
+        # Per-region body must surface the network-error reason so the
+        # user can see DNS vs TLS vs connect-refused at a glance.
+        assert "ConnectError" in result.output
+        # The credential-verify hint from the generic handler must NOT
+        # leak into the network case (the whole point of the subclass).
+        assert "verify the username and secret" not in result.output
+
+
+class TestAccountAddDerivedName:
+    """Phase 043 / AIE-116: ``mp account add`` derives NAME from /me.
+
+    For service_account / oauth_token, omitting the positional NAME
+    triggers a /me lookup and slugifies the first organization to
+    pick the local account name. For oauth_browser the CLI refuses
+    and points the user at ``mp login`` (the orchestrator handles the
+    PKCE-then-derive flow).
+    """
+
+    def test_sa_without_name_derives_from_first_org(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SA add without NAME → name slugified from the first org."""
+        from mixpanel_headless._internal import api_client as api_client_mod
+
+        monkeypatch.setenv("MP_SECRET", "team-secret")
+
+        def _fake_me(self: object) -> dict[str, object]:
+            return {
+                "user_id": 1,
+                "user_email": "u@example.com",
+                "organizations": {"100": {"id": 100, "name": "Acme Corp"}},
+                "projects": {},
+            }
+
+        monkeypatch.setattr(api_client_mod.MixpanelAPIClient, "me", _fake_me)
+        result = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                # NO positional name
+                "--type",
+                "service_account",
+                "--region",
+                "us",
+                "--username",
+                "u",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        cm = ConfigManager()
+        assert "acme-corp" in {s.name for s in cm.list_accounts()}
+
+    def test_sa_without_name_collision_appends_suffix(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two SA adds against the same org slug → ``acme-corp`` + ``acme-corp-2``."""
+        from mixpanel_headless._internal import api_client as api_client_mod
+
+        monkeypatch.setenv("MP_SECRET", "s")
+
+        def _fake_me(self: object) -> dict[str, object]:
+            return {
+                "user_id": 1,
+                "user_email": "u@example.com",
+                "organizations": {"100": {"id": 100, "name": "Acme Corp"}},
+                "projects": {},
+            }
+
+        monkeypatch.setattr(api_client_mod.MixpanelAPIClient, "me", _fake_me)
+
+        # First add → acme-corp
+        first = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "--type",
+                "service_account",
+                "--region",
+                "us",
+                "--username",
+                "u1",
+            ],
+        )
+        assert first.exit_code == 0, first.output
+
+        # Second add against same org slug → acme-corp-2
+        second = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "--type",
+                "service_account",
+                "--region",
+                "us",
+                "--username",
+                "u2",
+            ],
+        )
+        assert second.exit_code == 0, second.output
+
+        cm = ConfigManager()
+        names = {s.name for s in cm.list_accounts()}
+        assert "acme-corp" in names
+        assert "acme-corp-2" in names
+
+    def test_explicit_name_skips_derivation(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Passing ``foo`` as positional NAME wins over the derivation path."""
+        from mixpanel_headless._internal import api_client as api_client_mod
+
+        monkeypatch.setenv("MP_SECRET", "s")
+        called = {"count": 0}
+
+        def _spy_me(self: object) -> dict[str, object]:
+            # If NAME is supplied, derivation should not run, so /me
+            # should NOT be called by accounts.add. (It can still be
+            # called by other discovery paths, but not the derive_name
+            # path.)
+            called["count"] += 1
+            return {"user_id": 1, "organizations": {}, "projects": {}}
+
+        monkeypatch.setattr(api_client_mod.MixpanelAPIClient, "me", _spy_me)
+        result = runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "foo",
+                "--type",
+                "service_account",
+                "--region",
+                "us",
+                "--username",
+                "u",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        cm = ConfigManager()
+        assert cm.get_account("foo").type == "service_account"
+        assert called["count"] == 0, "/me should not be called when NAME is explicit"
+
+    def test_oauth_browser_without_name_refuses(self, runner: CliRunner) -> None:
+        """``mp account add --type oauth_browser`` (no NAME) refuses with hint."""
+        result = runner.invoke(
+            app,
+            ["account", "add", "--type", "oauth_browser", "--region", "us"],
+        )
+        assert result.exit_code != 0, result.output
+        assert "mp login" in result.output
+
+
+class TestProjectListScopeHint:
+    """``mp project list`` extends the 403 message with the scope hint.
+
+    Per AIE-115 (US3) error catalog E-10, when a service account hits
+    /me without the ``user_details`` scope the CLI must spell out which
+    scope to enable instead of the generic "lacks /me permission" line.
+    """
+
+    def test_project_list_403_for_service_account_surfaces_scope_hint(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A 403 from /me on an SA prints E-10 wording and exits non-zero."""
+        from mixpanel_headless._internal import api_client as api_client_mod
+        from mixpanel_headless.exceptions import QueryError
+
+        monkeypatch.setenv("MP_SECRET", "s")
+        runner.invoke(
+            app,
+            [
+                "account",
+                "add",
+                "limited-sa",
+                "--type",
+                "service_account",
+                "--region",
+                "us",
+                "--username",
+                "u",
+                "--project",
+                "1111111",
+            ],
+        )
+
+        def _raise_403(self: object) -> dict[str, object]:
+            raise QueryError("Permission denied", status_code=403)
+
+        monkeypatch.setattr(api_client_mod.MixpanelAPIClient, "me", _raise_403)
+        result = runner.invoke(app, ["project", "list"])
+        assert result.exit_code != 0, result.output
+        # E-10 key phrases — wording locked but not snapped end-to-end so
+        # ANSI styling drift in @handle_errors doesn't break the test.
+        assert "user_details" in result.output
+        assert "Settings" in result.output
+        assert "Service Accounts" in result.output
+
+
 class TestAccountLoginNoBrowser:
     """``mp account login NAME --no-browser`` MUST propagate ``open_browser=False``.
 

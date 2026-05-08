@@ -128,30 +128,40 @@ class TestAddAccount:
         assert loaded.token is None
         assert loaded.token_env == "MP_OAUTH_TOKEN"
 
-    def test_service_account_without_default_project_raises(
+    def test_service_account_without_default_project_succeeds(
         self, cm: ConfigManager
     ) -> None:
-        """SA without ``default_project`` raises (FR-004)."""
-        with pytest.raises(ConfigError):
-            cm.add_account(
-                "team",
-                type="service_account",
-                region="us",
-                username="u",
-                secret=SecretStr("s"),
-            )
+        """Per 043 FR-001: SA may omit ``default_project`` at add-time.
 
-    def test_oauth_token_without_default_project_raises(
+        Inverts the 042 hard requirement so a brand-new SA can be
+        registered before the user knows which project to bind to.
+        ``mp project list`` discovers the available projects via /me;
+        ``mp project use ID`` then sets the active project.
+        """
+        cm.add_account(
+            "team",
+            type="service_account",
+            region="us",
+            username="u",
+            secret=SecretStr("s"),
+        )
+        assert cm.get_account("team").default_project is None
+
+    def test_oauth_token_without_default_project_succeeds(
         self, cm: ConfigManager
     ) -> None:
-        """oauth_token without ``default_project`` raises (FR-004)."""
-        with pytest.raises(ConfigError):
-            cm.add_account(
-                "ci",
-                type="oauth_token",
-                region="us",
-                token=SecretStr("ey.tok"),
-            )
+        """Per 043 FR-001: oauth_token may omit ``default_project``.
+
+        Same relaxation as service_account; the bearer token is enough
+        to register the account, with the project chosen later.
+        """
+        cm.add_account(
+            "ci",
+            type="oauth_token",
+            region="us",
+            token=SecretStr("ey.tok"),
+        )
+        assert cm.get_account("ci").default_project is None
 
     def test_duplicate_name_raises(self, cm: ConfigManager) -> None:
         """Adding an existing name raises ConfigError."""

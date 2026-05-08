@@ -84,10 +84,11 @@ with mp.Workspace() as ws:
 
 ## Functional Namespaces
 
-- `mp.accounts.add(name, *, type, region, ...)` — register a new account
+- `mp.accounts.add(name, *, type, region, ..., derive_name=False)` — register a new account; `derive_name=True` opts into `/me`-driven naming for SA / oauth_token
 - `mp.accounts.list()` — `list[AccountSummary]`
 - `mp.accounts.use(name)` — set active account (clears workspace)
 - `mp.accounts.login(name)` — run PKCE flow for an oauth_browser account
+- `mp.accounts.login_unified(*, name=None, region=None, project=None, ...)` — orchestrator behind `mp login` (043 / AIE-117); composes region probe, project picker, name derivation, and re-login state machine
 - `mp.accounts.test(name)` — probe `/me` and return `AccountTestResult`
 - `mp.accounts.export_bridge(*, to, account=None)` — write a v2 Cowork bridge file
 - `mp.accounts.remove_bridge(*, at=None)` — idempotent bridge removal
@@ -156,6 +157,7 @@ MixpanelHeadlessError
 │   │   └── JQLSyntaxError
 │   └── ServerError
 ├── OAuthError
+│   └── RegionProbeError    # 043 / AIE-114 — raised when no region accepts the credential
 └── WorkspaceScopeError
 ```
 

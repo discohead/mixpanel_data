@@ -7,6 +7,11 @@ PR author to either (a) justify the new ceiling or (b) refactor.
 Scope (auth subsystem):
     - ``src/mixpanel_headless/_internal/auth/*.py`` (excluding ``__init__.py``)
     - ``src/mixpanel_headless/_internal/config.py``
+    - ``src/mixpanel_headless/accounts.py`` — public auth namespace
+      (added to scope post-043 after the orchestrator landed: the
+      original budget excluded it on the assumption it stayed a thin
+      facade, but the ``mp login`` orchestrator pushed it past 1500
+      lines and the budget guard would otherwise miss further growth).
     - The five v3 CLI command groups:
       ``cli/commands/{account, project, workspace, target, session}.py``
 
@@ -20,9 +25,9 @@ cohorts / flags / experiments / alerts / data governance) that have
 nothing to do with auth. The original spec budget assumed an
 api_client split that didn't happen and is out of scope here.
 
-Current ballpark at the 042 branch tip: 19 files / ~5,800 LoC.
+Current ballpark after the 043 rescue: 20 files / ~8,200 LoC.
 Re-run ``wc -l`` against ``_auth_subsystem_files()`` to get a fresh
-number; the budgets below carry ~10% headroom so a single cleanup
+number; the budgets below carry ~7% headroom so a single cleanup
 PR doesn't trip the test, but a substantial bloat does.
 """
 
@@ -45,6 +50,7 @@ def _auth_subsystem_files() -> list[Path]:
         [
             *auth_pkg,
             REPO_ROOT / "src/mixpanel_headless/_internal/config.py",
+            REPO_ROOT / "src/mixpanel_headless/accounts.py",
             REPO_ROOT / "src/mixpanel_headless/cli/commands/account.py",
             REPO_ROOT / "src/mixpanel_headless/cli/commands/project.py",
             REPO_ROOT / "src/mixpanel_headless/cli/commands/workspace.py",
@@ -60,8 +66,20 @@ class TestLocBudget:
     FILE_COUNT_CAP = 20
     """Maximum number of auth-subsystem files. A 21st file fails this test."""
 
-    LOC_CAP = 6500
-    """Maximum total LoC across the auth subsystem (~10% headroom over current)."""
+    LOC_CAP = 8800
+    """Maximum total LoC across the auth subsystem (~7% headroom over current).
+
+    Bumped 6500 → 6700 → 8800 by 043 (frictionless-auth):
+    - 6500 → 6700 covered the two new files
+      (``_internal/auth/region_probe.py``, ``_internal/auth/naming.py``)
+      plus the relaxations in ``cli/commands/account.py`` /
+      ``_internal/config.py`` / ``_internal/me.py``.
+    - 6700 → 8800 added ``accounts.py`` (1500+ lines after the
+      ``login_unified`` orchestrator landed) to the scope so the
+      orchestrator's growth is also guarded going forward.
+    See ``specs/043-frictionless-auth/plan.md`` §"Scale/Scope" and the
+    rescue plan at ``~/.claude/plans/thoroughly-and-rigorously-and-gentle-lemur.md``.
+    """
 
     def test_file_count_cap(self) -> None:
         """No more than ``FILE_COUNT_CAP`` files comprise the auth subsystem."""
