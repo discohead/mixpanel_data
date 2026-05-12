@@ -1,0 +1,352 @@
+# Bookmarks API Contract
+# Feature: 015-bookmarks-api
+# This documents the Python library API, not the underlying Mixpanel HTTP API
+
+openapi: 3.0.3
+info:
+  title: Bookmarks API - mixpanel_data Library
+  description: |
+    Python library methods for listing and querying saved Mixpanel reports (bookmarks).
+
+    This contract defines the public API exposed by the `Workspace` class.
+  version: 1.0.0
+
+paths:
+  /workspace/list_bookmarks:
+    get:
+      operationId: list_bookmarks
+      summary: List saved reports (bookmarks) in the project
+      description: |
+        Retrieves metadata for all saved Insights, Funnel, Retention, and Flows reports.
+
+        **Python usage:**
+        ```python
+        ws = mp.Workspace()
+        bookmarks = ws.list_bookmarks()
+        bookmarks = ws.list_bookmarks(bookmark_type="retention")
+        ```
+
+        **CLI usage:**
+        ```bash
+        mp inspect bookmarks
+        mp inspect bookmarks --type insights
+        ```
+      parameters:
+        - name: bookmark_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BookmarkType'
+          description: Filter by report type. If None, returns all types.
+      responses:
+        '200':
+          description: List of bookmark metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookmarkInfo'
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Permission denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+
+  /workspace/query_saved_report:
+    get:
+      operationId: query_saved_report
+      summary: Query a saved Insights, Retention, or Funnel report
+      description: |
+        Executes a saved report and returns the results. Works with insights,
+        retention, and funnel bookmark types. Use `report_type` property to
+        determine the data structure.
+
+        **Python usage:**
+        ```python
+        ws = mp.Workspace()
+        result = ws.query_saved_report(bookmark_id=12345678)
+        print(f"Type: {result.report_type}")
+        print(result.series)
+        ```
+
+        **CLI usage:**
+        ```bash
+        mp query saved-report 12345678
+        mp query saved-report 12345678 --format table
+        ```
+      parameters:
+        - name: bookmark_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Saved report identifier (from list_bookmarks or Mixpanel URL)
+      responses:
+        '200':
+          description: Report data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedReportResult'
+        '400':
+          description: Invalid bookmark_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '404':
+          description: Bookmark not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+
+  /workspace/query_flows:
+    get:
+      operationId: query_flows
+      summary: Query a saved Flows report
+      description: |
+        Executes a saved Flows report and returns path data. Only works with
+        bookmarks of type "flows".
+
+        **Python usage:**
+        ```python
+        ws = mp.Workspace()
+        result = ws.query_flows(bookmark_id=12345678)
+        print(f"Conversion: {result.overall_conversion_rate:.1%}")
+        for step in result.steps:
+            print(step)
+        ```
+
+        **CLI usage:**
+        ```bash
+        mp query flows 12345678
+        mp query flows 12345678 --format json
+        ```
+      parameters:
+        - name: bookmark_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Saved Flows report identifier
+      responses:
+        '200':
+          description: Flows report data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowsResult'
+        '400':
+          description: Invalid bookmark_id or not a flows bookmark
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+
+components:
+  schemas:
+    BookmarkType:
+      type: string
+      enum:
+        - insights
+        - funnels
+        - retention
+        - flows
+        - launch-analysis
+      description: Valid bookmark types for saved reports
+
+    SavedReportType:
+      type: string
+      enum:
+        - insights
+        - retention
+        - funnel
+      description: Report type detected from query results
+
+    BookmarkInfo:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - project_id
+        - created
+        - modified
+      properties:
+        id:
+          type: integer
+          description: Unique bookmark identifier
+          example: 63877017
+        name:
+          type: string
+          description: User-defined report name
+          example: "Monthly Recurring Revenue"
+        type:
+          $ref: '#/components/schemas/BookmarkType'
+        project_id:
+          type: integer
+          description: Project this bookmark belongs to
+          example: 3409416
+        created:
+          type: string
+          format: date-time
+          description: Creation timestamp (ISO format)
+          example: "2024-09-18T16:39:49"
+        modified:
+          type: string
+          format: date-time
+          description: Last modification timestamp
+          example: "2025-08-26T05:16:50"
+        workspace_id:
+          type: integer
+          nullable: true
+          description: Workspace ID if workspace-scoped
+        dashboard_id:
+          type: integer
+          nullable: true
+          description: Parent dashboard ID if linked
+        description:
+          type: string
+          nullable: true
+          description: User-provided description
+        creator_id:
+          type: integer
+          nullable: true
+          description: ID of the user who created the bookmark
+        creator_name:
+          type: string
+          nullable: true
+          description: Name of the user who created the bookmark
+
+    SavedReportResult:
+      type: object
+      required:
+        - bookmark_id
+        - computed_at
+        - from_date
+        - to_date
+        - headers
+        - series
+      properties:
+        bookmark_id:
+          type: integer
+          description: Saved report identifier
+          example: 12345678
+        computed_at:
+          type: string
+          format: date-time
+          description: When report was computed
+          example: "2025-01-15T10:30:00.252314+00:00"
+        from_date:
+          type: string
+          description: Report start date
+          example: "2024-01-01T00:00:00-08:00"
+        to_date:
+          type: string
+          description: Report end date
+          example: "2024-01-07T00:00:00-08:00"
+        headers:
+          type: array
+          items:
+            type: string
+          description: Column headers (used for type detection)
+          example: ["$event"]
+        series:
+          type: object
+          additionalProperties: true
+          description: Report data (structure varies by report_type)
+        report_type:
+          $ref: '#/components/schemas/SavedReportType'
+          description: Derived from headers
+
+    FlowsResult:
+      type: object
+      required:
+        - bookmark_id
+        - computed_at
+        - steps
+        - breakdowns
+        - overall_conversion_rate
+        - metadata
+      properties:
+        bookmark_id:
+          type: integer
+          description: Saved report identifier
+          example: 63880055
+        computed_at:
+          type: string
+          format: date-time
+          description: When report was computed
+        steps:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Flow step data
+        breakdowns:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Path breakdown data
+        overall_conversion_rate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: End-to-end conversion rate
+          example: 0.15
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional API metadata
+
+    AuthenticationError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Invalid credentials"
+        status_code:
+          type: integer
+          example: 401
+
+    QueryError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Invalid bookmark_id"
+        status_code:
+          type: integer
+          example: 400
+
+  securitySchemes:
+    ServiceAccountAuth:
+      type: http
+      scheme: basic
+      description: Mixpanel Service Account credentials (username/secret)
+
+security:
+  - ServiceAccountAuth: []

@@ -1,0 +1,30 @@
+{
+  "name": "mixpanel-headless",
+  "version": "0.1.0",
+  "description": "Query and analyze Mixpanel data with Python. Provides the mixpanel_headless auth surface (Account → Project → Workspace hierarchy), API (5 query engines, discovery, entity CRUD), and Business Context read/write (the markdown documentation that grounds AI assistants, at org and project scopes), with a live documentation system (help.py) for method signatures, type lookup, fuzzy search, and hosted docs.",
+  "author": {
+    "name": "Jared McFarland",
+    "email": "jaredcolin@gmail.com",
+    "url": "https://github.com/jaredmcfarland"
+  },
+  "license": "MIT",
+  "homepage": "https://mixpanel.github.io/mixpanel-headless/",
+  "repository": "https://github.com/mixpanel/mixpanel-headless",
+  "keywords": [
+    "mixpanel",
+    "analytics",
+    "data-analysis",
+    "product-analytics",
+    "codemode",
+    "pandas",
+    "python",
+    "data-science",
+    "networkx",
+    "anytree",
+    "funnels",
+    "retention",
+    "flows",
+    "users",
+    "graph-analysis"
+  ]
+}

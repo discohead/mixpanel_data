@@ -1,0 +1,186 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mixpanel-headless"
+dynamic = ["version"]
+description = "Python library for working with Mixpanel analytics data, designed for AI coding agents"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Jared McFarland" }]
+keywords = ["mixpanel", "analytics", "data", "api", "ai", "agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.0",
+    "tomli>=2.0; python_version < '3.11'",
+    "tomli-w>=1.0",
+    "pandas>=2.0",
+    "pyarrow>=17.0; python_version >= '3.11'",
+    "httpx>=0.27",
+    "typer>=0.12",
+    "rich>=13.0",
+    "jq>=1.9.0",
+    "networkx>=3.0",
+    "anytree>=2.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "hypothesis[cli]>=6.100",
+    "ruff>=0.1",
+    "mypy>=1.0",
+    "pandas-stubs>=2.0",
+    "mutmut>=3.0",
+    "interrogate>=1.7",
+]
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.24",
+    "mkdocs-typer>=0.0.3",
+    "mkdocs-llmstxt>=0.2.0",
+    "mkdocs-llmstxt-md>=0.1.0",
+]
+notebook = ["ipykernel>=6.0"]
+
+[tool.hatch.version]
+path = "src/mixpanel_headless/__init__.py"
+
+[project.scripts]
+mp = "mixpanel_headless.cli.main:app"
+
+[project.urls]
+Homepage = "https://mixpanel.github.io/mixpanel-headless/"
+Repository = "https://github.com/mixpanel/mixpanel-headless"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mixpanel_headless"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"man" = "share/man/man1"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501", # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mixpanel_headless"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test files routinely accept pytest fixtures as parameters whose only role
+# is to trigger fixture side-effects (e.g., ``_isolated_home: None``). The
+# ARG001/ARG002 lints flag those as unused. F811 fires when a test file
+# imports a fixture from another module so pytest can discover it.
+"tests/**/*.py" = ["ARG001", "ARG002", "F811"]
+# Typer command handlers receive ``ctx: typer.Context`` for every command;
+# the ctx is consumed by the @handle_errors decorator and the framework,
+# even when the body doesn't reference it. Stub commands (Phase-deferred
+# functionality) similarly accept their final-API arg shape. Both shapes
+# are deliberate, not bugs.
+"src/mixpanel_headless/cli/commands/*.py" = ["ARG001"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "networkx.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "anytree.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-vv --tb=short -m 'not live'"
+markers = [
+    "live: marks tests as live API tests (deselect with '-m \"not live\"')",
+    "destructive: marks tests that consume limited resources (e.g. deletion request quota)",
+    "contract: marks tests that lock recorded HTTP response shapes (auth redesign R6 layered tests)",
+]
+
+[tool.coverage.run]
+source = ["src/mixpanel_headless"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
+[tool.mutmut]
+paths_to_mutate = ["src/mixpanel_headless/"]
+pytest_add_cli_args_test_selection = ["tests/"]
+
+# Docstring coverage. Thresholds set just below the current measurement to
+# block regression without forcing immediate cleanup of pre-existing gaps.
+# Current measurements (2026-04-27): src 99.3%, tests 95.2%.
+[tool.interrogate]
+ignore-init-method = false
+ignore-init-module = false
+ignore-magic = false
+ignore-semiprivate = false
+ignore-private = false
+ignore-property-decorators = false
+ignore-module = false
+ignore-nested-functions = false
+ignore-nested-classes = false
+ignore-setters = false
+fail-under = 99
+exclude = ["build", "dist", ".venv"]
+verbose = 1
+quiet = false
+color = true
+
+[dependency-groups]
+dev = [
+    "click-man>=0.5.1",
+    "pre-commit>=4.5.1",
+    "psutil>=7.2.0",
+    "ruff>=0.1",
+    "types-psutil>=7.2.0.20251228",
+]

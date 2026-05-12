@@ -1,0 +1,131 @@
+# Activity Feed API Contract
+# Mixpanel Query API: GET /api/query/stream/query
+
+endpoint:
+  path: /api/query/stream/query
+  method: GET
+  base_url: https://mixpanel.com/api/query
+
+parameters:
+  required:
+    distinct_ids:
+      type: string
+      format: json_array
+      description: JSON-encoded array of distinct_ids to query
+      example: '["user_123", "user_456"]'
+
+  optional:
+    from_date:
+      type: string
+      format: date
+      description: Start date (YYYY-MM-DD)
+      example: "2024-01-01"
+
+    to_date:
+      type: string
+      format: date
+      description: End date (YYYY-MM-DD)
+      example: "2024-01-31"
+
+response:
+  success:
+    status: 200
+    content_type: application/json
+    schema:
+      status:
+        type: string
+        value: "ok"
+      results:
+        type: object
+        properties:
+          events:
+            type: array
+            items:
+              type: object
+              properties:
+                event:
+                  type: string
+                  description: Event name
+                properties:
+                  type: object
+                  description: Event properties
+                  properties:
+                    time:
+                      type: integer
+                      format: unix_timestamp
+                    "$distinct_id":
+                      type: string
+
+  errors:
+    - status: 401
+      description: Invalid credentials
+      exception: AuthenticationError
+
+    - status: 400
+      description: Invalid parameters
+      exception: QueryError
+
+    - status: 429
+      description: Rate limit exceeded
+      exception: RateLimitError
+
+# Library Method Contract
+
+library_method:
+  module: mixpanel_data._internal.services.live_query
+  class: LiveQueryService
+  method: activity_feed
+
+  signature: |
+    def activity_feed(
+        self,
+        distinct_ids: list[str],
+        *,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> ActivityFeedResult
+
+  parameters:
+    - name: distinct_ids
+      type: list[str]
+      required: true
+      description: User identifiers to query
+
+    - name: from_date
+      type: str | None
+      required: false
+      default: null
+      description: Start date (YYYY-MM-DD)
+
+    - name: to_date
+      type: str | None
+      required: false
+      default: null
+      description: End date (YYYY-MM-DD)
+
+  returns:
+    type: ActivityFeedResult
+    description: User event history with lazy DataFrame conversion
+
+  raises:
+    - AuthenticationError
+    - QueryError
+    - RateLimitError
+
+api_client_method:
+  module: mixpanel_data._internal.api_client
+  class: MixpanelAPIClient
+  method: activity_feed
+
+  signature: |
+    def activity_feed(
+        self,
+        distinct_ids: list[str],
+        *,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> dict[str, Any]
+
+  notes:
+    - Encodes distinct_ids as JSON array
+    - Returns raw API response dictionary

@@ -1,0 +1,32 @@
+{
+  "name": "mixpanel-headless-marketplace",
+  "owner": {
+    "name": "Jared McFarland",
+    "email": "jaredcolin@gmail.com"
+  },
+  "metadata": {
+    "description": "mixpanel-headless plugin marketplace"
+  },
+  "plugins": [
+    {
+      "name": "mixpanel-headless",
+      "description": "Turn Claude into a senior data analyst and Mixpanel product analytics expert. CodeMode-first: writes Python using mixpanel_headless + pandas.",
+      "source": "./mixpanel-plugin",
+      "author": {
+        "name": "Jared McFarland",
+        "email": "jaredcolin@gmail.com"
+      },
+      "homepage": "https://mixpanel.github.io/mixpanel-headless/",
+      "repository": "https://github.com/mixpanel/mixpanel-headless",
+      "license": "MIT",
+      "keywords": [
+        "mixpanel",
+        "analytics",
+        "data-analysis",
+        "product-analytics",
+        "codemode",
+        "pandas"
+      ]
+    }
+  ]
+}

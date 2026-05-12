@@ -1,0 +1,8 @@
+{
+  "access_token": "legacy-access-token-abc",
+  "refresh_token": "legacy-refresh-token-def",
+  "expires_at": "2099-01-01T00:00:00+00:00",
+  "scope": "read:project",
+  "token_type": "Bearer",
+  "project_id": "3713224"
+}

@@ -1,0 +1,176 @@
+# Engage API Profile Query Parameters Contract
+# Feature: 018-engage-api-params
+# Date: 2026-01-04
+
+# This contract defines the new parameters added to profile querying
+# across the Mixpanel Engage Query API integration.
+
+components:
+  schemas:
+    ProfileQueryParams:
+      type: object
+      description: Parameters for querying user or group profiles
+      properties:
+        # Existing parameters (for reference)
+        where:
+          type: string
+          nullable: true
+          description: Filter expression for profile properties
+          example: 'properties["plan"]=="premium"'
+
+        cohort_id:
+          type: string
+          nullable: true
+          description: Filter to profiles in this cohort
+          example: "12345"
+
+        output_properties:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Properties to include in response
+          example: ["$email", "$name", "plan"]
+
+        # NEW PARAMETERS
+        distinct_id:
+          type: string
+          nullable: true
+          description: Fetch a single profile by its distinct ID
+          example: "user_abc123"
+          x-mutually-exclusive-with: distinct_ids
+
+        distinct_ids:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Fetch multiple profiles by their distinct IDs (max 2000)
+          maxItems: 2000
+          example: ["user_abc123", "user_def456", "user_ghi789"]
+          x-mutually-exclusive-with: distinct_id
+
+        data_group_id:
+          type: string
+          nullable: true
+          description: Group type for querying group profiles instead of user profiles
+          example: "companies"
+          x-api-param-name: data_group_id
+          x-public-name: group_id
+
+        behaviors:
+          type: string
+          nullable: true
+          description: Event behavior selector expression for filtering profiles
+          example: 'selector(event == "Purchase", time > now() - 7*24*60*60)'
+          x-mutually-exclusive-with: cohort_id
+
+        as_of_timestamp:
+          type: integer
+          nullable: true
+          format: unix-epoch
+          description: Point-in-time snapshot for consistent pagination with behaviors
+          example: 1704067200
+          x-required-with: behaviors (for pagination > 1000 results)
+
+        include_all_users:
+          type: boolean
+          nullable: true
+          default: true
+          description: Include cohort members without profile data
+          x-requires: cohort_id
+
+    ValidationRules:
+      type: object
+      description: Parameter validation constraints
+      properties:
+        mutual_exclusivity:
+          type: array
+          items:
+            type: object
+            properties:
+              params:
+                type: array
+                items:
+                  type: string
+              error:
+                type: string
+          example:
+            - params: [distinct_id, distinct_ids]
+              error: "Cannot specify both distinct_id and distinct_ids"
+            - params: [behaviors, cohort_id]
+              error: "Cannot specify both behaviors and cohort_id"
+
+        dependencies:
+          type: array
+          items:
+            type: object
+            properties:
+              param:
+                type: string
+              requires:
+                type: string
+              error:
+                type: string
+          example:
+            - param: include_all_users
+              requires: cohort_id
+              error: "include_all_users requires cohort_id to be specified"
+
+  # CLI Flag Mapping
+  x-cli-flags:
+    distinct_id:
+      flag: "--distinct-id"
+      type: string
+      help: "Fetch a single profile by distinct ID"
+
+    distinct_ids:
+      flag: "--distinct-ids"
+      type: string
+      multiple: true
+      help: "Fetch multiple profiles by distinct IDs (can be repeated)"
+
+    group_id:
+      flag: "--group-id"
+      type: string
+      help: "Query group profiles (e.g., 'companies', 'accounts')"
+
+    behaviors:
+      flag: "--behaviors"
+      type: string
+      help: "Filter by event behavior expression"
+
+    as_of_timestamp:
+      flag: "--as-of-timestamp"
+      type: integer
+      help: "Unix timestamp for point-in-time queries"
+
+    include_all_users:
+      flag: "--include-all-users / --no-include-all-users"
+      type: boolean
+      default: true
+      help: "Include cohort members without profiles"
+
+# Error Responses
+  responses:
+    InvalidParameters:
+      description: Parameter validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              code:
+                type: string
+                enum: [MUTUAL_EXCLUSIVITY, MISSING_DEPENDENCY, INVALID_VALUE]
+          examples:
+            mutual_exclusivity:
+              value:
+                error: "Cannot specify both distinct_id and distinct_ids"
+                code: "MUTUAL_EXCLUSIVITY"
+            missing_dependency:
+              value:
+                error: "include_all_users requires cohort_id to be specified"
+                code: "MISSING_DEPENDENCY"

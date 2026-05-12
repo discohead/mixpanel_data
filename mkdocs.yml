@@ -1,0 +1,210 @@
+site_name: mixpanel_headless
+site_description: Python library for working with Mixpanel analytics data, designed for AI coding agents
+site_author: Jared McFarland
+site_url: https://mixpanel.github.io/mixpanel-headless/
+
+repo_name: mixpanel/mixpanel-headless
+repo_url: https://github.com/mixpanel/mixpanel-headless
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.instant
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - header.autohide
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/mixpanel.css
+
+extra_javascript:
+  - javascripts/copy-markdown.js
+
+plugins:
+  - search
+  - llmstxt-md:
+      # noklam's plugin - markdown URLs and copy buttons (llms.txt generation disabled)
+      enable_markdown_urls: true
+      enable_copy_button: true
+      enable_llms_txt: false
+      enable_llms_full: false
+      copy_button_text: "Copy markdown"
+      copy_button_position:
+        top: "85px"
+        right: "24px"
+      copy_button_style:
+        background: "transparent"
+        color: "rgba(255, 255, 255, 0.7)"
+        border: "1px solid rgba(255, 255, 255, 0.2)"
+        padding: "6px 12px"
+        border_radius: "6px"
+        font_size: "13px"
+        font_weight: "400"
+        font_family: "inherit"
+      sections:
+        Getting Started:
+          - index.md
+          - getting-started/installation.md
+          - getting-started/quickstart.md
+          - getting-started/configuration.md
+        User Guide:
+          - guide/unified-query-system.md
+          - guide/discovery.md
+          - guide/query.md
+          - guide/query-funnels.md
+          - guide/query-retention.md
+          - guide/query-flows.md
+          - guide/query-users.md
+          - guide/live-analytics.md
+          - guide/streaming.md
+          - guide/entity-management.md
+          - guide/data-governance.md
+          - guide/business-context.md
+        API Reference:
+          - api/index.md
+          - api/workspace.md
+          - api/auth.md
+          - api/exceptions.md
+          - api/types.md
+        CLI Reference:
+          - cli/index.md
+          - cli/commands.md
+        Architecture:
+          - architecture/design.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_toc_entry: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            docstring_style: google
+            docstring_section_style: spacy
+            merge_init_into_class: true
+            show_signature_annotations: true
+            separate_signature: true
+            line_length: 80
+            members_order: source
+  - llmstxt:
+      # pawamoy's plugin - handles all llms.txt generation from HTML
+      full_output: llms-full.txt
+      markdown_description: |
+        mixpanel_headless is a complete programmable interface to Mixpanel analytics.
+        Python library and CLI for discovery, querying, streaming, and entity management.
+        Discover your schema, run live analytics (segmentation, funnels, retention, flows),
+        execute JQL, and stream data for processing.
+      sections:
+        Getting Started:
+          - index.md: "Project overview and key concepts"
+          - getting-started/installation.md: "Install with pip or uv"
+          - getting-started/quickstart.md: "First queries in 5 minutes"
+          - getting-started/configuration.md: "Accounts, env vars, config files"
+        User Guide:
+          - guide/unified-query-system.md: "Unified query system — one vocabulary, four analytics engines"
+          - guide/discovery.md: "Explore schema, events, properties, cohorts"
+          - guide/query.md: "Typed insights queries — DAU, formulas, filters, breakdowns"
+          - guide/query-funnels.md: "Typed funnel queries — steps, exclusions, conversion windows"
+          - guide/query-retention.md: "Typed retention queries — event pairs, custom buckets, alignment modes"
+          - guide/query-flows.md: "Typed flow queries — path analysis, direction controls, visualization modes"
+          - guide/query-users.md: "Typed user profile queries — filtering, sorting, parallel fetching, aggregate counts"
+          - guide/live-analytics.md: "Segmentation, funnels, retention, JQL"
+          - guide/streaming.md: "Stream events and profiles for ETL"
+          - guide/entity-management.md: "Create, update, delete dashboards, reports, and cohorts"
+          - guide/data-governance.md: "Manage Lexicon definitions, drop filters, custom properties, custom events, lookup tables, schema registry, enforcement, auditing, anomalies, and event deletion requests"
+          - guide/business-context.md: "Read and write the markdown business context that grounds AI assistants (org and project scopes, 50,000-char cap)"
+        API Reference:
+          - api/index.md: "Python API overview"
+          - api/workspace.md: "Workspace class - main entry point"
+          - api/auth.md: "Authentication and credentials"
+          - api/exceptions.md: "Exception hierarchy"
+          - api/types.md: "Result types (SegmentationResult, etc.)"
+        CLI Reference:
+          - cli/index.md: "CLI overview and output formats"
+          - cli/commands.md: "Complete command reference"
+        Architecture:
+          - architecture/design.md: "Layered architecture and services"
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+  - mkdocs-typer
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Configuration: getting-started/configuration.md
+  - User Guide:
+      - The Unified Query System: guide/unified-query-system.md
+      - Data Discovery: guide/discovery.md
+      - Insights Queries: guide/query.md
+      - Funnel Queries: guide/query-funnels.md
+      - Retention Queries: guide/query-retention.md
+      - Flow Queries: guide/query-flows.md
+      - User Profile Queries: guide/query-users.md
+      - Live Analytics: guide/live-analytics.md
+      - Streaming Data: guide/streaming.md
+      - Entity Management: guide/entity-management.md
+      - Data Governance: guide/data-governance.md
+      - Business Context: guide/business-context.md
+  - API Reference:
+      - Overview: api/index.md
+      - Workspace: api/workspace.md
+      - Auth: api/auth.md
+      - Exceptions: api/exceptions.md
+      - Result Types: api/types.md
+  - CLI Reference:
+      - Overview: cli/index.md
+      - Commands: cli/commands.md
+  - Architecture:
+      - Design: architecture/design.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/mixpanel/mixpanel-headless

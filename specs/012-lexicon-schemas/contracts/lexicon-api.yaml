@@ -1,0 +1,256 @@
+openapi: 3.0.3
+info:
+  title: Mixpanel Lexicon Schemas API (Read Operations)
+  description: |
+    API contracts for the Mixpanel Lexicon Schemas API read operations.
+    These endpoints retrieve data dictionary definitions for events and profile properties.
+  version: 1.0.0
+
+servers:
+  - url: https://mixpanel.com/api/app
+    description: US region
+  - url: https://eu.mixpanel.com/api/app
+    description: EU region
+  - url: https://in.mixpanel.com/api/app
+    description: India region
+
+security:
+  - basicAuth: []
+
+paths:
+  /projects/{projectId}/schemas:
+    get:
+      operationId: listSchemas
+      summary: List all schemas
+      description: Retrieve all schema definitions in the project.
+      parameters:
+        - $ref: '#/components/parameters/projectId'
+      responses:
+        '200':
+          description: List of schemas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /projects/{projectId}/schemas/{entityType}:
+    get:
+      operationId: listSchemasByEntityType
+      summary: List schemas by entity type
+      description: Retrieve schema definitions filtered by entity type.
+      parameters:
+        - $ref: '#/components/parameters/projectId'
+        - $ref: '#/components/parameters/entityType'
+      responses:
+        '200':
+          description: List of schemas for entity type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /projects/{projectId}/schemas/{entityType}/{name}:
+    get:
+      operationId: getSchema
+      summary: Get single schema
+      description: Retrieve a specific schema by entity type and name.
+      parameters:
+        - $ref: '#/components/parameters/projectId'
+        - $ref: '#/components/parameters/entityType'
+        - name: name
+          in: path
+          required: true
+          description: Schema name (event or profile property name)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Single schema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SingleSchemaResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Service Account credentials (username:secret)
+
+  parameters:
+    projectId:
+      name: projectId
+      in: path
+      required: true
+      description: Mixpanel project ID
+      schema:
+        type: string
+
+    entityType:
+      name: entityType
+      in: path
+      required: true
+      description: Schema entity type
+      schema:
+        type: string
+        enum: [event, profile]
+
+  schemas:
+    SchemaListResponse:
+      type: object
+      required: [results, status]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LexiconSchema'
+        status:
+          type: string
+          enum: [ok]
+
+    SingleSchemaResponse:
+      type: object
+      required: [results, status]
+      properties:
+        results:
+          $ref: '#/components/schemas/LexiconSchema'
+        status:
+          type: string
+          enum: [ok]
+
+    LexiconSchema:
+      type: object
+      required: [entityType, name, schemaJson]
+      properties:
+        entityType:
+          type: string
+          enum: [event, profile]
+        name:
+          type: string
+        schemaJson:
+          $ref: '#/components/schemas/LexiconDefinition'
+
+    LexiconDefinition:
+      type: object
+      properties:
+        description:
+          type: string
+          nullable: true
+        properties:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LexiconProperty'
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+
+    LexiconProperty:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [string, number, boolean, array, object, integer, 'null']
+        description:
+          type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+
+    Metadata:
+      type: object
+      properties:
+        com.mixpanel:
+          $ref: '#/components/schemas/LexiconMetadata'
+
+    LexiconMetadata:
+      type: object
+      properties:
+        $source:
+          type: string
+          nullable: true
+        displayName:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        hidden:
+          type: boolean
+          default: false
+        dropped:
+          type: boolean
+          default: false
+        contacts:
+          type: array
+          items:
+            type: string
+        teamContacts:
+          type: array
+          items:
+            type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+    Unauthorized:
+      description: Invalid credentials
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+    NotFound:
+      description: Schema not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+
+    RateLimited:
+      description: Rate limit exceeded (5 requests/minute)
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string

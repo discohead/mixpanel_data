@@ -1,0 +1,304 @@
+"""Output formatters for CLI commands.
+
+This module provides formatting functions for different output formats:
+- JSON: Pretty-printed JSON
+- JSONL: Newline-delimited JSON (one object per line)
+- Table: Rich ASCII table
+- CSV: Comma-separated values with headers
+- Plain: Minimal text output (one item per line)
+
+Plus :func:`emit_records` — a single dispatcher used by the identity-axis
+list commands (``mp account list``, ``mp project list``, ``mp workspace list``,
+``mp target list``) so JSON / JSONL handling is implemented exactly once.
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+import json
+from collections.abc import Callable, Iterable, Sequence
+from datetime import date, datetime
+from typing import Any, TypeVar
+
+from rich.console import Console
+from rich.markup import escape as rich_escape
+from rich.table import Table
+
+_T = TypeVar("_T")
+
+
+def _json_serializer(obj: Any) -> str:
+    """Serialize non-standard types to JSON-compatible strings.
+
+    Used as the default serializer for json.dumps() to handle types
+    that aren't natively JSON-serializable.
+
+    Args:
+        obj: The object to serialize. Handles datetime, date, and
+            falls back to str() for other types.
+
+    Returns:
+        ISO format string for datetime/date objects, or str(obj) for others.
+    """
+    if isinstance(obj, datetime | date):
+        return obj.isoformat()
+    return str(obj)
+
+
+def format_json(data: dict[str, Any] | list[Any]) -> str:
+    """Format data as pretty-printed JSON.
+
+    Args:
+        data: Data to format (dict or list).
+
+    Returns:
+        Pretty-printed JSON string with 2-space indentation.
+    """
+    return json.dumps(data, indent=2, default=_json_serializer, ensure_ascii=False)
+
+
+def format_jsonl(data: dict[str, Any] | list[Any]) -> str:
+    """Format data as newline-delimited JSON (JSONL).
+
+    For lists, outputs one JSON object per line.
+    For dicts, outputs a single JSON object.
+
+    Args:
+        data: Data to format (dict or list).
+
+    Returns:
+        JSONL string with one object per line.
+    """
+    if isinstance(data, list):
+        lines = [
+            json.dumps(item, default=_json_serializer, ensure_ascii=False)
+            for item in data
+        ]
+        return "\n".join(lines)
+    return json.dumps(data, default=_json_serializer, ensure_ascii=False)
+
+
+def format_table(
+    data: dict[str, Any] | list[Any],
+    columns: list[str] | None = None,
+) -> Table:
+    """Format data as a Rich ASCII table.
+
+    Args:
+        data: Data to format (dict or list of dicts).
+        columns: Column names to display. If None, auto-detected from data.
+
+    Returns:
+        Rich Table object ready for printing.
+    """
+    table = Table(show_header=True, header_style="bold")
+
+    # Handle single dict as a list of one item
+    if isinstance(data, dict):
+        data = [data]
+
+    if not data:
+        return table
+
+    # Auto-detect columns from first item if not specified
+    if columns is None:
+        first_item = data[0]
+        columns = list(first_item.keys()) if isinstance(first_item, dict) else ["value"]
+
+    # Add columns to table
+    for col in columns:
+        table.add_column(col.upper().replace("_", " "))
+
+    # Add rows
+    for item in data:
+        if isinstance(item, dict):
+            row = [_format_cell(item.get(col, "")) for col in columns]
+        else:
+            row = [_format_cell(item)]
+        table.add_row(*row)
+
+    return table
+
+
+def _format_cell(value: Any) -> str:
+    """Format a single cell value for Rich table display.
+
+    Converts various Python types to human-readable string representations
+    suitable for display in terminal tables. All output is escaped to prevent
+    Rich from interpreting square brackets as markup tags.
+
+    Args:
+        value: The value to format. Handles None, bool, datetime, date,
+            list, dict, and other types.
+
+    Returns:
+        Formatted string: empty for None, "Yes"/"No" for bool, ISO format
+        for dates, JSON for collections, str() for others. All strings are
+        escaped to prevent Rich markup interpretation.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, list | dict):
+        result = json.dumps(value, default=_json_serializer, ensure_ascii=False)
+        return rich_escape(result)
+    return rich_escape(str(value))
+
+
+def format_csv(data: dict[str, Any] | list[Any]) -> str:
+    """Format data as comma-separated values with headers.
+
+    Args:
+        data: Data to format (dict or list of dicts).
+
+    Returns:
+        CSV string with header row and data rows.
+    """
+    # Handle single dict as a list of one item
+    if isinstance(data, dict):
+        data = [data]
+
+    if not data:
+        return ""
+
+    output = io.StringIO()
+
+    # Determine fieldnames from first item
+    first_item = data[0]
+    if isinstance(first_item, dict):
+        fieldnames = list(first_item.keys())
+        dict_writer = csv.DictWriter(
+            output, fieldnames=fieldnames, extrasaction="ignore"
+        )
+        dict_writer.writeheader()
+        for item in data:
+            if isinstance(item, dict):
+                # Convert non-string values to strings
+                row = {k: _csv_value(v) for k, v in item.items()}
+                dict_writer.writerow(row)
+    else:
+        # For non-dict items, use single "value" column
+        list_writer = csv.writer(output)
+        list_writer.writerow(["value"])
+        for item in data:
+            list_writer.writerow([_csv_value(item)])
+
+    return output.getvalue()
+
+
+def _csv_value(value: Any) -> str:
+    """Format a value for CSV output.
+
+    Converts various Python types to string representations suitable for
+    CSV files. Uses lowercase for booleans (common CSV convention).
+
+    Args:
+        value: The value to format. Handles None, bool, datetime, date,
+            list, dict, and other types.
+
+    Returns:
+        Formatted string: empty for None, lowercase "true"/"false" for bool,
+        ISO format for dates, JSON for collections, str() for others.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, list | dict):
+        return json.dumps(value, default=_json_serializer, ensure_ascii=False)
+    return str(value)
+
+
+def format_plain(data: dict[str, Any] | list[Any]) -> str:
+    """Format data as minimal plain text.
+
+    For lists, outputs one item per line.
+    For dicts with a "name" or "value" key, outputs that value.
+    For other dicts, outputs key=value pairs.
+
+    Args:
+        data: Data to format (dict or list).
+
+    Returns:
+        Plain text string with one item per line.
+    """
+    if isinstance(data, list):
+        lines = []
+        for item in data:
+            if isinstance(item, dict):
+                # Try common keys first
+                for key in ("name", "value", "event", "id"):
+                    if key in item:
+                        lines.append(str(item[key]))
+                        break
+                else:
+                    # Fall back to first value
+                    if item:
+                        lines.append(str(next(iter(item.values()))))
+                    else:
+                        lines.append("")
+            else:
+                lines.append(str(item))
+        return "\n".join(lines)
+
+    if isinstance(data, dict):
+        # For single dict, try common keys or format as key=value
+        for key in ("name", "value", "event", "id"):
+            if key in data:
+                return str(data[key])
+        # Format as key=value pairs
+        return "\n".join(f"{k}={v}" for k, v in data.items())
+
+    return str(data)
+
+
+def emit_records(
+    items: Iterable[_T],
+    *,
+    format: str,  # noqa: A002 — matches CLI ``--format`` parameter name
+    console: Console,
+    to_dict: Callable[[_T], dict[str, Any]],
+    table_renderer: Callable[[Sequence[_T]], str] | None = None,
+) -> None:
+    """Emit a list of records as JSON / JSONL / (caller-supplied) table.
+
+    Centralises the JSON / JSONL projection so the four identity-axis list
+    commands (``mp account list``, ``mp project list``, ``mp workspace list``,
+    ``mp target list``) don't each maintain their own ``json.dumps`` ladder
+    that drifts in subtle ways (indent, ensure_ascii, default serializer).
+
+    The table layout is intentionally NOT abstracted: each command renders
+    its own fixed-width plain-text table with a custom active-row marker
+    and column widths. Forcing a generic Rich Table here would change the
+    visual contract of those commands.
+
+    Args:
+        items: Records to emit.
+        format: One of ``"json"``, ``"jsonl"``, or anything else (delegates
+            to ``table_renderer``).
+        console: Rich :class:`Console` to print to.
+        to_dict: Projection from a record to its JSON-shaped dict. Run
+            once per record on the JSON paths, never on the table path.
+        table_renderer: When ``format`` is not JSON-shaped, called with the
+            full ``items`` list (materialised) to produce the table string.
+            If ``None``, treats the unknown format as JSON.
+    """
+    materialised = list(items) if not isinstance(items, list) else items
+    if format == "json":
+        console.print(format_json([to_dict(x) for x in materialised]))
+        return
+    if format == "jsonl":
+        for x in materialised:
+            console.print(format_jsonl(to_dict(x)))
+        return
+    if table_renderer is not None:
+        console.print(table_renderer(materialised))
+        return
+    # Unknown format with no renderer → fall back to JSON for safety.
+    console.print(format_json([to_dict(x) for x in materialised]))

@@ -1,0 +1,14 @@
+# v3 golden output: one account + [active]. Used as expected-state for
+# conversion idempotency tests AND as a positive load() example.
+# Project lives on the account as `default_project` (not in `[active]`).
+
+[active]
+account = "demo-sa"
+workspace = 3448413
+
+[accounts.demo-sa]
+type = "service_account"
+region = "us"
+default_project = "3713224"
+username = "user.x.mp-service-account"
+secret = "demo-secret"

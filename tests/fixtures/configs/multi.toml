@@ -1,0 +1,33 @@
+# v3 golden output: three accounts (one of each type), two targets, [active].
+# Project lives on each account as `default_project` (not in `[active]`).
+
+[active]
+account = "team"
+workspace = 3448414
+
+[accounts.team]
+type = "service_account"
+region = "us"
+default_project = "3018488"
+username = "team.sa"
+secret = "team-secret"
+
+[accounts.personal]
+type = "oauth_browser"
+region = "us"
+default_project = "3713224"
+
+[accounts.ci]
+type = "oauth_token"
+region = "us"
+default_project = "3018488"
+token_env = "MP_CI_TOKEN"
+
+[targets.ecom]
+account = "team"
+project = "3018488"
+workspace = 3448414
+
+[targets.ai]
+account = "team"
+project = "3713224"
