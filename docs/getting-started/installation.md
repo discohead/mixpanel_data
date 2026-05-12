@@ -1,6 +1,6 @@
 # Installation
 
-> **⚠️ Pre-release Software**: This package is under active development and not yet published to PyPI. Install directly from GitHub.
+> **⚠️ Pre-release Software**: This package is under active development. APIs may change between versions before 1.0.
 
 !!! tip "Explore on DeepWiki"
     🤖 **[Installation Guide →](https://deepwiki.com/mixpanel/mixpanel-headless/2.1-installation)**
@@ -15,7 +15,7 @@
 ## Installing with pip
 
 ```bash
-pip install git+https://github.com/mixpanel/mixpanel-headless.git
+pip install mixpanel-headless
 ```
 
 ## Installing with uv
@@ -23,13 +23,13 @@ pip install git+https://github.com/mixpanel/mixpanel-headless.git
 [uv](https://github.com/astral-sh/uv) is a fast Python package installer:
 
 ```bash
-uv pip install git+https://github.com/mixpanel/mixpanel-headless.git
+uv pip install mixpanel-headless
 ```
 
 Or add to your project:
 
 ```bash
-uv add git+https://github.com/mixpanel/mixpanel-headless.git
+uv add mixpanel-headless
 ```
 
 ## Optional Dependencies

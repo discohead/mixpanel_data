@@ -44,13 +44,13 @@ The `mixpanel_headless` package installs both the Python library and the `mp` co
 ### Option A: Install with pip
 
 ```bash
-pip install git+https://github.com/mixpanel/mixpanel-headless.git
+pip install mixpanel-headless
 ```
 
 ### Option B: Install with uv (faster)
 
 ```bash
-uv pip install git+https://github.com/mixpanel/mixpanel-headless.git
+uv pip install mixpanel-headless
 ```
 
 ### Verify the Installation
