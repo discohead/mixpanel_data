@@ -342,7 +342,16 @@ class TestOAuthFlowPasteFallback:
         # The paste reader thread reads via sys.stdin.readline(), so we need
         # to stub sys.stdin in the flow module.
         class _DeferredStdin:
-            """Stdin that blocks until state is captured, then emits the URL."""
+            """Stdin that blocks until state is captured, then emits the URL.
+
+            ``isatty`` returns True so the paste reader thread starts —
+            the production code skips the paste reader for non-TTY stdin
+            (Cowork pipes, CI runners) since there's no in-band way to
+            deliver paste input.
+            """
+
+            def isatty(self) -> bool:
+                return True
 
             def readline(self) -> str:
                 # Wait for the authorize URL build (which captures state).

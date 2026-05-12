@@ -2,7 +2,12 @@
 
 Get your Mixpanel credentials working inside [Claude Cowork](https://docs.anthropic.com/en/docs/claude-code/cowork) sessions so Claude agents can query your analytics data autonomously.
 
-Cowork runs Claude agents in sandboxed virtual machines. These VMs don't have access to your local config files or browser, so credentials need to be exported from your machine into a "bridge file" that Cowork can read.
+Cowork runs Claude agents in sandboxed virtual machines. The CLI has two ways to authenticate inside Cowork:
+
+1. **Two-shot login (`mp login --start` / `--finish`)** — the simplest path if you don't have `mp` installed locally. Runs entirely inside Cowork; you paste a URL into your host browser, then paste the redirect URL back. No host-side setup.
+2. **Bridge file** — if you already have credentials configured on your laptop (e.g., from regular `mp` use), export them into a "bridge file" Cowork can read. One-time setup, lasts across Cowork sessions.
+
+Both paths work. Pick the one that fits your situation.
 
 ---
 
@@ -10,13 +15,65 @@ Cowork runs Claude agents in sandboxed virtual machines. These VMs don't have ac
 
 - **Claude Desktop** with Cowork access
 - **A Mixpanel account** with access to a project
-- **One of the following** for authentication:
-  - A **service account** (username + secret) from your Mixpanel project settings, OR
-  - A browser for **OAuth login** (interactive — your project is auto-discovered)
+- **A browser** on your laptop for OAuth login (works for both paths)
 
 ---
 
-## Step 1: Install the CLI and Set Up Credentials
+## Path A: Two-shot login inside Cowork (recommended for first-time users)
+
+This path requires nothing on your laptop. Everything happens inside Cowork.
+
+### Step A1: Start a Cowork session and run setup
+
+Open a Cowork session and run:
+
+```
+/mixpanel-headless:setup
+```
+
+This installs the `mp` CLI in the Cowork VM.
+
+### Step A2: Run the login slash command
+
+```
+/mixpanel-headless:auth login
+```
+
+Claude detects the headless environment and runs the two-shot flow:
+
+1. Claude runs `mp login --start` and shows you a URL to open.
+2. You open the URL in your laptop's browser, complete Mixpanel login.
+3. Your browser redirects to `localhost:19284/callback?...` and shows "site can't be reached" — **that's expected**.
+4. You copy the URL from your browser's address bar and paste it back into chat.
+5. Claude runs `mp login --finish '<URL>'`. The CLI exchanges the code for tokens, fetches `/me`, auto-picks a project, and writes the account to `~/.mp/accounts/` inside the VM.
+
+The 10-minute inflight TTL is generous — switch tabs, complete login, come back, paste. If you take longer, just run `/mixpanel-headless:auth login` again to begin a fresh attempt.
+
+### Step A3: Start asking questions
+
+```
+How many signups did we get last week?
+
+What's our funnel conversion rate from signup to purchase?
+```
+
+### When this path is best
+
+- You don't have `mp` installed on your laptop yet.
+- You only need access from this one Cowork session (or a few — the VM persists tokens between sessions, but if Cowork rebuilds the VM you'll re-login).
+- You're OK with the manual paste-back per fresh VM (one-time cost; auto-refresh handles token rotation thereafter).
+
+### Tested browsers
+
+The "site can't be reached" page must preserve `?code=...&state=...` in the address bar so you can copy it. Verified working on Chrome, Firefox, and Safari (default settings).
+
+---
+
+## Path B: Credential bridge from your laptop
+
+If you already have `mp` configured on your laptop, this path is faster: one host-side export, then every Cowork session auto-discovers your credentials.
+
+### Step B1: Install the CLI and set up credentials
 
 On your **local machine** (not inside Cowork), install the `mp` command-line tool:
 
@@ -56,7 +113,7 @@ You should see a success message confirming the connection.
 
 ---
 
-## Step 2: Export Credentials for Cowork
+### Step B2: Export credentials for Cowork
 
 On your **local machine**, export the active account into a v2 bridge file at the default Cowork-readable path:
 
@@ -66,30 +123,28 @@ mp account export-bridge --to ~/.claude/mixpanel/auth.json
 
 This writes a v2 `auth.json` bridge file embedding your full `Account` record (and any `oauth_browser` tokens). The Cowork VM auto-discovers it on session start. Override the location with the `MP_AUTH_FILE` env var if you need a custom path.
 
-You'll see a brief confirmation, then the bridge is ready:
+The CLI prints:
 
 ```
-Wrote bridge: ~/.claude/mixpanel/auth.json
-  Account:  personal (oauth_browser, us)
-  Tokens:   included (refresh-capable)
+Wrote bridge file to ~/.claude/mixpanel/auth.json
 ```
 
 ### Options
 
 ```bash
 # Export a specific named account (defaults to the active account)
-mp account export-bridge --to ~/.claude/mixpanel/auth.json --account production
+mp account export-bridge --to ~/.claude/mixpanel/auth.json --account YOUR_ACCOUNT_NAME
 
 # Pin a project ID into the bridge (overrides the account's default_project)
-mp account export-bridge --to ~/.claude/mixpanel/auth.json --project 12345
+mp account export-bridge --to ~/.claude/mixpanel/auth.json --project YOUR_PROJECT_ID
 
 # Pin a workspace ID into the bridge (needed for dashboard/entity management)
-mp account export-bridge --to ~/.claude/mixpanel/auth.json --workspace 3448413
+mp account export-bridge --to ~/.claude/mixpanel/auth.json --workspace YOUR_WORKSPACE_ID
 ```
 
 ---
 
-## Step 3: Start a Cowork Session and Run Setup
+### Step B3: Start a Cowork session and run setup
 
 Open a Cowork session and run the setup skill:
 
@@ -97,21 +152,9 @@ Open a Cowork session and run the setup skill:
 /mixpanel-headless:setup
 ```
 
-The setup script automatically detects the Cowork environment and reads credentials from the bridge file. You'll see output like:
+The setup script automatically detects the Cowork environment and reads credentials from the bridge file. No additional configuration is needed inside Cowork.
 
-```
-Cowork environment detected.
-✓ Auth bridge file found: ~/.claude/mixpanel/auth.json
-  Account:  personal (oauth_browser, us)
-  Project:  12345
-  Tokens:   included (refresh-capable)
-```
-
-No additional configuration is needed inside Cowork.
-
----
-
-## Step 4: Start Asking Questions
+### Step B4: Start asking questions
 
 You're ready. Ask Claude questions in natural language, just like in regular Claude Code:
 
@@ -185,9 +228,9 @@ The credential bridge is a v2 JSON file that maps your local credentials into a 
 Your machine                                         Cowork VM
 ┌─────────────────────────┐                          ┌─────────────────────────┐
 │ ~/.mp/config.toml       │                          │ ~/.claude/mixpanel/     │
-│ ~/.mp/accounts/<name>/  │──account export-bridge──▶│   auth.json             │
-│ (account + tokens)      │   --to <path>            │ (v2 bridge: full        │
-│                         │                          │  Account + tokens)      │
+│  (account records)      │                          │   auth.json             │
+│ ~/.mp/accounts/<name>/  │──account export-bridge──▶│ (v2 bridge: full        │
+│  (tokens + me cache)    │   --to <path>            │  Account + tokens)      │
 └─────────────────────────┘                          └─────────────────────────┘
                                                               │
                                                        resolve_session() reads
@@ -253,20 +296,38 @@ mp --version   # verify
 
 ### Setup says "Cowork environment detected" but no credentials
 
-**Cause**: You're inside Cowork but the bridge file is missing.
+**Cause**: You're inside Cowork without a bridge file AND haven't done the two-shot login.
 
-**Fix**: You cannot configure credentials from inside Cowork (no browser, no host terminal). Exit Cowork, run `mp account export-bridge --to ~/.claude/mixpanel/auth.json` on your local machine, then start a new Cowork session.
+**Fix**: Two options:
+- Use Path A (two-shot login from inside Cowork): run `/mixpanel-headless:auth login` inside Cowork.
+- Use Path B (bridge from your laptop): run `mp account export-bridge --to ~/.claude/mixpanel/auth.json` on your local machine, then start a new Cowork session.
 
-### Important: What Doesn't Work Inside Cowork
+### Two-shot login: "site can't be reached" page
 
-These commands require a browser or host terminal and **should be run on your local machine**, not inside Cowork:
+**Cause**: When the OAuth provider redirects your browser to `localhost:19284/callback`, no server is listening (the loopback is the Cowork VM, not your laptop). The browser shows "site can't be reached."
 
-- `mp login` and `mp account login <name>` (need a browser for the PKCE OAuth flow)
-- `mp account add` for `service_account` (prompts for secret interactively by default; `--secret-stdin` and `MP_SECRET` env var work non-interactively, but the credential bridge is the recommended approach for Cowork)
+**Fix**: This is the expected behavior. Copy the URL from your browser's address bar (it contains `?code=...&state=...`) and paste it back into chat. Verified to work on Chrome, Firefox, and Safari with default settings.
+
+### Two-shot login: inflight expired
+
+**Cause**: You took longer than 10 minutes between `mp login --start` and pasting the redirect URL.
+
+**Fix**: Re-run `/mixpanel-headless:auth login`. The CLI clobbers the prior inflight and starts fresh.
+
+### Two-shot login: post-publish failure
+
+**Cause**: `mp login --finish` succeeded at token exchange but failed at publish (e.g., `/me` timed out, name collision, network blip).
+
+**Fix**: The CLI leaves a `.tmp-*` placeholder dir in `~/.mp/accounts/`. Re-run `mp login --resume <PATH>` to retry the publish without re-running PKCE. The error message includes the placeholder path.
+
+### Bridge path: commands that need to run on your laptop
+
+These bridge-management commands require host-side resources and **must run on your local machine**:
+
 - `mp account export-bridge --to <path>` (reads host credentials, writes the bridge file)
 - `mp account remove-bridge [--at <path>]` (removes the bridge file from the host)
 
-Always run these on your **local machine** before starting a Cowork session.
+Note: `mp login` itself works **inside** Cowork via the two-shot flow (Path A). Only the bridge-export commands above are host-only.
 
 ---
 

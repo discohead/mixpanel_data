@@ -36,6 +36,7 @@ from mixpanel_headless.exceptions import (
     InvalidArgumentError,
     JQLSyntaxError,
     MixpanelHeadlessError,
+    NeedsRegionSwitchError,
     OAuthError,
     ProjectNotFoundError,
     QueryError,
@@ -80,6 +81,7 @@ class ExitCode(IntEnum):
     INVALID_ARGS = 3
     NOT_FOUND = 4
     RATE_LIMIT = 5
+    NEEDS_SELECTION = 6
     INTERRUPTED = 130
 
 
@@ -339,6 +341,27 @@ def handle_errors(func: F) -> F:
                 "secret are correct."
             )
             raise typer.Exit(ExitCode.AUTH_ERROR) from None
+        except NeedsRegionSwitchError as e:
+            # Subclass of OAuthError — must come BEFORE the generic OAuthError
+            # handler so the cross-region message + alternatives surface
+            # instead of a generic "OAuth error" line. Maps to exit 6
+            # (NEEDS_SELECTION) so shell scripts can distinguish "user must
+            # do something specific" from "auth genuinely broken".
+            err_console.print(f"[red]ERROR:[/red] {rich_escape(e.message)}")
+            cross = e.pick.cross_region_projects or []
+            if cross:
+                err_console.print("")
+                err_console.print("Cross-region projects (sample):")
+                for pid, name, domain in cross[:10]:
+                    err_console.print(
+                        f"  {rich_escape(pid)}  {rich_escape(name)}  "
+                        f"({rich_escape(domain)})"
+                    )
+                if len(cross) > 10:
+                    err_console.print(
+                        f"  … and {len(cross) - 10} more (see JSON output for full list)."
+                    )
+            raise typer.Exit(ExitCode.NEEDS_SELECTION) from None
         except OAuthError as e:
             err_console.print(f"[red]OAuth error:[/red] {rich_escape(e.message)}")
             if e.code:
@@ -613,14 +636,25 @@ def output_result(
         print(output)
 
 
+#: Cadence at which the non-TTY heartbeat thread emits "still running"
+#: lines. 15s is short enough that a Cowork user sees activity within the
+#: first 30s of a 67s ``/me`` call, long enough that a 1s spinner won't
+#: clutter the log with redundant lines.
+_NON_TTY_HEARTBEAT_INTERVAL_SECONDS = 15.0
+
+
 @contextmanager
 def status_spinner(ctx: typer.Context, message: str) -> Generator[None, None, None]:
     """Context manager to show a spinner for long-running operations.
 
     Shows an animated spinner on stderr while the wrapped operation runs.
-    Respects the --quiet flag to suppress the spinner. Also skips the
-    spinner in non-TTY environments (e.g., CI/CD pipelines) to avoid
-    cluttering logs with escape sequences.
+    Respects the --quiet flag to suppress the spinner. In non-TTY
+    environments (CI, Cowork, pipes), instead of running a no-op, the
+    spinner emits a single-line stderr heartbeat every
+    ``_NON_TTY_HEARTBEAT_INTERVAL_SECONDS`` so callers can see the process
+    is still working. Without this, slow ``/me`` calls (67-74s on busy
+    accounts) leave Cowork users staring at silence and killing the
+    process before it completes.
 
     Args:
         ctx: Typer context with global options in obj dict.
@@ -634,12 +668,44 @@ def status_spinner(ctx: typer.Context, message: str) -> Generator[None, None, No
             bookmarks = workspace.list_bookmarks()
     """
     import sys
+    import threading
+    import time as _time
 
     quiet = ctx.obj.get("quiet", False) if ctx.obj else False
 
-    # Skip spinner if quiet mode or non-interactive (e.g., CI/CD, pipes)
-    if quiet or not sys.stderr.isatty():
+    if quiet:
         yield
-    else:
+        return
+
+    if sys.stderr.isatty():
         with err_console.status(message):
             yield
+        return
+
+    # Non-TTY: heartbeat thread. Daemon so a hard exit doesn't wait on it;
+    # event-driven wakeup so __exit__ stops the cadence within 50 ms.
+    stop = threading.Event()
+    started = _time.monotonic()
+
+    def _heartbeat() -> None:
+        # Print a starting line so callers see something within the first
+        # turn of the loop (the user reads the prompt-message even before
+        # the first 15s tick).
+        print(f"[mp] {message}", file=sys.stderr, flush=True)
+        while not stop.wait(_NON_TTY_HEARTBEAT_INTERVAL_SECONDS):
+            elapsed = int(_time.monotonic() - started)
+            print(
+                f"[mp] {message} ({elapsed}s elapsed…)",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    hb = threading.Thread(target=_heartbeat, daemon=True)
+    hb.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        # Don't join — the thread is daemon, sleeps on the event, and exits
+        # promptly. Joining adds 0–50 ms latency to every CLI command for no
+        # observable correctness gain.

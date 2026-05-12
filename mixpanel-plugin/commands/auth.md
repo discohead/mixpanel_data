@@ -29,6 +29,21 @@ arguments, run `session`.
 
 ### "login"
 
+Two routing paths — same-machine vs headless. Detect the environment
+first:
+
+- **Same-machine** (you can launch the user's browser from the terminal
+  the user is in — typical Claude Code CLI setup): run `mp login`
+  directly and let the user complete the flow in their browser.
+- **Headless** (Claude Cowork sandbox, devcontainer, browserless SSH —
+  `$DISPLAY` unset, `$BROWSER` unset, or you know you're in Cowork): use
+  the two-shot `--start` / `--finish` flow that emits machine-parseable
+  JSON envelopes. The CLI process can't reach the user's host browser
+  via loopback, so the flow runs in two CLI invocations bridged by the
+  user pasting the redirect URL back into chat.
+
+#### Same-machine path
+
 For first-time setup, the frictionless one-shot path is `mp login`. It
 runs the right auth flow for the environment, derives the account name
 from `/me`, and pins a default project. Tell the user to run:
@@ -49,10 +64,115 @@ Optional flags they may want:
 - `--project ID` — skip the project picker
 - `--service-account` — force the SA path (requires `MP_USERNAME` + `MP_SECRET` in env)
 - `--token-env VAR` — force the static-bearer path (reads token from `$VAR`)
-- `--no-browser` — print the authorization URL instead of launching a browser
+- `--no-browser` — print the authorization URL instead of launching a browser (still requires a TTY for paste-back)
 
 After the user confirms they ran it, verify with `account test`:
 `python3 ${CLAUDE_PLUGIN_ROOT}/skills/mixpanelyst/scripts/auth_manager.py account test`
+
+#### Headless path (Claude Cowork, devcontainers, browserless remote)
+
+The two-shot `mp login --start` / `--finish` flow exists for environments
+where the loopback OAuth callback can't reach the user's host browser.
+You drive the dance directly via `Bash` calls and `AskUserQuestion`:
+
+1. **Start.** Run:
+   ```
+   ! mp login --start
+   ```
+   For EU / India users, append `--region eu` or `--region in`. The CLI
+   prints a single-line JSON envelope to stdout. Parse it as
+   `json.loads(stdout)`.
+
+   Expected shape:
+   ```json
+   {
+     "schema_version": 1,
+     "state": "ok",
+     "authorize_url": "https://mixpanel.com/oauth/authorize/?...",
+     "redirect_uri": "http://localhost:19284/callback",
+     "expires_at": <unix-ts>,
+     "region": "us",
+     "inflight_path": "/home/.../inflight.json"
+   }
+   ```
+
+2. **Present the URL.** Show `authorize_url` to the user with this
+   exact framing:
+
+   > Open this URL in your browser, complete login, then copy the URL
+   > from your browser's address bar back here. The page will fail to
+   > load with "site can't be reached" — that's expected; copy the URL
+   > anyway. Tested on Chrome, Firefox, and Safari.
+
+   Use `AskUserQuestion` to collect the pasted URL.
+
+3. **Finish.** Pass the pasted URL verbatim to `--finish`. Quote it so
+   shell metacharacters in the query string don't break the call:
+   ```
+   ! mp login --finish '<pasted URL>'
+   ```
+
+   Expected `state: ok` envelope:
+   ```json
+   {
+     "schema_version": 1,
+     "state": "ok",
+     "account": {"name": "...", "type": "oauth_browser", "region": "us"},
+     "user": {"email": "..."},
+     "project": {"id": "...", "name": "..."},
+     "project_pick": {
+       "auto_picked": true,
+       "method": "primary_org_lowest_id",
+       "primary_org_name": "...",
+       "primary_org_survivor_count": <int>,
+       "accessible_project_count": <int>,
+       ...
+     },
+     "next": [
+       {"command": "mp project list", "label": "See all accessible projects"},
+       {"command": "mp project use <id>", "label": "Switch to a different project"}
+     ]
+   }
+   ```
+
+   Render based on `project_pick.method`:
+   - `"explicit"` → "✓ Logged in to project `<id>` as requested."
+   - `"sole_survivor"` → "✓ Logged in to project `<name>` (your only
+     active project)."
+   - `"primary_org_lowest_id"` → "✓ Logged in to project `<name>` —
+     auto-picked from `<primary_org_name>` (your most-active org;
+     `<primary_org_survivor_count>` projects there). Want a different
+     one?" If yes, run `mp project list` then `mp project use <id>`.
+   - `"fallback_with_unintegrated"` → "✓ Logged in to project `<name>`
+     — note: this project hasn't received events. Verify before running
+     queries."
+   - `"fallback_with_demos"` → "✓ Logged in to project `<name>` — note:
+     all your projects are demos. Pass `--project ID` next time if you
+     want a specific one."
+
+4. **Handle the `cross_region_only` error.** If `--finish` exits 6 with
+   `state: error` and `error.code: NEEDS_REGION_SWITCH`, the user
+   authenticated against the wrong region. Show:
+
+   > Your account doesn't have any projects in `<auth_region>`. The
+   > `error.details.cross_region_projects` list shows projects in other
+   > regions. Want to retry with one of those?
+
+   Then offer to re-run `mp login --start --region eu` (or `--region in`)
+   based on the cross-region list.
+
+5. **Recovery.** If `--finish` fails AFTER token exchange (e.g., `/me`
+   timed out, name collision), the CLI leaves a `.tmp-*` placeholder dir
+   in `~/.mp/accounts/`. Re-run with `--resume <PATH>` to retry the
+   publish without re-running PKCE. The error message will include the
+   placeholder path.
+
+After the dance completes, verify with `account test`:
+`python3 ${CLAUDE_PLUGIN_ROOT}/skills/mixpanelyst/scripts/auth_manager.py account test`
+
+**Inflight TTL is 10 minutes.** If the user takes longer than that to
+complete browser auth and paste back, `--finish` returns
+`OAUTH_INFLIGHT_EXPIRED`. Re-run `mp login --start` to begin again.
 
 ### No arguments or "session"
 

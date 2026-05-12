@@ -731,13 +731,24 @@ class TestMpLoginNameValidation:
         assert result.exit_code != 0, result.output
         # No tokens should have escaped above the accounts tree.
         assert not (tmp_path / ".mp" / "escape").exists()
-        # And the placeholder dir should have been cleaned up.
+        # New contract (two-shot flow): the placeholder is PRESERVED when
+        # ``tokens.json`` exists so the user can ``mp login --resume <PATH>
+        # --name valid-name`` to recover without re-running PKCE. Verify
+        # the placeholder remains AND contains valid tokens.json (the
+        # critical security property — tokens stay inside ~/.mp/accounts/,
+        # never under ~/.mp/escape/).
         accounts_dir = tmp_path / ".mp" / "accounts"
         if accounts_dir.exists():
             leftovers = [
                 p for p in accounts_dir.iterdir() if p.name.startswith(".tmp-")
             ]
-            assert leftovers == [], f"placeholder leak: {leftovers}"
+            # Either no placeholder (publish succeeded then bailed before
+            # writing tokens) or exactly one placeholder with tokens.json.
+            for placeholder in leftovers:
+                tokens_path = placeholder / "tokens.json"
+                assert tokens_path.exists(), (
+                    f"placeholder kept without tokens.json: {placeholder}"
+                )
 
 
 class TestMpLoginPostRenameRollback:

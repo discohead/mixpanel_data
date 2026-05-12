@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from mixpanel_headless._internal.auth.account import Region
+    from mixpanel_headless.accounts import ProjectPickResult
 
 
 class MixpanelHeadlessError(Exception):
@@ -1033,10 +1034,21 @@ class OAuthError(MixpanelHeadlessError):
     Error codes:
     - OAUTH_TOKEN_ERROR: Token exchange or validation failed
     - OAUTH_REFRESH_ERROR: Token refresh failed
+    - OAUTH_REFRESH_REVOKED: Refresh token rejected by IdP (re-login required)
     - OAUTH_REGISTRATION_ERROR: Dynamic Client Registration failed
     - OAUTH_TIMEOUT: Callback server timed out waiting for authorization
     - OAUTH_PORT_ERROR: All callback ports are occupied
     - OAUTH_BROWSER_ERROR: Could not open browser for authorization
+    - OAUTH_PASTE_ERROR: Pasted redirect URL was empty / unparseable / missing
+      ``code`` or ``state``
+    - OAUTH_STATE_MISMATCH: Pasted ``state`` did not match the in-flight session
+    - OAUTH_AUTH_DENIED: OAuth provider returned an ``error=`` parameter
+    - OAUTH_CONFIG_ERROR: Invalid region or other static config rejected at construction
+    - OAUTH_INFLIGHT_MISSING: ``mp login --finish`` / ``--resume`` invoked with
+      no inflight file on disk (run ``mp login --start`` first)
+    - OAUTH_INFLIGHT_EXPIRED: Inflight file present but ``expires_at < now()``
+      (the 10-minute TTL expired; re-run ``mp login --start``)
+    - OAUTH_INFLIGHT_CORRUPT: Inflight JSON failed to parse / is missing required keys
 
     Example:
         ```python
@@ -1176,6 +1188,63 @@ class RegionProbeNetworkError(RegionProbeError):
             attempts=attempts,
             code="OAUTH_NETWORK_UNREACHABLE",
         )
+
+
+class NeedsRegionSwitchError(OAuthError):
+    """``/me`` returned 0 region-compatible projects after auto-pick filtering.
+
+    Raised by :func:`mixpanel_headless.accounts._resolve_project` when the
+    user authenticated against region X but every visible project lives in
+    a different cluster. The auto-pick algorithm refuses to publish a
+    wrong-region account because every subsequent request would 401.
+
+    Carries the full :class:`ProjectPickResult` so the CLI can render the
+    cross-region alternatives — typically a one-line "you have N projects in
+    eu and M in in; run ``mp login --start --region eu``" hint plus a
+    structured ``cross_region_projects`` list for programmatic consumers.
+
+    Maps to ``ExitCode.NEEDS_SELECTION`` (6) via the ``@handle_errors``
+    decorator. Code is ``NEEDS_REGION_SWITCH``.
+
+    Example:
+        ```python
+        try:
+            pick = _resolve_project(me_resp=me, region="us", auto_pick=True, ...)
+        except NeedsRegionSwitchError as exc:
+            for pid, name, domain in exc.pick.cross_region_projects or []:
+                print(f"{pid} ({name}) lives at {domain}")
+        ```
+    """
+
+    def __init__(self, message: str, *, pick: ProjectPickResult) -> None:
+        """Initialize NeedsRegionSwitchError.
+
+        Args:
+            message: Human-readable summary of the cross-region situation
+                (e.g., counts per region + suggested ``mp login --start
+                --region`` command).
+            pick: The :class:`ProjectPickResult` carrying the
+                cross-region project list (``method == "cross_region_only"``)
+                so the CLI can render the structured envelope without
+                re-walking ``/me``.
+        """
+        self._pick = pick
+        super().__init__(
+            message,
+            code="NEEDS_REGION_SWITCH",
+            details={
+                "auth_region": pick.auth_region,
+                "cross_region_projects": [
+                    {"id": pid, "name": name, "domain": domain}
+                    for pid, name, domain in (pick.cross_region_projects or [])
+                ],
+            },
+        )
+
+    @property
+    def pick(self) -> ProjectPickResult:
+        """The full :class:`ProjectPickResult` carrying cross-region data."""
+        return self._pick
 
 
 class WorkspaceScopeError(MixpanelHeadlessError):
