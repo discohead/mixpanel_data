@@ -36,7 +36,7 @@ if [ "$minor" -ge 11 ]; then
 fi
 
 echo ""
-echo "Installing mixpanel_headless and dependencies..."
+echo "Installing mixpanel-headless (import name: mixpanel_headless) and dependencies..."
 if command -v uv &>/dev/null; then
   echo "  (using uv)"
   uv pip install --python "$python_cmd" "$MIXPANEL_HEADLESS_PKG" "${DEPS[@]}" || { echo "  ⚠ Virtualenv install failed, trying system install..."; uv pip install --system --python "$python_cmd" "$MIXPANEL_HEADLESS_PKG" "${DEPS[@]}"; }
