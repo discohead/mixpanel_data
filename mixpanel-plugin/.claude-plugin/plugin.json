@@ -1,6 +1,6 @@
 {
   "name": "mixpanel-headless",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Query and analyze Mixpanel data with Python. Provides the mixpanel_headless auth surface (Account → Project → Workspace hierarchy), API (5 query engines, discovery, entity CRUD), and Business Context read/write (the markdown documentation that grounds AI assistants, at org and project scopes), with a live documentation system (help.py) for method signatures, type lookup, fuzzy search, and hosted docs.",
   "author": {
     "name": "Jared McFarland",
