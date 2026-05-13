@@ -11,7 +11,7 @@ This guide walks you through your first queries with mixpanel_headless in about 
 
 You'll need:
 
-- mixpanel_headless installed (`pip install git+https://github.com/mixpanel/mixpanel-headless.git`)
+- mixpanel_headless installed (`pip install mixpanel-headless`)
 - **Either** a Mixpanel service account (username, secret, project ID) **or** a Mixpanel user account (for OAuth login)
 - Your project's data residency region (us, eu, or in)
 

@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to mixpanel_headless!
 
-> **Note**: This package is currently in pre-release and not yet published to PyPI. We welcome contributions, but please be aware that APIs may change between versions as we work toward a stable 1.0 release.
+> **Note**: This package is in pre-release. We welcome contributions, but APIs may change between versions as we work toward a stable 1.0 release. Install with `pip install mixpanel-headless`.
 
 ## Development Setup
 
@@ -12,11 +12,7 @@ Thank you for your interest in contributing to mixpanel_headless!
 - [uv](https://github.com/astral-sh/uv) (package manager)
 - [just](https://github.com/casey/just) (command runner)
 
-### Recommended: Use the Devcontainer
-
-The repository includes a devcontainer with Python 3.10, uv, just, and all development tools pre-installed. This is the easiest way to get started.
-
-### Manual Setup
+### Setup
 
 ```bash
 # Clone the repository

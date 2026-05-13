@@ -27,8 +27,7 @@ if [ -z "$python_cmd" ]; then
 fi
 
 # Install packages
-# mixpanel_headless is not on PyPI — install from GitHub
-MIXPANEL_HEADLESS_PKG="git+https://github.com/mixpanel/mixpanel-headless.git"
+MIXPANEL_HEADLESS_PKG="mixpanel-headless"
 DEPS=(pandas numpy matplotlib seaborn 'networkx>=3.0' 'anytree>=2.8.0' scipy)
 
 # pyarrow is only needed on Python 3.11+ (for pandas 3.x Arrow-backed dtypes)
@@ -37,7 +36,7 @@ if [ "$minor" -ge 11 ]; then
 fi
 
 echo ""
-echo "Installing mixpanel_headless (from GitHub) and dependencies..."
+echo "Installing mixpanel-headless (import name: mixpanel_headless) and dependencies..."
 if command -v uv &>/dev/null; then
   echo "  (using uv)"
   uv pip install --python "$python_cmd" "$MIXPANEL_HEADLESS_PKG" "${DEPS[@]}" || { echo "  ⚠ Virtualenv install failed, trying system install..."; uv pip install --system --python "$python_cmd" "$MIXPANEL_HEADLESS_PKG" "${DEPS[@]}"; }

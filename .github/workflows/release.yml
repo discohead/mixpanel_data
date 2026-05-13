@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a  # v4
+      - name: Build sdist + wheel
+        run: uv build --python 3.12
+      - name: Verify built version matches release tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          WHEEL=$(ls dist/*.whl | head -1)
+          PKG_VER=$(echo "$WHEEL" | sed -E 's/.*-([0-9][^-]*)-.*\.whl/\1/')
+          if [ "$TAG" != "$PKG_VER" ]; then
+            echo "::error::Release tag v$TAG does not match built package version $PKG_VER. Bump __version__ in src/mixpanel_headless/__init__.py to match the tag."
+            exit 1
+          fi
+          echo "✓ Tag v$TAG matches built version $PKG_VER"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1 (v1.14.0)

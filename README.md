@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/github/license/mixpanel/mixpanel-headless)](LICENSE)
 
-> **⚠️ Pre-release Software**: This package is under active development and not yet published to PyPI. APIs may change between versions.
+> **⚠️ Pre-release Software**: This package is under active development. APIs may change between versions before 1.0.
 
 A complete programmable interface to Mixpanel analytics—Python library and CLI for discovery, querying, streaming, and entity management.
 
@@ -15,10 +15,8 @@ Core analytics—typed Insights engine queries (DAU/WAU/MAU, formulas, filters, 
 
 ## Installation
 
-Install directly from GitHub (package not yet published to PyPI):
-
 ```bash
-pip install git+https://github.com/mixpanel/mixpanel-headless.git
+pip install mixpanel-headless
 ```
 
 Requires Python 3.10+. Verify installation:

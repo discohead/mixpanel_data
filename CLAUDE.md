@@ -218,11 +218,9 @@ Cowork bridge: `~/.claude/mixpanel/auth.json` (default) or `$MP_AUTH_FILE`
 
 ## Development
 
-**Recommended:** Use the devcontainer (Python 3.10+, uv, just pre-installed)
-
-**First-time setup after cloning**: run `just install-hooks` to install the
-git pre-commit hook. Without it, `ruff check` / `ruff format` violations slip
-through to CI.
+**First-time setup after cloning**: `uv sync --all-extras` then `just install-hooks`
+to install the git pre-commit hook. Without the hook, `ruff check` / `ruff format`
+violations slip through to CI.
 
 This project uses [just](https://github.com/casey/just) as a command runner.
 

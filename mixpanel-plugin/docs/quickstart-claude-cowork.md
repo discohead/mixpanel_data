@@ -78,7 +78,7 @@ If you already have `mp` configured on your laptop, this path is faster: one hos
 On your **local machine** (not inside Cowork), install the `mp` command-line tool:
 
 ```bash
-pip install git+https://github.com/mixpanel/mixpanel-headless.git
+pip install mixpanel-headless
 ```
 
 Then configure your Mixpanel credentials. The recommended path is the one-shot `mp login`:
@@ -290,7 +290,7 @@ Then start a new Cowork session.
 
 **Fix**:
 ```bash
-pip install git+https://github.com/mixpanel/mixpanel-headless.git
+pip install mixpanel-headless
 mp --version   # verify
 ```
 
