@@ -18,7 +18,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-05-05T03:02:46.718410316Z"
+exclude-newer = "2026-05-06T20:22:35.387856Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -675,15 +675,15 @@ socks = [
 
 [[package]]
 name = "hypothesis"
-version = "6.152.4"
+version = "6.151.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
     { name = "sortedcontainers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fa/c7/3147bd903d6b18324a016d43a259cf5b4bb4545e1ead6773dc8a0374e70a/hypothesis-6.152.4.tar.gz", hash = "sha256:31c8f9ce619716f543e2710b489b1633c833586641d9e6c94cee03f109a5afc4", size = 466444, upload-time = "2026-04-27T20:18:37.594Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/39/da/d9cc191b2fd31a138e9e803c967ec59496e991290d1c986cb74963e577d0/hypothesis-6.151.13.tar.gz", hash = "sha256:ca85e59454d7f36276a7ee99c775acd95e56495d4028b01e5b606a316771890c", size = 463886, upload-time = "2026-04-13T06:32:48.382Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/89/0f50dd0d92e8a7dffc24f69ab910ff81db89b2f082ba42682bd57695e4d2/hypothesis-6.152.4-py3-none-any.whl", hash = "sha256:e730fd93c7578182efadc7f90b3c5437ee4d55edf738930eb5043c81ac1d97e8", size = 532145, upload-time = "2026-04-27T20:18:35.043Z" },
+    { url = "https://files.pythonhosted.org/packages/43/4d/06c2149d3aa1a0877db55f5dabb0070e046ac0a4b3795397d7c6477e0789/hypothesis-6.151.13-py3-none-any.whl", hash = "sha256:642508683cd59f2b0cd049bbee5029a61104f69621e2652bd2a894221ee424a9", size = 529610, upload-time = "2026-04-13T06:32:46.83Z" },
 ]
 
 [package.optional-dependencies]
@@ -1356,7 +1356,7 @@ dev = [
 requires-dist = [
     { name = "anytree", specifier = ">=2.12" },
     { name = "httpx", extras = ["socks"], specifier = ">=0.27" },
-    { name = "hypothesis", extras = ["cli"], marker = "extra == 'dev'", specifier = ">=6.100" },
+    { name = "hypothesis", extras = ["cli"], marker = "extra == 'dev'", specifier = ">=6.151.13" },
     { name = "interrogate", marker = "extra == 'dev'", specifier = ">=1.7" },
     { name = "ipykernel", marker = "extra == 'notebook'", specifier = ">=6.0" },
     { name = "jq", specifier = ">=1.9.0" },
