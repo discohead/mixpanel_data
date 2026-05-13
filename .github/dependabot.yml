@@ -1,0 +1,27 @@
+# To get started with Dependabot version updates, you'll need to specify which
+# package ecosystems to update and where the package manifests are located.
+# Please see the documentation for all configuration options:
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # Python (uv)
+  - package-ecosystem: 'uv'
+    directory: '/'
+    pull-request-branch-name:
+      separator: '-'
+    schedule:
+      interval: 'monthly'
+    cooldown:
+      default-days: 30
+    open-pull-requests-limit: 1
+
+  # GitHub Actions
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    pull-request-branch-name:
+      separator: '-'
+    schedule:
+      interval: 'weekly'
+    cooldown:
+      default-days: 30
