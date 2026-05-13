@@ -25,14 +25,3 @@ updates:
       interval: 'weekly'
     cooldown:
       default-days: 30
-
-  # Devcontainer Dockerfile
-  - package-ecosystem: 'docker'
-    directory: '/.devcontainer'
-    pull-request-branch-name:
-      separator: '-'
-    schedule:
-      interval: 'monthly'
-    cooldown:
-      default-days: 30
-    open-pull-requests-limit: 1
