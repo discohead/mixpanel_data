@@ -40,6 +40,18 @@ jobs:
             ${{ github.event.pull_request.base.ref }} \
             +refs/pull/${{ github.event.pull_request.number }}/head
 
+      - name: Restore trusted Codex config from base
+        # The PR's checkout includes any PR-supplied changes to the Codex
+        # prompt and config. A malicious same-repo PR could rewrite
+        # `.github/codex/prompts/review.md` to instruct the LLM to
+        # exfiltrate `OPENAI_API_KEY` or take other unauthorized actions
+        # the moment an ai-engine reviewer applies the label without
+        # noticing the prompt diff. Restore the entire `.github/codex/`
+        # tree from the merge target so codex always reads the trusted
+        # base copy regardless of what the PR changed.
+        run: |
+          git checkout "origin/${{ github.event.pull_request.base.ref }}" -- .github/codex/
+
       - name: Run Codex
         id: run_codex
         uses: openai/codex-action@e0fdf01220eb9a88167c4898839d273e3f2609d1 # v1
