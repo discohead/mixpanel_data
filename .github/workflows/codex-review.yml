@@ -6,14 +6,22 @@ on:
 
 jobs:
   codex:
-    # Only run when the "codex-review" label is applied to a non-fork PR.
-    # GitHub gates label application on triage permission (granted with write
-    # access), which serves as the implicit access gate. The fork check stops a
-    # forked branch from supplying a hostile prompt file and avoids noisy
-    # failures (fork PRs don't have access to repo secrets like OPENAI_API_KEY).
+    # Three gates, all required:
+    #   1. The "codex-review" label was the one just applied. (Label
+    #      application requires triage permission, but that grant is too
+    #      coarse for spending OPENAI_API_KEY on arbitrary PR code.)
+    #   2. The PR head is in this repo, not a fork. Fork PRs would not get
+    #      the secret anyway, and rejecting them up front avoids noisy
+    #      failure runs.
+    #   3. The user who applied the label is on the explicit ai-engine
+    #      allow-list below. This is the actual access gate — only humans
+    #      authorized to spend Codex budget can trigger a run on otherwise
+    #      arbitrary PR code. Refresh from `gh api orgs/mixpanel/teams/
+    #      ai-engine/members --jq '.[].login'` when the team changes.
     if: |
       github.event.label.name == 'codex-review' &&
-      github.event.pull_request.head.repo.fork == false
+      github.event.pull_request.head.repo.fork == false &&
+      contains(fromJSON('["xxx","sumitngupta","msiebert","gslopez","micaww","jaredmixpanel","joshua-koehler"]'), github.event.sender.login)
     runs-on: ubuntu-latest
     permissions:
       contents: read

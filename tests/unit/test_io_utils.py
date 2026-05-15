@@ -8,7 +8,8 @@ crash without leaving the on-disk file in a partial state, and
 
 Verifies:
 - Writes bytes to a fresh path with default 0o600 mode
-- Writes bytes with a custom mode
+- Accepts owner-only restrictive modes (0o400, 0o600)
+- Rejects modes that grant group/world access (0o644, 0o660, 0o604)
 - Atomically replaces existing file content
 - Tmp file is cleaned up after a successful write
 - Tmp file is cleaned up after a failed write (no leak)
@@ -69,11 +70,26 @@ class TestAtomicWriteBytes:
         platform.system() == "Windows",
         reason="POSIX file permissions not available on Windows",
     )
-    def test_writes_bytes_with_custom_mode(self, temp_dir: Path) -> None:
-        """An explicit mode is honored on the final file."""
+    def test_writes_bytes_with_owner_only_mode(self, temp_dir: Path) -> None:
+        """A restrictive owner-only mode (0o400) is honored on the final file."""
         target = temp_dir / "config.toml"
-        atomic_write_bytes(target, b"x", mode=0o644)
-        assert stat.S_IMODE(target.stat().st_mode) == 0o644
+        atomic_write_bytes(target, b"x", mode=0o400)
+        assert stat.S_IMODE(target.stat().st_mode) == 0o400
+
+    @pytest.mark.parametrize("bad_mode", [0o644, 0o660, 0o604, 0o666, 0o777])
+    def test_rejects_group_or_world_bits(self, temp_dir: Path, bad_mode: int) -> None:
+        """Modes granting group or world access are rejected before any I/O.
+
+        Defense-in-depth: every internal caller passes 0o600, but the API
+        is private to ``_internal`` and a future caller asking for 0o644
+        would silently leak a credential file. The check fires at function
+        entry, so no tmp file is created on rejection.
+        """
+        target = temp_dir / "config.toml"
+        with pytest.raises(ValueError, match="group/world access"):
+            atomic_write_bytes(target, b"x", mode=bad_mode)
+        assert not target.exists()
+        assert _tmp_glob(target) == []
 
     def test_replaces_existing_file_atomically(self, temp_dir: Path) -> None:
         """Writing to an existing path swaps content; old content is gone."""

@@ -58,15 +58,29 @@ def atomic_write_bytes(path: Path, data: bytes, *, mode: int = 0o600) -> None:
     Parent directories are NOT created — callers are responsible for
     ensuring ``path.parent`` exists with appropriate permissions.
 
+    The tmp file is always created with mode ``0o600`` (owner-only)
+    regardless of the requested ``mode`` — only the final file picks up
+    ``mode`` via :func:`os.fchmod`. This guarantees the on-disk view is
+    never wider than ``0o600`` for the brief window the tmp file exists,
+    even if the caller asked for a more restrictive final mode like
+    ``0o400``.
+
     Args:
         path: Destination file path. Will be created or replaced.
         data: Bytes to write.
         mode: POSIX file mode applied to the final file. Defaults to
             ``0o600`` (owner read/write only) — the right default for
-            credential / config material. Ignored on Windows where
-            POSIX modes have no real-world effect.
+            credential / config material. Must NOT grant any group or
+            world bits (``mode & 0o077`` must be ``0``); this helper
+            only ever writes credential-bearing files. Ignored on
+            Windows where POSIX modes have no real-world effect.
 
     Raises:
+        ValueError: If ``mode`` grants any group or world access (any
+            bit in ``0o077`` is set). Defense-in-depth: every internal
+            caller passes ``0o600``, but the API is private to
+            ``_internal`` and a future caller asking for ``0o644``
+            would silently leak a credential file.
         FileExistsError: If a stale tmp file from the same pid+tid is
             already present at the computed tmp path. The target is not
             touched.
@@ -74,8 +88,18 @@ def atomic_write_bytes(path: Path, data: bytes, *, mode: int = 0o600) -> None:
         OSError: If the underlying write or rename fails (disk full,
             permission denied, cross-device link, etc.).
     """
+    if mode & 0o077:
+        raise ValueError(
+            f"atomic_write_bytes mode must not grant group/world access; "
+            f"got {oct(mode)}"
+        )
     tmp_path = path.parent / f"{path.name}.tmp.{os.getpid()}.{threading.get_ident()}"
-    fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    # Always create the tmp file owner-only (literal 0o600). The caller's
+    # requested ``mode`` is applied via fchmod below, after we've validated
+    # it and proved we own the fd. Passing a literal here keeps the
+    # ``os.open`` mode statically bounded, which both makes intent obvious
+    # and stops static analyzers from flagging this as overly permissive.
+    fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         try:
             if hasattr(os, "fchmod"):
