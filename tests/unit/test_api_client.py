@@ -831,6 +831,54 @@ class TestDiscovery:
 
         assert call_count == 1
 
+    def test_get_events_does_not_retry_on_non_403_with_matching_text(
+        self, test_credentials: Session
+    ) -> None:
+        """A 400 whose message coincidentally matches the gate text must not retry.
+
+        Guards against an over-eager retry triggered by any QueryError whose
+        message happens to contain ``exceeds N days``.
+        """
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(
+                400,
+                json={"error": "Query exceeds 90 days lookback in custom filter"},
+            )
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(QueryError),
+        ):
+            client.get_events()
+
+        assert call_count == 1
+
+    def test_get_events_empty_string_from_date_is_not_replaced(
+        self, test_credentials: Session
+    ) -> None:
+        """``from_date=""`` is passed through as-is, not silently defaulted.
+
+        Locks the ``is None`` check: callers who pass a falsy-but-non-None
+        value should get whatever the server returns (probably a 400), not
+        the library's default ``2000-01-01``.
+        """
+        captured_params: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            for key, value in request.url.params.items():
+                captured_params[key] = value
+            return httpx.Response(200, json=[])
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.get_events(from_date="", to_date="")
+
+        assert captured_params["from_date"] == ""
+        assert captured_params["to_date"] == ""
+
     def test_get_event_properties(self, test_credentials: Session) -> None:
         """Should list event properties from /events/properties/top endpoint."""
         captured_params: dict[str, Any] = {}

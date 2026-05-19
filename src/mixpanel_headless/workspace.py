@@ -943,12 +943,13 @@ class Workspace:
 
         Defaults to the widest window the underlying
         ``/events/names`` endpoint will accept: ``limit=5000`` (the
-        server-side ceiling), ``from_date`` reaching back to the Unix
-        epoch, and ``to_date`` set to today. The endpoint is gated by
-        the per-project ``max_data_history_days`` feature; if the
-        wide ``from_date`` is rejected (HTTP 403, "Date range exceeds
-        N days into the past"), the call automatically retries with
-        ``today - N days``.
+        server-side ceiling), ``from_date=2000-01-01`` (the API's
+        earliest accepted year — pre-2000 values come back as
+        ``"invalid date, bad year"``), and ``to_date`` set to today.
+        The endpoint is gated by the per-project
+        ``max_data_history_days`` feature; if the wide ``from_date``
+        is rejected (HTTP 403, "Date range exceeds N days into the
+        past"), the call automatically retries with ``today - N days``.
 
         Note that this method reflects events seen during the queried
         window — it is not the schema registry. Events that were
@@ -962,8 +963,8 @@ class Workspace:
         Args:
             limit: Maximum events to return. Defaults to the
                 server-side ceiling (5000).
-            from_date: ``YYYY-MM-DD`` lower bound. Defaults to a wide
-                value that will fall back to the project's
+            from_date: ``YYYY-MM-DD`` lower bound. Defaults to
+                ``2000-01-01`` and falls back to the project's
                 ``max_data_history_days`` ceiling on rejection.
             to_date: ``YYYY-MM-DD`` upper bound. Defaults to today.
 

@@ -408,17 +408,18 @@ class DiscoveryService:
     ) -> list[str]:
         """List event names in the project.
 
-        Defaults to the widest range supported by the underlying
-        ``/events/names`` endpoint (``limit=5000``, ``from_date``
-        reaching back to the Unix epoch, ``to_date=today``). Results
-        for each unique ``(limit, from_date, to_date)`` triple are
-        cached separately for the lifetime of this service instance.
+        Defaults to the widest range the underlying ``/events/names``
+        endpoint will accept (``limit=5000``, ``from_date=2000-01-01``
+        — the API's earliest accepted year — and ``to_date=today``).
+        Results for each unique ``(limit, from_date, to_date)`` triple
+        are cached separately for the lifetime of this service
+        instance.
 
         Args:
             limit: Maximum events to return. ``None`` defers to the
                 API client's default (5000, the server-side ceiling).
             from_date: ``YYYY-MM-DD`` lower bound. ``None`` defers to
-                the API client's wide default.
+                the API client's default of ``2000-01-01``.
             to_date: ``YYYY-MM-DD`` upper bound. ``None`` defers to
                 the API client's default (today).
 
