@@ -428,6 +428,8 @@ class DiscoveryService:
 
         Raises:
             AuthenticationError: Invalid credentials.
+            QueryError: 403 errors unrelated to date-range gating, or
+                any other 4xx the ``/events/names`` endpoint emits.
         """
         cache_key: tuple[str | int | None, ...] = (
             "list_events",

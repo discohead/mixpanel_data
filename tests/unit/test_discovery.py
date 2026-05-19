@@ -173,6 +173,60 @@ class TestListEvents:
 
         assert events == []
 
+    def test_list_events_caches_per_args_triple(
+        self,
+        discovery_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], DiscoveryService
+        ],
+    ) -> None:
+        """Cache key is the (limit, from_date, to_date) triple.
+
+        Calls with the same triple share a cache slot; calls with
+        different triples each hit the API.
+        """
+        call_count = 0
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(200, json=[f"E{call_count}"])
+
+        discovery = discovery_factory(handler)
+
+        discovery.list_events(limit=10)
+        discovery.list_events(limit=10)
+        assert call_count == 1  # second call cached
+
+        discovery.list_events(limit=20)
+        assert call_count == 2  # different triple, new HTTP call
+
+        discovery.list_events()  # all-None triple, distinct from above
+        assert call_count == 3
+
+    def test_list_events_forwards_kwargs_to_api_client(
+        self,
+        discovery_factory: Callable[
+            [Callable[[httpx.Request], httpx.Response]], DiscoveryService
+        ],
+    ) -> None:
+        """Caller-supplied limit/from_date/to_date reach the outbound request.
+
+        Guards against accidental drop of the kwargs-filtering block.
+        """
+        captured_params: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            for k, v in request.url.params.items():
+                captured_params[k] = v
+            return httpx.Response(200, json=["e1"])
+
+        discovery = discovery_factory(handler)
+        discovery.list_events(limit=7, from_date="2024-01-01", to_date="2024-12-31")
+
+        assert captured_params["limit"] == "7"
+        assert captured_params["from_date"] == "2024-01-01"
+        assert captured_params["to_date"] == "2024-12-31"
+
 
 # =============================================================================
 # User Story 2: list_properties() Tests

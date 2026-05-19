@@ -974,6 +974,8 @@ class Workspace:
         Raises:
             ConfigError: If API credentials not available.
             AuthenticationError: If credentials are invalid.
+            QueryError: 403 errors unrelated to date-range gating, or
+                any other 4xx the ``/events/names`` endpoint emits.
         """
         return self._discovery_service.list_events(
             limit=limit,

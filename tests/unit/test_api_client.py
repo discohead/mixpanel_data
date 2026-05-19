@@ -6,6 +6,7 @@ Tests use httpx.MockTransport for deterministic HTTP mocking.
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -765,8 +766,6 @@ class TestDiscovery:
         self, test_credentials: Session
     ) -> None:
         """A 403 'Date range exceeds N days' should retry with today - N days."""
-        from datetime import date, timedelta
-
         captured_from_dates: list[str] = []
         call_count = 0
 

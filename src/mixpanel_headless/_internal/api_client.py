@@ -1900,9 +1900,9 @@ class MixpanelAPIClient:
         ``limit`` is the server-side ceiling (5000), ``from_date`` is
         ``2000-01-01`` (the earliest year the API accepts — pre-2000
         values come back as ``"invalid date, bad year"``), and
-        ``to_date`` is today (UTC). The ``/events/names`` endpoint is
-        gated by the per-project ``max_data_history_days`` feature; if
-        the wide ``from_date`` is rejected with HTTP 403 "Date range
+        ``to_date`` is today. The ``/events/names`` endpoint is gated
+        by the per-project ``max_data_history_days`` feature; if the
+        wide ``from_date`` is rejected with HTTP 403 "Date range
         exceeds N days into the past", this method automatically
         retries once with ``today - N days``.
 
@@ -1914,7 +1914,8 @@ class MixpanelAPIClient:
                 falls back to the project's ``max_data_history_days``
                 ceiling when rejected.
             to_date: ``YYYY-MM-DD`` upper bound. Defaults to today
-                (UTC).
+                (system local date, consistent with the rest of the
+                library's date-default convention).
 
         Returns:
             List of event name strings.
@@ -1925,10 +1926,14 @@ class MixpanelAPIClient:
                 any other 4xx the endpoint emits.
         """
         url = self._build_url("query", "/events/names")
+        # Capture today once so the initial to_date and the retry's
+        # from_date can't diverge if the host crosses midnight between
+        # the two requests.
+        today = date.today()
         resolved_from = (
             from_date if from_date is not None else self._EVENTS_NAMES_WIDE_FROM_DATE
         )
-        resolved_to = to_date if to_date is not None else date.today().isoformat()
+        resolved_to = to_date if to_date is not None else today.isoformat()
         params: dict[str, Any] = {
             "type": "general",
             "limit": limit,
@@ -1938,13 +1943,18 @@ class MixpanelAPIClient:
         try:
             response = self._request("GET", url, params=params)
         except QueryError as exc:
+            # Matches the per-project lookback gate error text observed
+            # at the time of writing: "Date range exceeds N days into
+            # the past". Kept loose (no anchor on "Date range" / "into
+            # the past") so minor rewordings don't silently disable the
+            # retry. Combined with the status_code == 403 gate and the
+            # from_date is None short-circuit, false positives are not
+            # constructable from any other known backend code path.
             match = re.search(r"exceeds\s+(\d+)\s+days", str(exc))
             if not match or from_date is not None or exc.status_code != 403:
                 raise
             allowed_days = int(match.group(1))
-            params["from_date"] = (
-                date.today() - timedelta(days=allowed_days)
-            ).isoformat()
+            params["from_date"] = (today - timedelta(days=allowed_days)).isoformat()
             response = self._request("GET", url, params=params)
         if isinstance(response, list):
             return [str(e) for e in response]
