@@ -170,6 +170,10 @@ def _fchmod_no_follow(
             be applied (file vanished, permission denied, etc.).
         fallback_args: Args interpolated into ``fallback_message``.
     """
+    if not hasattr(os, "fchmod"):
+        # Windows / non-POSIX. POSIX modes have no meaning here;
+        # skip silently rather than crash with AttributeError.
+        return
     try:
         fd = os.open(str(path), open_flags)
     except OSError:
@@ -297,9 +301,18 @@ class OAuthStorage:
         method just has to avoid leaving a chmod side effect on a
         symlinked target.
 
+        Windows: POSIX modes don't apply; Windows uses ACLs. Skip
+        silently — ``os.O_NOFOLLOW``, ``os.O_DIRECTORY``, and
+        ``os.fchmod`` don't exist on the platform, and evaluating
+        their bitwise OR at the call site would raise
+        ``AttributeError`` before this function even runs.
+
         Args:
             path: File path whose permissions (and parent directory) to check.
         """
+        if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "fchmod"):
+            # Windows / non-POSIX. No-op.
+            return
         # Check directory permissions. Use lstat so a symlinked storage dir
         # doesn't get its target silently chmodded.
         try:
@@ -314,10 +327,13 @@ class OAuthStorage:
         elif dir_st is not None:
             dir_mode = stat.S_IMODE(dir_st.st_mode)
             if dir_mode != 0o700:
+                dir_open_flags = os.O_RDONLY | os.O_NOFOLLOW
+                if hasattr(os, "O_DIRECTORY"):
+                    dir_open_flags |= os.O_DIRECTORY
                 _fchmod_no_follow(
                     self._storage_dir,
                     stat.S_IRWXU,
-                    open_flags=os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    open_flags=dir_open_flags,
                     fallback_message=(
                         "Cannot repair directory permissions on %s. "
                         "Expected 0o700, got %s. Run: chmod 700 %s"

@@ -9,6 +9,7 @@ Covers:
 
 from __future__ import annotations
 
+import os
 import platform
 import stat
 from pathlib import Path
@@ -298,3 +299,29 @@ class TestOAuthStorageSymlinkRejection:
             storage._check_and_fix_permissions(target)
         # Verify the file was actually chmodded via the fchmod path.
         assert stat.S_IMODE(target.stat().st_mode) == 0o600
+
+    def test_windows_skip_does_not_crash(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """On platforms without ``os.O_NOFOLLOW`` or ``os.fchmod``,
+        ``_check_and_fix_permissions`` is a no-op rather than an
+        ``AttributeError`` crash.
+
+        Regression: an earlier revision of the SEC-331 follow-up
+        used ``os.O_NOFOLLOW | os.O_DIRECTORY`` at the call site,
+        which evaluated at construction time. On Windows that raises
+        ``AttributeError`` before the function body runs. We simulate
+        the platform via ``monkeypatch.delattr`` so the test exercises
+        the same code path that would run on a real Windows interpreter.
+        """
+        from mixpanel_headless._internal.auth.storage import OAuthStorage
+
+        monkeypatch.setenv("MP_OAUTH_STORAGE_DIR", str(tmp_path))
+        storage = OAuthStorage()
+        storage._ensure_dir()
+        target = storage._tokens_path("us")
+        target.write_text("{}", encoding="utf-8")
+        # Pretend O_NOFOLLOW doesn't exist (Windows posture).
+        monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+        # Must not raise.
+        storage._check_and_fix_permissions(target)
