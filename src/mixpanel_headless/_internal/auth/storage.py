@@ -37,7 +37,11 @@ from typing import Any
 from pydantic import SecretStr
 
 from mixpanel_headless._internal.auth.token import OAuthClientInfo, OAuthTokens
-from mixpanel_headless._internal.io_utils import atomic_write_bytes
+from mixpanel_headless._internal.io_utils import (
+    CredentialPathError,
+    atomic_write_bytes,
+    read_credential_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -236,15 +240,35 @@ class OAuthStorage:
 
         Verifies that the storage directory has ``0o700`` permissions and
         the specified file has ``0o600`` permissions. Attempts to repair
-        incorrect permissions via ``os.chmod()``. Logs a warning to stderr
-        if repair fails.
+        incorrect permissions via ``os.chmod()``. Logs a warning if
+        repair fails.
+
+        Symlink handling: uses ``lstat`` and refuses to chmod through a
+        symlink. The chmod would otherwise operate on the symlink's
+        target, which an attacker controls by choosing where the
+        symlink points — turning a "fix permissions" routine into a
+        primitive that auto-tightens an attacker file to 0o600 right
+        before we read it. The read itself is later rejected by
+        :func:`read_credential_text` via ``O_NOFOLLOW``, so this
+        method just has to avoid leaving a chmod side effect on a
+        symlinked target.
 
         Args:
             path: File path whose permissions (and parent directory) to check.
         """
-        # Check directory permissions
-        if self._storage_dir.exists():
-            dir_mode = stat.S_IMODE(self._storage_dir.stat().st_mode)
+        # Check directory permissions. Use lstat so a symlinked storage dir
+        # doesn't get its target silently chmodded.
+        try:
+            dir_st = self._storage_dir.lstat()
+        except FileNotFoundError:
+            dir_st = None
+        if dir_st is not None and stat.S_ISLNK(dir_st.st_mode):
+            logger.warning(
+                "Refusing to chmod through symlinked storage directory %s.",
+                self._storage_dir,
+            )
+        elif dir_st is not None:
+            dir_mode = stat.S_IMODE(dir_st.st_mode)
             if dir_mode != 0o700:
                 try:
                     self._storage_dir.chmod(stat.S_IRWXU)
@@ -258,21 +282,32 @@ class OAuthStorage:
                         self._storage_dir,
                     )
 
-        # Check file permissions
-        if path.exists():
-            file_mode = stat.S_IMODE(path.stat().st_mode)
-            if file_mode != 0o600:
-                try:
-                    path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-                except OSError:
-                    logger.warning(
-                        "Cannot repair file permissions on %s. "
-                        "Expected 0o600, got %s. "
-                        "Run: chmod 600 %s",
-                        path,
-                        oct(file_mode),
-                        path,
-                    )
+        # Check file permissions. lstat for the same reason as the dir branch.
+        try:
+            file_st = path.lstat()
+        except FileNotFoundError:
+            return
+        if stat.S_ISLNK(file_st.st_mode):
+            logger.warning(
+                "Refusing to chmod through symlink at %s. "
+                "The subsequent read will reject the symlink and the cache "
+                "will be re-fetched.",
+                path,
+            )
+            return
+        file_mode = stat.S_IMODE(file_st.st_mode)
+        if file_mode != 0o600:
+            try:
+                path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+            except OSError:
+                logger.warning(
+                    "Cannot repair file permissions on %s. "
+                    "Expected 0o600, got %s. "
+                    "Run: chmod 600 %s",
+                    path,
+                    oct(file_mode),
+                    path,
+                )
 
     def _write_file(self, path: Path, data: dict[str, Any]) -> None:
         """Atomically write JSON data to ``path`` with mode ``0o600``.
@@ -307,8 +342,15 @@ class OAuthStorage:
             return None
         self._check_and_fix_permissions(path)
         try:
-            content = path.read_text(encoding="utf-8")
+            content = read_credential_text(path)
             parsed = json.loads(content)
+        except CredentialPathError as exc:
+            # Symlink or lax mode rejected by the read helper. WARNING
+            # (not the lower-severity "corrupted JSON" log below) so a
+            # symlink-attack signal isn't swallowed in the same-shape
+            # "ignore this file" path.
+            logger.warning("Refusing to read credential file %s: %s", path, exc)
+            return None
         except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
             logger.warning("Corrupted or invalid JSON in %s — ignoring file.", path)
             return None

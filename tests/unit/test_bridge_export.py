@@ -292,3 +292,80 @@ class TestAccountsNamespaceWiring:
         target.write_text("{}", encoding="utf-8")
         assert accounts_ns.remove_bridge(at=target) is True
         assert not target.exists()
+
+
+class TestBridgeSymlinkRejection:
+    """``load_bridge`` and ``_read_browser_tokens`` refuse symlinked credential paths.
+
+    Regression for the same-UID symlink attack covered by
+    ``io_utils.read_credential_text``. Two code paths in ``bridge.py``
+    read credential material from disk:
+
+    1. ``load_bridge`` reads the bridge file itself (env-controllable
+       via ``MP_AUTH_FILE``).
+    2. ``_read_browser_tokens`` reads per-account ``tokens.json``
+       when exporting a fresh bridge for an oauth_browser account.
+
+    Both must refuse a symlink at the leaf component.
+    """
+
+    @pytest.mark.skipif(
+        not hasattr(__import__("os"), "O_NOFOLLOW"),
+        reason="O_NOFOLLOW required; Windows is not in scope",
+    )
+    def test_load_bridge_symlink_raises_configerror(self, tmp_path: Path) -> None:
+        """A symlink at the bridge path raises ``ConfigError``."""
+        from mixpanel_headless.exceptions import ConfigError
+
+        attacker = tmp_path / "attacker_bridge.json"
+        attacker.write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "account": {
+                        "name": "evil",
+                        "type": "service_account",
+                        "region": "us",
+                        "default_project": "999",
+                        "username": "attacker",
+                        "secret": "stolen",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        attacker.chmod(0o600)
+        link = tmp_path / "bridge.json"
+        link.symlink_to(attacker)
+        with pytest.raises(ConfigError, match="symlink"):
+            load_bridge(link)
+
+    @pytest.mark.skipif(
+        not hasattr(__import__("os"), "O_NOFOLLOW"),
+        reason="O_NOFOLLOW required; Windows is not in scope",
+    )
+    def test_export_bridge_symlinked_tokens_raises_oautherror(
+        self, tmp_path: Path
+    ) -> None:
+        """A symlink at the per-account tokens.json raises ``OAuthError``."""
+        account = OAuthBrowserAccount(name="personal", region="us")
+        account_dir = tmp_path / ".mp" / "accounts" / "personal"
+        account_dir.mkdir(parents=True, mode=0o700)
+        attacker = tmp_path / "attacker_tokens.json"
+        attacker.write_text(
+            json.dumps(
+                {
+                    "access_token": "stolen",
+                    "expires_at": (
+                        datetime.now(timezone.utc) + timedelta(hours=1)
+                    ).isoformat(),
+                    "token_type": "Bearer",
+                }
+            ),
+            encoding="utf-8",
+        )
+        attacker.chmod(0o600)
+        (account_dir / "tokens.json").symlink_to(attacker)
+        out = tmp_path / "bridge.json"
+        with pytest.raises(OAuthError, match="symlink"):
+            export_bridge(account, to=out, token_resolver=OnDiskTokenResolver())

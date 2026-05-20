@@ -674,3 +674,46 @@ class TestMeService:
         )
         ws = service.find_default_workspace("555")
         assert ws is None
+
+
+class TestMeCacheSymlinkRejection:
+    """``MeCache.get`` refuses a symlinked ``me.json``.
+
+    Regression for the same-UID symlink attack covered by
+    ``io_utils.read_credential_text``. The contract here is the same
+    as for ``OAuthStorage._read_file``: rejection turns into ``None``
+    (so the next call re-fetches from ``/me``) but the rejection is
+    logged at WARNING — escalated from the existing ``.debug`` path so
+    a symlink-attack signal doesn't disappear into a quiet "corrupted
+    cache, ignoring" log line.
+    """
+
+    @pytest.mark.skipif(
+        not hasattr(__import__("os"), "O_NOFOLLOW"),
+        reason="O_NOFOLLOW required; Windows is not in scope",
+    )
+    def test_symlinked_cache_returns_none_and_warns(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A symlinked me.json is refused; ``get()`` returns None + WARNING."""
+        import json
+        import logging
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        account_dir = tmp_path / ".mp" / "accounts" / "personal"
+        account_dir.mkdir(parents=True, mode=0o700)
+        attacker = tmp_path / "attacker_me.json"
+        attacker.write_text(json.dumps({"cached_at": 0}), encoding="utf-8")
+        attacker.chmod(0o600)
+        (account_dir / "me.json").symlink_to(attacker)
+
+        cache = MeCache(account_name="personal")
+        caplog.set_level(logging.WARNING)
+        assert cache.get() is None
+        assert any(
+            "symlink" in rec.message.lower() or "refusing" in rec.message.lower()
+            for rec in caplog.records
+        ), f"expected WARNING log mentioning symlink/refusing, got: {caplog.text}"

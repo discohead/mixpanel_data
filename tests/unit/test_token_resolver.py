@@ -499,3 +499,41 @@ class TestConcurrentRefresh:
         # Both threads triggered an IdP call (the resolver does NOT have a
         # single-flight guard; this assertion documents the current behaviour).
         assert call_count == 2
+
+
+class TestSymlinkRejection:
+    """``get_browser_token`` refuses a symlinked ``tokens.json``.
+
+    Regression for the same-UID symlink attack covered by
+    ``io_utils.read_credential_bytes``. The error is surfaced through
+    the existing ``OAuthError`` translation in
+    ``OnDiskTokenResolver.get_browser_token`` so the CLI output stays
+    domain-specific.
+    """
+
+    @pytest.mark.skipif(
+        not hasattr(os, "O_NOFOLLOW"),
+        reason="O_NOFOLLOW required; Windows is not in scope",
+    )
+    def test_symlinked_tokens_raises_oautherror(self, isolated_home: Path) -> None:
+        """Symlinked tokens.json yields OAuthError with the symlink path named."""
+        account_dir = isolated_home / ".mp" / "accounts" / "personal"
+        account_dir.mkdir(parents=True, mode=0o700)
+        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        attacker = isolated_home / "attacker_tokens.json"
+        attacker.write_text(
+            json.dumps(
+                {
+                    "access_token": "stolen-acc",
+                    "expires_at": future.isoformat(),
+                    "token_type": "Bearer",
+                    "scope": "read:project",
+                }
+            ),
+            encoding="utf-8",
+        )
+        attacker.chmod(0o600)
+        (account_dir / "tokens.json").symlink_to(attacker)
+        resolver = OnDiskTokenResolver()
+        with pytest.raises(OAuthError, match="symlink"):
+            resolver.get_browser_token("personal", "us")

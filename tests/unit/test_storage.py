@@ -152,3 +152,88 @@ class TestEnsureAccountDir:
         monkeypatch.setenv("MP_OAUTH_STORAGE_DIR", str(tmp_path))
         with pytest.raises(ValueError):
             ensure_account_dir("../etc")
+
+
+class TestOAuthStorageSymlinkRejection:
+    """``OAuthStorage._read_file`` refuses symlinks; ``_check_and_fix_permissions``
+    refuses to chmod through them.
+
+    Regression for the same-UID symlink attack. The read path uses
+    :func:`read_credential_text`, which raises
+    :class:`CredentialPathError`; the silent-degradation contract
+    (``_read_file`` returns ``None`` and logs WARNING) is preserved so
+    a re-fetch still happens — but the rejection is now visible in logs.
+
+    The chmod path is independently dangerous: today
+    ``_check_and_fix_permissions`` does ``path.stat()`` (follows symlink)
+    + ``path.chmod()`` (chmods the target), so an attacker who plants
+    a 0o644 file gets it tightened to 0o600 just before the read. The
+    fix uses ``lstat()`` and bails on symlinks — we assert the target
+    file's mode is left untouched.
+    """
+
+    @pytest.mark.skipif(
+        platform.system() == "Windows",
+        reason="POSIX symlink + mode semantics required",
+    )
+    def test_read_symlinked_tokens_returns_none_and_warns(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A symlinked tokens file is refused; ``_read_file`` returns None + WARNING."""
+        import logging
+
+        from mixpanel_headless._internal.auth.storage import OAuthStorage
+
+        monkeypatch.setenv("MP_OAUTH_STORAGE_DIR", str(tmp_path))
+        attacker = tmp_path / "attacker.json"
+        attacker.write_text('{"access_token":"stolen"}', encoding="utf-8")
+        attacker.chmod(0o600)
+        storage = OAuthStorage()
+        storage._ensure_dir()
+        target = storage._tokens_path("us")
+        target.symlink_to(attacker)
+
+        caplog.set_level(logging.WARNING)
+        result = storage.load_tokens("us")
+        assert result is None
+        assert any(
+            "symlink" in rec.message.lower() or "refusing" in rec.message.lower()
+            for rec in caplog.records
+        ), f"expected WARNING log mentioning symlink/refusing, got: {caplog.text}"
+
+    @pytest.mark.skipif(
+        platform.system() == "Windows",
+        reason="POSIX symlink + mode semantics required",
+    )
+    def test_check_and_fix_permissions_does_not_chmod_through_symlink(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The buggy chmod-through-symlink primitive is killed.
+
+        Before the fix: ``_check_and_fix_permissions`` followed the
+        symlink and chmodded the target to 0o600, silently tightening
+        the attacker's file right before the (then-unsafe) read.
+
+        After: ``lstat`` detects the symlink, logs a warning, and
+        leaves the target file's mode untouched.
+        """
+        from mixpanel_headless._internal.auth.storage import OAuthStorage
+
+        monkeypatch.setenv("MP_OAUTH_STORAGE_DIR", str(tmp_path))
+        attacker = tmp_path / "attacker.json"
+        attacker.write_text("x", encoding="utf-8")
+        attacker.chmod(0o644)
+        original_mode = stat.S_IMODE(attacker.stat().st_mode)
+        assert original_mode == 0o644
+
+        storage = OAuthStorage()
+        storage._ensure_dir()
+        target = storage._tokens_path("us")
+        target.symlink_to(attacker)
+
+        storage._check_and_fix_permissions(target)
+        # Target file mode unchanged — no chmod side effect via the symlink.
+        assert stat.S_IMODE(attacker.stat().st_mode) == original_mode

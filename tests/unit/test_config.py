@@ -765,3 +765,30 @@ class TestMutateTransaction:
 
         # File untouched — no partial mutation reached disk.
         assert p.read_bytes() == original
+
+
+class TestSymlinkRejection:
+    """``ConfigManager`` refuses to read a ``config.toml`` that is a symlink.
+
+    Regression for the same-UID symlink attack covered by the read-side
+    hardening in ``io_utils.read_credential_text``. An attacker who can
+    write to the user's ``$HOME`` (CI shared $HOME, container shared
+    mounts) could otherwise plant ``config.toml`` as a symlink to an
+    attacker-controlled TOML and steer the user's session at another
+    project / account.
+    """
+
+    @pytest.mark.skipif(
+        not hasattr(__import__("os"), "O_NOFOLLOW"),
+        reason="O_NOFOLLOW required; Windows is not in scope",
+    )
+    def test_symlink_config_raises_configerror(self, tmp_path: Path) -> None:
+        """A symlink at ``config.toml`` raises ``ConfigError`` rather than reading."""
+        attacker = tmp_path / "attacker.toml"
+        attacker.write_text('[active]\naccount = "evil"\n', encoding="utf-8")
+        attacker.chmod(0o600)
+        link = tmp_path / "config.toml"
+        link.symlink_to(attacker)
+        cm = ConfigManager(config_path=link)
+        with pytest.raises(ConfigError, match="symlink"):
+            cm.list_accounts()

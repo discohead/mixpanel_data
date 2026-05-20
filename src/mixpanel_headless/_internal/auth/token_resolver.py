@@ -29,7 +29,10 @@ from mixpanel_headless._internal.auth.account import (
 )
 from mixpanel_headless._internal.auth.storage import account_dir
 from mixpanel_headless._internal.auth.token import OAuthTokens, token_payload_bytes
-from mixpanel_headless._internal.io_utils import atomic_write_bytes
+from mixpanel_headless._internal.io_utils import (
+    atomic_write_bytes,
+    read_credential_bytes,
+)
 from mixpanel_headless.exceptions import OAuthError
 
 
@@ -100,7 +103,7 @@ class OnDiskTokenResolver(TokenResolver):
                 details={"account_name": name, "path": str(path)},
             )
         try:
-            raw = path.read_bytes()
+            raw = read_credential_bytes(path)
         except OSError as exc:
             raise OAuthError(
                 f"Could not read OAuth tokens for account '{name}' from {path}: {exc}",

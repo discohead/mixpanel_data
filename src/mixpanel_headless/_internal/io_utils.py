@@ -1,4 +1,4 @@
-"""Atomic on-disk write primitive + bounded stdin reader.
+"""Atomic on-disk write primitive, credential-read helpers, and bounded stdin reader.
 
 Every persisted credential / config write goes through
 :func:`atomic_write_bytes` so a SIGKILL or power loss between
@@ -12,6 +12,17 @@ guarantees atomicity-on-success, not survival across power loss
 mid-write. Adding ``fsync`` would cost 5–50 ms per CLI invocation
 for no win in the realistic failure modes for a desktop CLI.
 
+:func:`read_credential_bytes` / :func:`read_credential_text` are the
+read-side mirror. On POSIX they open with ``O_NOFOLLOW`` so the
+kernel refuses to traverse a symlink at the final path component,
+then verify via ``fstat`` that the file mode is owner-only. Same-UID
+symlink attacks (CI runners with shared ``$HOME``, container images
+with shared mounts, compromised local tooling running as the user)
+are the threat model — see :class:`CredentialPathError` for what
+gets raised and the helper docstrings for what's deliberately out of
+scope (hard links, intermediate-component symlinks under ``0o700``
+ancestors, attacker-controlled ``$HOME``).
+
 :func:`read_capped_secret_from_stdin` is the shared stdin reader for
 service-account secrets and OAuth bearers. The cap rejects multi-MB
 pastes (e.g. an SSH key piped by mistake) before the value reaches
@@ -20,14 +31,22 @@ the credential store.
 
 from __future__ import annotations
 
+import errno
 import os
+import stat
 import sys
 import threading
 from pathlib import Path
 
 from mixpanel_headless.exceptions import ConfigError
 
-__all__ = ["atomic_write_bytes", "read_capped_secret_from_stdin"]
+__all__ = [
+    "CredentialPathError",
+    "atomic_write_bytes",
+    "read_capped_secret_from_stdin",
+    "read_credential_bytes",
+    "read_credential_text",
+]
 
 
 SECRET_STDIN_MAX_BYTES = 64 * 1024
@@ -120,6 +139,170 @@ def atomic_write_bytes(path: Path, data: bytes, *, mode: int = 0o600) -> None:
     except BaseException:
         Path(tmp_path).unlink(missing_ok=True)
         raise
+
+
+class CredentialPathError(OSError):
+    """Raised when a credential file fails a structural safety check.
+
+    Subclass of :class:`OSError` so existing ``except OSError`` handlers
+    at the credential call sites (``config.py``, ``bridge.py``,
+    ``token_resolver.py``, ``storage.py``, ``me.py``) continue to catch
+    it and translate to their domain exceptions (``ConfigError``,
+    ``OAuthError``) without code changes. Call sites that want to
+    distinguish a deliberate refusal (symlink, lax mode) from incidental
+    I/O failure (missing file, EACCES on a legit file) can
+    ``except CredentialPathError`` separately and log at WARNING — the
+    silent-degradation sites in ``storage.py`` and ``me.py`` use this
+    distinction so a symlink-attack signal isn't lost in a
+    "corrupted cache, ignoring" path.
+    """
+
+
+def _open_credential_fd(path: Path) -> int:
+    """Open ``path`` read-only, refusing to traverse a final-component symlink.
+
+    On POSIX, uses ``os.open(O_RDONLY | O_NOFOLLOW)`` so the kernel
+    surfaces ``ELOOP`` when the final component is a symlink. We catch
+    that ``ELOOP`` and re-raise as :class:`CredentialPathError` with a
+    message naming the path explicitly so logs don't show the bare
+    "Too many levels of symbolic links" the kernel emits.
+
+    On platforms without ``O_NOFOLLOW`` (Windows), falls back to
+    :meth:`Path.is_symlink` before opening. TOCTOU-vulnerable in
+    theory; not in the threat model.
+
+    Args:
+        path: File to open.
+
+    Returns:
+        The open file descriptor. Caller MUST close.
+
+    Raises:
+        CredentialPathError: The final path component is a symlink.
+        FileNotFoundError: The path does not exist (non-symlink case).
+        OSError: Any other open failure (EACCES, EISDIR, ...).
+    """
+    if hasattr(os, "O_NOFOLLOW"):
+        try:
+            return os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW)
+        except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                raise CredentialPathError(
+                    errno.ELOOP,
+                    f"Refusing to read credential at symlink: {path}",
+                    str(path),
+                ) from exc
+            raise
+    # Windows fallback. The ``is_symlink`` check is TOCTOU-vulnerable —
+    # an attacker could swap a regular file for a symlink between this
+    # check and the open. Windows is not in the threat model for the
+    # same-UID-attacker scenario (creating symlinks requires elevated
+    # privileges or developer mode), so we accept the residual risk.
+    if path.is_symlink():
+        raise CredentialPathError(
+            errno.ELOOP,
+            f"Refusing to read credential at symlink: {path}",
+            str(path),
+        )
+    return os.open(str(path), os.O_RDONLY)
+
+
+def _enforce_owner_only_mode(fd: int, path: Path) -> None:
+    """Raise ``CredentialPathError`` if the open file's mode has group/world bits.
+
+    The check runs on ``fstat(fd)``, NOT a fresh ``path.stat()``. The fd
+    pins the inode at the moment of open, so an attacker cannot swap
+    the file out from under the check — there is no TOCTOU window.
+
+    Skipped on platforms without :func:`os.fstat` mode semantics
+    (Windows reports a stub mode).
+
+    Args:
+        fd: Open file descriptor.
+        path: The path used at open time (for the error message only).
+
+    Raises:
+        CredentialPathError: Mode has any of the ``0o077`` bits set.
+    """
+    if not hasattr(os, "fchmod"):  # Windows proxy — no real POSIX mode.
+        return
+    file_mode = stat.S_IMODE(os.fstat(fd).st_mode)
+    if file_mode & 0o077:
+        raise CredentialPathError(
+            errno.EPERM,
+            (
+                f"Refusing to read credential with mode {oct(file_mode)} "
+                f"(group/world bits set): {path}"
+            ),
+            str(path),
+        )
+
+
+def read_credential_bytes(path: Path) -> bytes:
+    """Read bytes from ``path`` while refusing symlinks and lax modes.
+
+    POSIX: opens with ``O_NOFOLLOW`` so the kernel rejects a symlinked
+    final component (``ELOOP``); then ``fstat``s the fd and rejects any
+    file mode with the ``0o077`` bits set. Both rejections raise
+    :class:`CredentialPathError` (an :class:`OSError` subclass).
+
+    Out of scope:
+        - Hard links. ``O_NOFOLLOW`` does not detect them. A hard-link
+          attack requires write access to a directory in the target
+          path AND read access to the target file, which is strictly
+          stronger than the same-UID symlink threat we're defending.
+        - Intermediate symlinks in ancestor paths. Ancestor dirs are
+          managed at ``0o700`` by ``ensure_account_dir`` and
+          ``_ensure_dir``, which excludes the insertion vector.
+        - Attacker-controlled ``$HOME``. If :meth:`Path.home` itself
+          is influenced (some CI setups override ``$HOME``), the leaf
+          check is moot. That's a deployment posture, not an
+          in-process check.
+
+    Args:
+        path: File to read.
+
+    Returns:
+        The file contents as bytes.
+
+    Raises:
+        CredentialPathError: ``path`` is a symlink, or the file mode
+            has group/world bits set.
+        FileNotFoundError: ``path`` does not exist (non-symlink case).
+        OSError: Any other I/O failure (EACCES, EISDIR, ...).
+    """
+    fd = _open_credential_fd(path)
+    try:
+        _enforce_owner_only_mode(fd, path)
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
+def read_credential_text(path: Path, *, encoding: str = "utf-8") -> str:
+    """UTF-8 (by default) wrapper around :func:`read_credential_bytes`.
+
+    Args:
+        path: File to read.
+        encoding: Text encoding. Defaults to ``utf-8``; every credential
+            file in this codebase is UTF-8 by construction.
+
+    Returns:
+        Decoded file contents.
+
+    Raises:
+        CredentialPathError: ``path`` fails a structural safety check.
+        UnicodeDecodeError: File bytes are not valid in ``encoding``.
+        FileNotFoundError: ``path`` does not exist.
+        OSError: Any other I/O failure.
+    """
+    return read_credential_bytes(path).decode(encoding)
 
 
 def read_capped_secret_from_stdin() -> str:
