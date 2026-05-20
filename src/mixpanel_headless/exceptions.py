@@ -19,7 +19,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from mixpanel_headless._internal.auth.account import Region
+    from mixpanel_headless.accounts import ProjectPickResult
 
 
 class MixpanelHeadlessError(Exception):
@@ -1033,10 +1036,21 @@ class OAuthError(MixpanelHeadlessError):
     Error codes:
     - OAUTH_TOKEN_ERROR: Token exchange or validation failed
     - OAUTH_REFRESH_ERROR: Token refresh failed
+    - OAUTH_REFRESH_REVOKED: Refresh token rejected by IdP (re-login required)
     - OAUTH_REGISTRATION_ERROR: Dynamic Client Registration failed
     - OAUTH_TIMEOUT: Callback server timed out waiting for authorization
     - OAUTH_PORT_ERROR: All callback ports are occupied
     - OAUTH_BROWSER_ERROR: Could not open browser for authorization
+    - OAUTH_PASTE_ERROR: Pasted redirect URL was empty / unparseable / missing
+      ``code`` or ``state``
+    - OAUTH_STATE_MISMATCH: Pasted ``state`` did not match the in-flight session
+    - OAUTH_AUTH_DENIED: OAuth provider returned an ``error=`` parameter
+    - OAUTH_CONFIG_ERROR: Invalid region or other static config rejected at construction
+    - OAUTH_INFLIGHT_MISSING: ``mp login --finish`` / ``--resume`` invoked with
+      no inflight file on disk (run ``mp login --start`` first)
+    - OAUTH_INFLIGHT_EXPIRED: Inflight file present but ``expires_at < now()``
+      (the 10-minute TTL expired; re-run ``mp login --start``)
+    - OAUTH_INFLIGHT_CORRUPT: Inflight JSON failed to parse / is missing required keys
 
     Example:
         ```python
@@ -1176,6 +1190,156 @@ class RegionProbeNetworkError(RegionProbeError):
             attempts=attempts,
             code="OAUTH_NETWORK_UNREACHABLE",
         )
+
+
+class NeedsRegionSwitchError(OAuthError):
+    """``/me`` returned 0 region-compatible projects after auto-pick filtering.
+
+    Raised by :func:`mixpanel_headless.accounts._resolve_project` when the
+    user authenticated against region X but every visible project lives in
+    a different cluster. The auto-pick algorithm refuses to publish a
+    wrong-region account because every subsequent request would 401.
+
+    Carries the full :class:`ProjectPickResult` so the CLI can render the
+    cross-region alternatives — typically a one-line "you have N projects in
+    eu and M in in; run ``mp login --start --region eu``" hint plus a
+    structured ``cross_region_projects`` list for programmatic consumers.
+
+    Maps to ``ExitCode.NEEDS_SELECTION`` (6) via the ``@handle_errors``
+    decorator. Code is ``NEEDS_REGION_SWITCH``.
+
+    Example:
+        ```python
+        try:
+            pick = _resolve_project(me_resp=me, region="us", auto_pick=True, ...)
+        except NeedsRegionSwitchError as exc:
+            for pid, name, domain in exc.pick.cross_region_projects or []:
+                print(f"{pid} ({name}) lives at {domain}")
+        ```
+    """
+
+    def __init__(self, message: str, *, pick: ProjectPickResult) -> None:
+        """Initialize NeedsRegionSwitchError.
+
+        Args:
+            message: Human-readable summary of the cross-region situation
+                (e.g., counts per region + suggested ``mp login --start
+                --region`` command).
+            pick: The :class:`ProjectPickResult` carrying the
+                cross-region project list (``method == "cross_region_only"``)
+                so the CLI can render the structured envelope without
+                re-walking ``/me``.
+        """
+        self._pick = pick
+        super().__init__(
+            message,
+            code="NEEDS_REGION_SWITCH",
+            details={
+                "auth_region": pick.auth_region,
+                "cross_region_projects": [
+                    {"id": pid, "name": name, "domain": domain}
+                    for pid, name, domain in (pick.cross_region_projects or [])
+                ],
+            },
+        )
+
+    @property
+    def pick(self) -> ProjectPickResult:
+        """The full :class:`ProjectPickResult` carrying cross-region data."""
+        return self._pick
+
+
+class LoginFinishPublishError(MixpanelHeadlessError):
+    """Token exchange succeeded but the publish step failed.
+
+    Raised by :func:`mixpanel_headless.accounts.login_unified_finish` (and
+    :func:`login_unified_resume`) when the OAuth code has already been
+    exchanged for tokens but the subsequent ``/me`` probe / project
+    resolution / account write failed in a recoverable way (bad
+    ``--name``, project not visible, name collision, transient ``/me``
+    failure, etc.). Re-running ``mp login --finish`` would fail at the
+    token exchange step because the IdP one-time-uses authorization
+    codes; the user must run ``mp login --resume <placeholder_dir>``
+    with corrected args to recover.
+
+    Carries ``placeholder_dir`` so the CLI / slash command can surface
+    the exact resume command without the user having to ``ls
+    ~/.mp/accounts/`` for a ``.tmp-*`` directory. The original error's
+    code, message, and details are preserved so consumers can still
+    branch on the underlying cause.
+
+    Maps to ``ExitCode.GENERAL_ERROR`` (1) by default; the CLI's
+    ``--finish`` / ``--resume`` paths catch it explicitly and emit a
+    structured JSON error envelope on stdout before exit.
+
+    Example:
+        ```python
+        try:
+            result = login_unified_finish(pasted_url=url)
+        except LoginFinishPublishError as exc:
+            print(f"Resume with: mp login --resume {exc.placeholder_dir}")
+            print(f"Original cause: {exc.original_code}: {exc.original_message}")
+        ```
+    """
+
+    def __init__(
+        self,
+        *,
+        placeholder_dir: Path,
+        cause: BaseException,
+    ) -> None:
+        """Initialize LoginFinishPublishError.
+
+        Args:
+            placeholder_dir: The ``.tmp-{nonce}`` directory still on disk
+                with valid ``tokens.json``. The user passes this to
+                ``mp login --resume`` to recover.
+            cause: The underlying exception that triggered the publish
+                failure. ``code``, ``message``, and ``details`` are
+                copied into this wrapper for slash-command rendering.
+        """
+        self._placeholder_dir = placeholder_dir
+        original_code = str(getattr(cause, "code", None) or type(cause).__name__)
+        original_message = str(cause)
+        original_details = (
+            dict(getattr(cause, "details", {}) or {})
+            if hasattr(cause, "details")
+            else {}
+        )
+        self._original_code = original_code
+        self._original_message = original_message
+        message = (
+            f"Token exchange succeeded but publish failed: "
+            f"{original_code}: {original_message}\n\n"
+            f"Recover with: mp login --resume {placeholder_dir}\n"
+            f"(Re-running --finish won't work — the OAuth code has already "
+            f"been consumed.)"
+        )
+        super().__init__(
+            message,
+            code="LOGIN_FINISH_PUBLISH_FAILED",
+            details={
+                "placeholder_dir": str(placeholder_dir),
+                "original_code": original_code,
+                "original_message": original_message,
+                "original_details": original_details,
+            },
+        )
+
+    @property
+    def placeholder_dir(self) -> Path:
+        """The ``.tmp-{nonce}`` placeholder directory ready for ``--resume``."""
+        return self._placeholder_dir
+
+    @property
+    def original_code(self) -> str:
+        """Machine-readable code of the underlying publish failure."""
+        return self._original_code
+
+    @property
+    def original_message(self) -> str:
+        """Human-readable message of the underlying publish failure."""
+        return self._original_message
 
 
 class WorkspaceScopeError(MixpanelHeadlessError):

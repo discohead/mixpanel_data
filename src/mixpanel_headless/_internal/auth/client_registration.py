@@ -42,6 +42,18 @@ OAUTH_BASE_URLS: dict[str, str] = {
     "in": "https://in.mixpanel.com/oauth/",
 }
 
+#: Canonical project ``domain`` host string keyed by region.
+#: Mirrors ``OAUTH_BASE_URLS`` keys so the auto-pick filter can map a
+#: region back to the host string ``MeProjectInfo.domain`` reports.
+#: Co-located here as the single source of region truth — both the auth
+#: endpoint config and the auto-pick region filter resolve through this
+#: file.
+DOMAIN_FOR_REGION: dict[str, str] = {
+    "us": "mixpanel.com",
+    "eu": "eu.mixpanel.com",
+    "in": "in.mixpanel.com",
+}
+
 #: Scopes sent in the DCR request body for server-side validation.
 #: Advisory only — DCR does NOT store these on the application model.
 #: The created app has an empty scope field, meaning all scopes are allowed.

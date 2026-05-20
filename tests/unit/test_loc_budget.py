@@ -63,13 +63,18 @@ def _auth_subsystem_files() -> list[Path]:
 class TestLocBudget:
     """FR-067: keep the auth subsystem within a defensible size envelope."""
 
-    FILE_COUNT_CAP = 20
-    """Maximum number of auth-subsystem files. A 21st file fails this test."""
+    FILE_COUNT_CAP = 21
+    """Maximum number of auth-subsystem files. A 22nd file fails this test.
 
-    LOC_CAP = 8800
-    """Maximum total LoC across the auth subsystem (~7% headroom over current).
+    Bumped 20 → 21 by the two-shot ``mp login --start/--finish/--resume``
+    flow which added ``_internal/auth/inflight.py`` (on-disk PKCE
+    verifier + placeholder helpers).
+    """
 
-    Bumped 6500 → 6700 → 8800 by 043 (frictionless-auth):
+    LOC_CAP = 10500
+    """Maximum total LoC across the auth subsystem (~5% headroom over current).
+
+    Bumped 6500 → 6700 → 8800 → 10500:
     - 6500 → 6700 covered the two new files
       (``_internal/auth/region_probe.py``, ``_internal/auth/naming.py``)
       plus the relaxations in ``cli/commands/account.py`` /
@@ -77,8 +82,14 @@ class TestLocBudget:
     - 6700 → 8800 added ``accounts.py`` (1500+ lines after the
       ``login_unified`` orchestrator landed) to the scope so the
       orchestrator's growth is also guarded going forward.
-    See ``specs/043-frictionless-auth/plan.md`` §"Scale/Scope" and the
-    rescue plan at ``~/.claude/plans/thoroughly-and-rigorously-and-gentle-lemur.md``.
+    - 8800 → 10500 covers the two-shot ``mp login --start/--finish/--resume``
+      flow: ``inflight.py`` (~480 lines) + ~700 lines added to
+      ``accounts.py`` (``ProjectPickResult``, auto-pick filter cascade,
+      ``_publish_account_from_tokens``, the three new ``login_unified_*``
+      entry points).
+    See ``specs/043-frictionless-auth/plan.md`` and the contracts under
+    ``specs/043-frictionless-auth/contracts/`` for the two-shot flow
+    design that motivated the most recent bump.
     """
 
     def test_file_count_cap(self) -> None:

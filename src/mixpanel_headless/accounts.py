@@ -16,8 +16,9 @@ import logging
 import os
 import shutil
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import SecretStr
 
@@ -44,7 +45,9 @@ from mixpanel_headless.exceptions import (
     AccountExistsError,
     ConfigError,
     InvalidArgumentError,
+    LoginFinishPublishError,
     MixpanelHeadlessError,
+    NeedsRegionSwitchError,
     OAuthError,
     ProjectNotFoundError,
 )
@@ -56,7 +59,135 @@ from mixpanel_headless.types import (
 )
 
 if TYPE_CHECKING:
+    from mixpanel_headless._internal.auth.inflight import InflightSession
     from mixpanel_headless._internal.me import MeProjectInfo, MeResponse
+
+
+PickMethod = Literal[
+    "explicit",
+    "tty_picker",
+    "sole_survivor",
+    "sole_survivor_filtered",
+    "primary_org_lowest_id",
+    "fallback_with_unintegrated",
+    "fallback_with_demos",
+    "cross_region_only",
+    "no_projects",
+]
+"""Discriminator for how :func:`_resolve_project` arrived at its pick.
+
+The CLI uses this to render the right confirmation language ("auto-picked
+from your most-active org" vs "your only active project" vs
+"unintegrated — verify first") so the user can tell whether the choice
+needs a sanity check. Programmatic consumers (the slash command, future
+``auth_manager.py login_finish`` wrapper) branch on it without parsing
+the human message.
+
+``sole_survivor`` means the user really has only one region-compatible
+project (the funnel's ``region_compatible_count`` is 1).
+``sole_survivor_filtered`` means there are multiple region-compatible
+projects but only one survived the demo / unintegrated filters — the
+distinction matters for the user-facing message ("your only active
+project" vs "the only non-demo, integrated project")."""
+
+
+@dataclass(frozen=True)
+class ProjectPickResult:
+    """Structured result of :func:`_resolve_project`.
+
+    Replaces the bare ``str | None`` return so the CLI can announce the
+    auto-pick method, the funnel counts, and the primary-org context in
+    the response envelope. Frozen so callers can pass it through layers
+    without worrying about accidental mutation.
+
+    Attributes:
+        project_id: The chosen project ID, or ``None`` when ``method ==
+            "no_projects"`` (account has zero accessible projects) or
+            ``"cross_region_only"`` (raised before the result is returned,
+            but populated on the carried instance for the envelope).
+        method: How the choice was made — see :data:`PickMethod`.
+        auth_region: Region the credential authenticated against. Mirrored
+            here so :class:`NeedsRegionSwitchError` and the envelope can
+            surface it without an extra parameter on every call site.
+        primary_org_id: ID of the org from which ``project_id`` was
+            picked (only populated when ``method`` is one of the
+            ``primary_org_*`` / ``fallback_*`` / ``sole_survivor`` paths).
+        primary_org_name: Human-readable name of the primary org.
+        primary_org_survivor_count: How many projects in the primary org
+            survived the filter chain. Lets the CLI render "picked from
+            your most-active org (28 projects)" instead of just naming
+            the org.
+        accessible_project_count: Total ``len(me_resp.projects)`` before
+            any filter — anchors the funnel display.
+        region_compatible_count: Count after the region filter only.
+        filtered_count: Count after region + ``is_demo=False`` +
+            ``has_integrated=True``.
+        demo_excluded: How many region-compatible projects were dropped
+            for ``is_demo=True``.
+        unintegrated_excluded: How many were dropped for
+            ``has_integrated`` not being ``True``.
+        cross_region_projects: Populated only when ``method ==
+            "cross_region_only"``. List of ``(project_id, project_name,
+            domain)`` tuples so the envelope can suggest "run with
+            ``--region eu``".
+    """
+
+    project_id: str | None
+    method: PickMethod
+    auth_region: str
+    primary_org_id: str | None = None
+    primary_org_name: str | None = None
+    primary_org_survivor_count: int | None = None
+    accessible_project_count: int = 0
+    region_compatible_count: int = 0
+    filtered_count: int = 0
+    demo_excluded: int = 0
+    unintegrated_excluded: int = 0
+    cross_region_projects: builtins.list[tuple[str, str, str]] | None = None
+
+
+@dataclass(frozen=True)
+class LoginFinishResult:
+    """Public return type of :func:`login_unified_finish` / :func:`login_unified_resume`.
+
+    Bundles the published :class:`AccountSummary` with the
+    :class:`ProjectPickResult` so the CLI's ``--finish`` / ``--resume``
+    handlers can render the §9 envelope including ``project_pick``
+    metadata without re-running ``/me`` or re-deriving the algorithm.
+
+    Also returned by the internal
+    :func:`_publish_account_from_tokens` helper that powers both flows.
+
+    Attributes:
+        summary: The published account, with ``user_email`` /
+            ``project_id`` / ``project_name`` populated from ``/me``.
+        pick: The pick result (auto-pick metadata + funnel counts).
+    """
+
+    summary: AccountSummary
+    pick: ProjectPickResult
+
+
+@dataclass(frozen=True)
+class LoginStartResult:
+    """Return value of :func:`login_unified_start`.
+
+    Bundles the persisted :class:`InflightSession` (also written to disk
+    at ``~/.mp/oauth/inflight.json``) with the freshly-built
+    ``authorize_url`` so the CLI can print the URL to the user without
+    re-deriving it. The URL is intentionally NOT persisted in the
+    inflight file — it's purely a function of the other fields, and the
+    on-disk shape stays minimal.
+
+    Attributes:
+        inflight: The persisted session state.
+        authorize_url: Full ``mixpanel.com/oauth/authorize/?...`` URL the
+            user opens in their host browser.
+    """
+
+    inflight: InflightSession
+    authorize_url: str
+
 
 # Picker callback contract. The CLI supplies a TTY-aware implementation;
 # library callers can supply their own or pass ``None`` to fail-fast in
@@ -1616,7 +1747,6 @@ def _login_unified_new_browser(
     import secrets
 
     from mixpanel_headless._internal.auth.flow import OAuthFlow
-    from mixpanel_headless._internal.auth.naming import default_account_name
     from mixpanel_headless._internal.io_utils import atomic_write_bytes
 
     auth_region: Region = region if region is not None else "us"
@@ -1649,13 +1779,133 @@ def _login_unified_new_browser(
         from mixpanel_headless._internal.auth.token import token_payload_bytes
 
         atomic_write_bytes(placeholder_dir / "tokens.json", token_payload_bytes(tokens))
+        # Save region into placeholder meta so a future ``mp login --resume``
+        # can recover it without falling back to "read whichever
+        # client_X.json exists" — the prior prototype's hack failed for
+        # users with multiple regions registered.
+        from mixpanel_headless._internal.auth.inflight import save_placeholder_meta
 
-        # /me probe via temporary OAuthBrowserAccount with placeholder name.
-        # The placeholder dir isn't wired to OnDiskTokenResolver yet, so we
-        # inject the freshly minted bearer via _FreshBrowserBearer.
+        save_placeholder_meta(placeholder_dir, region=auth_region)
+
+        # Hand off to the shared post-token tail. auto_pick=False
+        # preserves the existing same-machine behavior (TTY picker fires
+        # for multi-project; ConfigError E-8 for non-TTY without picker).
+        # The new --finish/--resume paths pass auto_pick=True for the
+        # headless case.
+        result = _publish_account_from_tokens(
+            cm,
+            tokens=tokens,
+            region=auth_region,
+            placeholder_dir=placeholder_dir,
+            name=name,
+            project=project,
+            project_picker=project_picker,
+            auto_pick=False,
+            cached_me=None,
+            progress=progress,
+        )
+        return result.summary
+
+    except Exception:
+        # Failure before the rename — placeholder still has the
+        # ``.tmp-`` prefix. The new contract: keep the placeholder when
+        # ``tokens.json`` exists in it, so ``mp login --resume PLACEHOLDER``
+        # can finish the publish without re-running PKCE. Cleanup only
+        # fires for failures that landed before the token write.
+        tokens_path = placeholder_dir / "tokens.json"
+        if (
+            placeholder_dir.exists()
+            and placeholder_dir.name.startswith(".tmp-")
+            and not tokens_path.exists()
+        ):
+            _safe_rmtree_warn(placeholder_dir)
+        raise
+
+
+def _publish_account_from_tokens(
+    cm: ConfigManager,
+    *,
+    tokens: OAuthTokens,
+    region: Region,
+    placeholder_dir: Path,
+    name: str | None,
+    project: str | None,
+    project_picker: ProjectPicker | None,
+    auto_pick: bool,
+    cached_me: MeResponse | None,
+    progress: ProgressFactory,
+) -> LoginFinishResult:
+    """Shared post-token tail of the oauth_browser login flows.
+
+    Precondition: ``placeholder_dir`` exists, contains ``tokens.json`` matching
+    ``tokens``, and is named ``.tmp-{nonce}``.
+
+    Runs ``/me`` (or reuses ``cached_me`` when fresh), resolves the project via
+    :func:`_resolve_project`, asserts the project's region matches ``region``,
+    derives the account name (``--name`` wins; otherwise via
+    :func:`default_account_name`), atomic-renames the placeholder to its final
+    dir, registers the account in the TOML, and persists the ``/me`` cache.
+
+    Three callers use this:
+
+    1. :func:`_login_unified_new_browser` — same-machine ``mp login`` (passes
+       ``project_picker=tty_picker``, ``auto_pick=False``, ``cached_me=None``).
+    2. :func:`login_unified_finish` — ``mp login --finish URL`` headless
+       (passes ``project_picker=None``, ``auto_pick=True``, ``cached_me=None``).
+    3. :func:`login_unified_resume` — ``mp login --resume PATH`` recovery
+       (passes ``cached_me=<from placeholder>`` to skip the slow /me round-trip
+       when the cache is still fresh).
+
+    Rollback contract: on any failure BEFORE the rename, the placeholder is
+    left on disk as long as ``tokens.json`` exists in it (so the caller can
+    ``mp login --resume PLACEHOLDER``). The post-rename failure path keeps
+    today's behavior — ``add()`` failure rmtrees the published ``final_dir``
+    so the user isn't left with tokens at the user-visible name and no TOML
+    block.
+
+    Args:
+        cm: The config manager.
+        tokens: The freshly-exchanged tokens. ``access_token`` is read for
+            the in-memory ``/me`` probe via :class:`_FreshBrowserBearer`.
+        region: Auth region the credential is bound to.
+        placeholder_dir: Pre-existing ``.tmp-{nonce}`` directory.
+        name: Explicit account name (``None`` to derive from ``/me``).
+        project: Explicit project ID (``None`` to use picker / auto-pick).
+        project_picker: TTY-gated picker callback (``None`` to skip the
+            picker priority — the only valid combo with ``project_picker=None``
+            is ``auto_pick=True``, ``project is not None``, or a single-
+            project account; otherwise :func:`_resolve_project` raises E-8).
+        auto_pick: Enable the filter-then-sort fallback when no explicit
+            project and no picker. ``True`` for headless ``--finish`` /
+            ``--resume``.
+        cached_me: When supplied, skip the ``/me`` HTTP call. Used by
+            ``--resume`` after a publish failure when the placeholder
+            already carries a fresh ``me.json``.
+        progress: CM factory wrapped around the (optional) ``/me``
+            round-trip so the CLI's spinner / heartbeat stays active.
+
+    Returns:
+        :class:`LoginFinishResult` carrying the published
+        :class:`AccountSummary` plus the :class:`ProjectPickResult` so
+        the CLI can render the §9 envelope.
+
+    Raises:
+        AccountExistsError: Final name collides with an existing account.
+        ConfigError: Invalid name (regex), final dir already exists, or
+            the picker-or-raise priority chain raised E-8.
+        NeedsRegionSwitchError: ``/me`` returned 0 region-compatible projects.
+        ProjectNotFoundError: Explicit ``project`` not visible to ``/me``.
+    """
+    from mixpanel_headless._internal.auth.inflight import cache_me_in_placeholder
+    from mixpanel_headless._internal.auth.naming import default_account_name
+
+    # /me probe — skipped when --resume supplies a fresh cached payload.
+    if cached_me is not None:
+        me_resp = cached_me
+    else:
         temp_account = OAuthBrowserAccount(
             name="_tmp_login_unified_",
-            region=auth_region,
+            region=region,
             default_project=ProjectId("0"),
         )
         with progress(_FETCH_ME_PROGRESS_MESSAGE):
@@ -1665,89 +1915,437 @@ def _login_unified_new_browser(
                     tokens.access_token.get_secret_value()
                 ),
             )
+        # Cache /me in the placeholder so a future ``--resume`` can skip
+        # the round-trip. Failures here aren't fatal — the cache is an
+        # optimization, not a correctness requirement.
+        try:
+            cache_me_in_placeholder(placeholder_dir, me_resp)
+        except OSError as exc:
+            logger.warning("Could not cache /me in %s: %s", placeholder_dir, exc)
 
-        # Resolve the project (priority chain).
-        chosen_project = _resolve_project(
-            me_resp=me_resp,
-            explicit_project=project,
-            project_picker=project_picker,
+    # Resolve project (priority chain). May raise NeedsRegionSwitchError
+    # for cross-region-only accounts; the placeholder stays on disk so
+    # the user can retry with --region after fixing the input.
+    pick = _resolve_project(
+        me_resp=me_resp,
+        explicit_project=project,
+        project_picker=project_picker,
+        auto_pick=auto_pick,
+        region=region,
+    )
+    chosen_project = pick.project_id
+
+    # E-2 cross-check (defense in depth — auto-pick already region-filters,
+    # but explicit / TTY paths can still pick a wrong-region project).
+    _assert_project_region_matches(me_resp, chosen_project, region)
+
+    # Resolve final account name.
+    existing_names = {s.name for s in cm.list_accounts()}
+    final_name = (
+        name if name is not None else default_account_name(me_resp, existing_names)
+    )
+    if final_name in existing_names:
+        raise AccountExistsError(final_name)
+
+    # Validate name regex BEFORE rename (defense against path traversal).
+    try:
+        final_dir = account_dir(final_name)
+    except ValueError as exc:
+        raise ConfigError(
+            f"Invalid account name {final_name!r}: must match "
+            f"`^[a-zA-Z0-9_-]{{1,64}}$`."
+        ) from exc
+    if final_dir.exists():
+        raise ConfigError(
+            f"Final account directory {final_dir} already exists. Run "
+            f"`mp account remove {final_name}` first or pass --name."
         )
 
-        # E-2 cross-check via the shared helper (same wording as the
-        # legacy `login()` path).
-        _assert_project_region_matches(me_resp, chosen_project, auth_region)
+    os.rename(placeholder_dir, final_dir)
+    # Note: placeholder_dir is now the same directory as final_dir, but
+    # the ``placeholder_dir`` Python variable is NOT rebound. This is
+    # the symbol the OUTER except in callers checks via ``.startswith(".tmp-")``;
+    # leaving it pointing at the (now-non-existent) ``.tmp-*`` path is
+    # correct — it tells the outer handler "we already published, your
+    # rollback semantic doesn't apply."
 
-        # Resolve the account name (--name wins; otherwise derive).
-        existing_names = {s.name for s in cm.list_accounts()}
-        final_name = (
-            name if name is not None else default_account_name(me_resp, existing_names)
+    # Persist the account record. If add() raises, roll back final_dir
+    # so the user isn't left with tokens at the user-visible name and no
+    # [accounts.NAME] block.
+    try:
+        summary = add(
+            final_name,
+            type="oauth_browser",
+            region=region,
+            default_project=chosen_project,
         )
-        if final_name in existing_names:
-            # Use the structured AccountExistsError so callers /
-            # downstream tooling (the plugin's auth_manager.py) can
-            # pattern-match by class instead of parsing the message.
-            raise AccountExistsError(final_name)
-
-        # Atomic publish: validate the name first so a malicious or
-        # path-traversal value (`../foo`, absolute path, etc.) raises BEFORE
-        # os.rename publishes tokens outside the accounts tree. account_dir()
-        # enforces the same `^[a-zA-Z0-9_-]{1,64}$` regex the Pydantic
-        # Account model uses; the surrounding except-clause cleans up the
-        # placeholder when this raises.
-        try:
-            final_dir = account_dir(final_name)
-        except ValueError as exc:
-            raise ConfigError(
-                f"Invalid account name {final_name!r}: must match "
-                f"`^[a-zA-Z0-9_-]{{1,64}}$`."
-            ) from exc
-        if final_dir.exists():
-            raise ConfigError(
-                f"Final account directory {final_dir} already exists. Run "
-                f"`mp account remove {final_name}` first or pass --name."
-            )
-        os.rename(placeholder_dir, final_dir)
-        placeholder_dir = final_dir
-
-        # IMPORTANT: only the inner add() + cache write are allowed
-        # between this rename and the inner try-except. Anything inserted
-        # here would silently lose rollback, because the outer except's
-        # ``startswith(".tmp-")`` guard no longer matches ``final_dir``
-        # (we just rebound ``placeholder_dir`` to it) — only the inner
-        # except's ``_safe_rmtree_warn(final_dir)`` covers post-rename
-        # failures. New post-rename steps must add their own rollback.
-
-        # Persist the account record. If add() raises (a race added the
-        # same name between list_accounts() and now, the TOML write
-        # failed, etc.), roll back the on-disk publish so the user is
-        # not left with tokens at the user-visible name and no
-        # [accounts.NAME] block — that combination breaks
-        # `mp account remove` and blocks the next `mp login`.
-        try:
-            summary = add(
-                final_name,
-                type="oauth_browser",
-                region=auth_region,
-                default_project=chosen_project,
-            )
-            # Persist /me cache so the orchestrator's contract holds:
-            # the next MeService call returns instantly from disk
-            # instead of paying another /me round-trip. Inside the same
-            # try so a cache-write failure also rolls back the publish.
-            _persist_me_cache(final_name, me_resp)
-            return _summary_with_me(summary, me_resp=me_resp, project_id=chosen_project)
-        except Exception:
-            _safe_rmtree_warn(final_dir)
-            raise
-
+        _persist_me_cache(final_name, me_resp)
+        return LoginFinishResult(
+            summary=_summary_with_me(
+                summary, me_resp=me_resp, project_id=chosen_project
+            ),
+            pick=pick,
+        )
     except Exception:
-        # Failure before the rename — placeholder still has the
-        # ``.tmp-`` prefix. (The post-rename rollback above handles
-        # add() failure inline; this branch only fires when something
-        # earlier in the try block raised.)
-        if placeholder_dir.name.startswith(".tmp-"):
-            _safe_rmtree_warn(placeholder_dir)
+        _safe_rmtree_warn(final_dir)
         raise
+
+
+def login_unified_start(
+    *,
+    region: Region | None = None,
+) -> LoginStartResult:
+    """Two-shot oauth_browser flow — start step.
+
+    Generates PKCE + state, ensures DCR client registration for ``region``,
+    builds the authorize URL, persists the verifier to
+    ``~/.mp/oauth/inflight.json`` (mode 0o600, 10-min TTL), and returns
+    a :class:`LoginStartResult` carrying both the persisted session and
+    the freshly-built authorize URL. Does NOT open a browser, does NOT
+    start a callback server, does NOT block.
+
+    The caller is responsible for displaying the ``authorize_url`` to the
+    user (slash command, MCP server, scripted wrapper) and then invoking
+    :func:`login_unified_finish` with the redirect URL the user pastes back.
+
+    Region defaults to ``"us"`` since PKCE commits to a region before
+    ``/me`` runs (no probe). EU / India users pass ``region`` explicitly.
+
+    Args:
+        region: Mixpanel region to authenticate against. Defaults to
+            ``"us"``. Locked into the inflight file — ``--finish`` cannot
+            switch.
+
+    Returns:
+        :class:`LoginStartResult` carrying the persisted
+        :class:`InflightSession` and the full authorize URL.
+
+    Raises:
+        OAuthError: PKCE / DCR / port-binding failure.
+    """
+    import time
+    from urllib.parse import urlencode
+
+    from mixpanel_headless._internal.auth.client_registration import (
+        OAUTH_BASE_URLS,
+        ensure_client_registered,
+    )
+    from mixpanel_headless._internal.auth.flow import OAuthFlow
+    from mixpanel_headless._internal.auth.inflight import (
+        INFLIGHT_SCHEMA_VERSION,
+        INFLIGHT_TTL_SECONDS,
+        InflightSession,
+        find_available_callback_port,
+        save_inflight,
+    )
+    from mixpanel_headless._internal.auth.pkce import PkceChallenge
+    from mixpanel_headless._internal.auth.storage import OAuthStorage
+
+    auth_region: Region = region if region is not None else "us"
+    pkce = PkceChallenge.generate()
+    import secrets as _secrets
+
+    state = _secrets.token_urlsafe(32)
+    port = find_available_callback_port()
+    redirect_uri = f"http://localhost:{port}/callback"
+
+    # Construct OAuthFlow purely to share its bumped-timeout httpx.Client
+    # for the DCR round-trip. The flow itself is not driven — we just
+    # need a client with the correct timeout for the cold SOCKS handshake
+    # that bites every first-time Cowork run. The `with` block ensures
+    # the client is closed even if DCR or URL building raises.
+    with OAuthFlow(region=auth_region, storage=OAuthStorage()) as flow:
+        client_info = ensure_client_registered(
+            http_client=flow.http_client,
+            region=auth_region,
+            redirect_uri=redirect_uri,
+            storage=flow.storage,
+        )
+
+    base_url = OAUTH_BASE_URLS[auth_region]
+    authorize_url = f"{base_url}authorize/?" + urlencode(
+        {
+            "response_type": "code",
+            "client_id": client_info.client_id,
+            "redirect_uri": redirect_uri,
+            "state": state,
+            "code_challenge": pkce.challenge,
+            "code_challenge_method": "S256",
+        }
+    )
+
+    now = int(time.time())
+    session = InflightSession(
+        schema_version=INFLIGHT_SCHEMA_VERSION,
+        region=auth_region,
+        client_id=client_info.client_id,
+        redirect_uri=redirect_uri,
+        pkce_verifier=pkce.verifier,
+        state=state,
+        created_at=now,
+        expires_at=now + INFLIGHT_TTL_SECONDS,
+    )
+    save_inflight(session)
+    return LoginStartResult(inflight=session, authorize_url=authorize_url)
+
+
+def login_unified_finish(
+    *,
+    pasted_url: str,
+    name: str | None = None,
+    project: str | None = None,
+    project_picker: ProjectPicker | None = None,
+    progress: ProgressFactory | None = None,
+) -> LoginFinishResult:
+    """Two-shot oauth_browser flow — finish step.
+
+    Reads ``~/.mp/oauth/inflight.json``, validates the pasted URL's state
+    against the inflight, exchanges the authorization code for tokens,
+    writes tokens to a fresh placeholder dir, then delegates to
+    :func:`_publish_account_from_tokens` with ``auto_pick=True``.
+
+    On success: clears the inflight file, returns :class:`LoginFinishResult`
+    so the CLI can render the §9 envelope. On failure (including
+    state mismatch, /me errors, region mismatch, account name collision):
+    leaves the inflight in place so the user can retry without re-running
+    PKCE; leaves the placeholder in place when ``tokens.json`` was
+    already written so the user can ``mp login --resume PLACEHOLDER``.
+
+    Args:
+        pasted_url: The redirect URL (or ``code=...&state=...`` query
+            string) the user pasted from their browser address bar.
+        name: Explicit account name (``None`` to derive from /me).
+        project: Explicit project ID (``None`` to auto-pick).
+        project_picker: Optional TTY picker. CLI sets this when
+            ``sys.stdin.isatty()``; ``None`` for headless callers.
+        progress: CM factory wrapped around the slow ``/me`` call.
+
+    Returns:
+        :class:`LoginFinishResult` for the new account.
+
+    Raises:
+        OAuthError: ``OAUTH_INFLIGHT_*`` (missing / expired / corrupt
+            inflight), ``OAUTH_STATE_MISMATCH`` / ``OAUTH_PASTE_ERROR``
+            (bad pasted URL), or any error from
+            :meth:`OAuthFlow.exchange_code` / ``/me`` / publish.
+        NeedsRegionSwitchError: 0 region-compatible projects.
+        ProjectNotFoundError: Explicit ``project`` not visible.
+        AccountExistsError: Derived name collides; pass ``name=`` to override.
+    """
+    from mixpanel_headless._internal.auth.flow import (
+        OAuthFlow,
+        _parse_pasted_redirect,
+    )
+    from mixpanel_headless._internal.auth.inflight import (
+        clear_inflight,
+        load_inflight,
+        new_placeholder_dir,
+        save_placeholder_meta,
+    )
+    from mixpanel_headless._internal.auth.storage import OAuthStorage
+
+    if progress is None:
+        progress = lambda _msg: contextlib.nullcontext()  # noqa: E731
+
+    inflight = load_inflight()
+    cb = _parse_pasted_redirect(pasted_url, expected_state=inflight.state)
+
+    with OAuthFlow(region=inflight.region, storage=OAuthStorage()) as flow:
+        tokens = flow.exchange_code(
+            code=cb.code,
+            verifier=inflight.pkce_verifier,
+            client_id=inflight.client_id,
+            redirect_uri=inflight.redirect_uri,
+        )
+
+    placeholder_dir = new_placeholder_dir(accounts_root())
+    atomic_write_bytes(placeholder_dir / "tokens.json", token_payload_bytes(tokens))
+    save_placeholder_meta(placeholder_dir, region=inflight.region)
+
+    cm = _config()
+    try:
+        result = _publish_account_from_tokens(
+            cm,
+            tokens=tokens,
+            region=inflight.region,  # type: ignore[arg-type]
+            placeholder_dir=placeholder_dir,
+            name=name,
+            project=project,
+            project_picker=project_picker,
+            auto_pick=True,
+            cached_me=None,
+            progress=progress,
+        )
+    except NeedsRegionSwitchError:
+        # Cross-region is fundamental, not transient — re-running
+        # --resume against this placeholder would hit the same error.
+        # Clean up the placeholder + inflight so the user can run
+        # `mp login --start --region eu` (or whichever region) without
+        # an orphan .tmp-* dir lingering forever.
+        _safe_rmtree_warn(placeholder_dir)
+        clear_inflight()
+        raise
+    except Exception as exc:
+        # Token exchange already consumed the OAuth code, so re-running
+        # --finish with the same paste will fail at the IdP. Clear the
+        # inflight (it's useless now). If the placeholder still has
+        # tokens.json, wrap as LoginFinishPublishError so the CLI can
+        # surface the resume command. Post-rename failures (handled by
+        # the inner except in _publish_account_from_tokens) leave the
+        # placeholder gone, in which case the original exception
+        # propagates unchanged.
+        clear_inflight()
+        if (placeholder_dir / "tokens.json").exists():
+            raise LoginFinishPublishError(
+                placeholder_dir=placeholder_dir,
+                cause=exc,
+            ) from exc
+        raise
+
+    clear_inflight()
+    use(result.summary.name)
+    return result
+
+
+def login_unified_resume(
+    *,
+    placeholder_dir: Path,
+    name: str | None = None,
+    project: str | None = None,
+    project_picker: ProjectPicker | None = None,
+    progress: ProgressFactory | None = None,
+) -> LoginFinishResult:
+    """Two-shot oauth_browser flow — post-publish-failure recovery.
+
+    Reads ``tokens.json`` (and optionally a fresh ``me.json``) from
+    ``placeholder_dir``, then runs only the publish tail. No PKCE, no
+    code exchange — the tokens already exist. Clears the inflight file
+    on success.
+
+    Used when ``mp login --finish`` succeeded at token exchange but
+    failed at publish (e.g., ``/me`` timed out, ``add()`` collision,
+    transient network blip during the ``add()`` write). The user re-runs
+    ``mp login --resume <PLACEHOLDER>`` and we pick up where we left off.
+
+    Args:
+        placeholder_dir: The ``.tmp-{nonce}`` directory left behind by a
+            failed ``--finish`` attempt. Must exist and contain
+            ``tokens.json``.
+        name: Explicit account name (``None`` to derive).
+        project: Explicit project ID (``None`` to auto-pick).
+        project_picker: Optional TTY picker.
+        progress: CM factory.
+
+    Returns:
+        :class:`LoginFinishResult` for the recovered account.
+
+    Raises:
+        ConfigError: ``placeholder_dir`` is not under
+            :func:`accounts_root`, doesn't look like a placeholder
+            (wrong name pattern), doesn't contain ``tokens.json``, or
+            its ``meta.json`` carries an invalid ``region``.
+        OAuthError: ``tokens.json`` is malformed, or
+            ``meta.json`` exists but is corrupt
+            (``OAUTH_PLACEHOLDER_META_CORRUPT``).
+        Plus all the failure modes of :func:`_publish_account_from_tokens`.
+    """
+    from mixpanel_headless._internal.auth.inflight import (
+        clear_inflight,
+        load_cached_me_from_placeholder,
+        read_placeholder_meta,
+        read_tokens_from_placeholder,
+    )
+    from mixpanel_headless._internal.auth.storage import accounts_root as _accounts_root
+
+    if progress is None:
+        progress = lambda _msg: contextlib.nullcontext()  # noqa: E731
+
+    placeholder_dir = placeholder_dir.resolve()
+    # Guard against arbitrary on-disk paths. ``--resume`` will rename the
+    # placeholder into ``accounts_root()``; if a caller hands us
+    # ``/tmp/.tmp-foo``, we'd silently exfiltrate whoever's tokens are
+    # sitting there. Keep ``--resume`` strictly under the accounts root.
+    root = _accounts_root().resolve()
+    if not placeholder_dir.is_relative_to(root):
+        raise ConfigError(
+            f"--resume placeholder must live under {root}; got "
+            f"{placeholder_dir}. Pass the path printed by the failed "
+            f"`mp login --finish` invocation."
+        )
+    if not placeholder_dir.exists():
+        raise ConfigError(f"Placeholder directory {placeholder_dir} does not exist.")
+    if not placeholder_dir.name.startswith(".tmp-"):
+        raise ConfigError(
+            f"--resume expects a .tmp-* placeholder directory; got "
+            f"{placeholder_dir.name}. Pass the path printed by the failed "
+            f"`mp login --finish` invocation."
+        )
+    if not (placeholder_dir / "tokens.json").exists():
+        raise ConfigError(
+            f"No tokens.json in {placeholder_dir}. Nothing to resume — "
+            f"run `mp login --start` to begin a fresh login."
+        )
+
+    tokens = read_tokens_from_placeholder(placeholder_dir)
+
+    # Region detection: prefer the placeholder's meta.json (written at
+    # --finish time). ``read_placeholder_meta`` returns ``None`` ONLY
+    # when meta.json is absent (legacy placeholders predating the
+    # meta-writing code) — corrupt / unreadable meta now raises
+    # ``OAUTH_PLACEHOLDER_META_CORRUPT``. The "us" default is therefore
+    # only reached for legacy placeholders, never for a modern EU/IN
+    # placeholder with a busted meta.json (which would otherwise hit
+    # the NeedsRegionSwitchError cleanup path below and destroy
+    # recoverable tokens).
+    meta = read_placeholder_meta(placeholder_dir)
+    region: Region = "us"
+    if meta is not None:
+        meta_region = meta.get("region")
+        if isinstance(meta_region, str) and meta_region in ("us", "eu", "in"):
+            region = meta_region  # type: ignore[assignment]
+        else:
+            raise ConfigError(
+                f"Placeholder {placeholder_dir} has invalid region "
+                f"{meta_region!r} in meta.json. Repair meta.json by hand "
+                f"or re-run `mp login --start --region <us|eu|in>`."
+            )
+
+    cached_me = load_cached_me_from_placeholder(placeholder_dir)
+
+    cm = _config()
+    try:
+        result = _publish_account_from_tokens(
+            cm,
+            tokens=tokens,
+            region=region,
+            placeholder_dir=placeholder_dir,
+            name=name,
+            project=project,
+            project_picker=project_picker,
+            auto_pick=True,
+            cached_me=cached_me,  # type: ignore[arg-type]  # runtime MeResponse cast
+            progress=progress,
+        )
+    except NeedsRegionSwitchError:
+        # Same as --finish: cross-region is unrecoverable via --resume.
+        # Clean up the placeholder so the user can `mp login --start
+        # --region eu` cleanly.
+        _safe_rmtree_warn(placeholder_dir)
+        clear_inflight()
+        raise
+    except Exception as exc:
+        # Tokens still exist on disk; wrap so the slash command can
+        # render the resume command (same path the user passed in).
+        if (placeholder_dir / "tokens.json").exists():
+            raise LoginFinishPublishError(
+                placeholder_dir=placeholder_dir,
+                cause=exc,
+            ) from exc
+        raise
+
+    clear_inflight()
+    use(result.summary.name)
+    return result
 
 
 def _login_unified_new_credential(
@@ -1874,11 +2472,14 @@ def _login_unified_new_credential(
     with progress(_FETCH_ME_PROGRESS_MESSAGE):
         me_resp = _fetch_me(temp_account)
 
-    chosen_project = _resolve_project(
+    pick = _resolve_project(
         me_resp=me_resp,
         explicit_project=project,
         project_picker=project_picker,
+        auto_pick=False,
+        region=resolved_region,
     )
+    chosen_project = pick.project_id
 
     # Resolve final name (--name wins; otherwise derive from /me).
     final_name: str
@@ -1915,69 +2516,324 @@ def _resolve_project(
     me_resp: MeResponse,
     explicit_project: str | None,
     project_picker: ProjectPicker | None,
-) -> str | None:
+    auto_pick: bool = False,
+    region: Region = "us",
+) -> ProjectPickResult:
     """Apply the project-selection priority chain.
+
+    Returns a :class:`ProjectPickResult` carrying the chosen project ID
+    plus structured metadata (method, primary-org info, funnel counts) so
+    callers can announce how the choice was made. Replaces the prior
+    bare ``str | None`` return.
+
+    The selection chain is:
+
+    1. ``explicit_project`` set → validate visibility, return
+       ``method="explicit"``.
+    2. ``MP_PROJECT_ID`` env set → validate visibility (hard-fail if
+       stale), return ``method="explicit"``.
+    3. Region filter — drop projects whose ``domain`` doesn't match
+       ``region`` per :data:`DOMAIN_FOR_REGION`. If 0 region-compatible
+       projects remain, raise :class:`NeedsRegionSwitchError`.
+    4. ``project_picker`` set → invoke against the region-compatible
+       list (interactive users may want a demo or unintegrated project),
+       return ``method="tty_picker"``.
+    5. ``auto_pick=True`` → run the filter-then-sort algorithm:
+       drop ``is_demo`` and ``has_integrated=False`` projects; pick from
+       the highest-survivor-count org, lowest project ID within. Falls
+       back through unintegrated → demos when no project survives the
+       aggressive filter.
+    6. ``auto_pick=False`` → existing E-8 behavior: raise ``ConfigError``
+       when the user has multiple region-compatible projects and no picker.
 
     Args:
         me_resp: Parsed :class:`MeResponse`.
         explicit_project: ``--project`` argument (priority 1).
-        project_picker: Picker callback for multi-project case.
+        project_picker: Picker callback for the TTY case.
+        auto_pick: Enable the filter-then-sort fallback when no picker
+            and no explicit pick. ``True`` for ``mp login --finish`` /
+            ``--resume`` (the headless paths). ``False`` for same-machine
+            ``mp login`` (preserves today's picker-or-raise behavior).
+        region: Region the credential authenticated against. Used to
+            filter ``MeProjectInfo.domain`` and to populate
+            ``ProjectPickResult.auth_region``.
 
     Returns:
-        The resolved project ID, or ``None`` when the user has zero projects.
+        :class:`ProjectPickResult` with ``project_id`` set on success
+        (``None`` when ``method == "no_projects"``).
 
     Raises:
-        ConfigError: ``--project N`` not in /me (E-6), ``MP_PROJECT_ID``
-            set in the environment but not visible to this account (the
-            stale env var would shadow the picker's choice on every
-            subsequent CLI call via the resolver's env-first priority,
-            silently breaking the next ``mp query`` — surface it now),
-            or non-interactive multi-project context with no picker
+        ProjectNotFoundError: ``explicit_project`` not in ``/me``.
+        ConfigError: ``MP_PROJECT_ID`` set in env but not visible, or
+            multi-project context with no picker and ``auto_pick=False``
             (E-8).
+        NeedsRegionSwitchError: Zero region-compatible projects after
+            region filter.
     """
     projects = me_resp.projects
-    project_keys = builtins.list(projects.keys())
+    accessible_n = len(projects)
 
-    # Priority 1: explicit --project.
+    # No projects at all — nothing to pick. Caller leaves default_project
+    # unset; the user runs ``mp project use ID`` once one becomes accessible.
+    if accessible_n == 0:
+        return ProjectPickResult(
+            project_id=None,
+            method="no_projects",
+            auth_region=region,
+            accessible_project_count=0,
+        )
+
+    # Priority 1: explicit --project. Skips all filtering — the user knows
+    # what they want; ``_assert_project_region_matches`` catches cross-region
+    # picks downstream with a more actionable error.
     if explicit_project is not None:
-        if explicit_project in projects:
-            return explicit_project
-        # Use ProjectNotFoundError so the CLI can map it to exit code 4
-        # (NOT_FOUND) and downstream callers can pattern-match by
-        # class. The structured `available_projects` field carries the
-        # same information that was previously embedded in the message.
-        raise ProjectNotFoundError(explicit_project, available_projects=project_keys)
+        if explicit_project not in projects:
+            raise ProjectNotFoundError(
+                explicit_project,
+                available_projects=builtins.list(projects.keys()),
+            )
+        return ProjectPickResult(
+            project_id=explicit_project,
+            method="explicit",
+            auth_region=region,
+            accessible_project_count=accessible_n,
+            region_compatible_count=accessible_n,
+            filtered_count=accessible_n,
+        )
 
-    # Priority 2: MP_PROJECT_ID env. Either it resolves now, or we
-    # hard-fail — falling through silently just defers the failure to
-    # the user's next `mp query` (the resolver reads MP_PROJECT_ID
-    # ahead of the persisted default_project, so the picker's choice
-    # would be shadowed). Better to flag the stale env var here.
+    # Priority 2: MP_PROJECT_ID env. Treated as user-explicit — hard-fail
+    # if not visible (the resolver reads MP_PROJECT_ID first on every
+    # subsequent CLI call, so a stale value would silently shadow the
+    # picker's choice).
     env_project = os.environ.get("MP_PROJECT_ID")
     if env_project:
-        if env_project in projects:
-            return env_project
-        accessible_lines = "\n".join(
-            f"  - {pid} : {info.name} ({info.domain or '(no domain)'})"
+        if env_project not in projects:
+            accessible_lines = "\n".join(
+                f"  - {pid} : {info.name} ({info.domain or '(no domain)'})"
+                for pid, info in projects.items()
+            )
+            raise ConfigError(
+                f"MP_PROJECT_ID={env_project} is not visible to this account.\n\n"
+                f"Accessible projects:\n{accessible_lines}\n\n"
+                f"Either unset MP_PROJECT_ID, or pass --project ID with a "
+                f"visible value. (Subsequent `mp` calls would otherwise read "
+                f"MP_PROJECT_ID first and silently fail with auth errors.)"
+            )
+        return ProjectPickResult(
+            project_id=env_project,
+            method="explicit",
+            auth_region=region,
+            accessible_project_count=accessible_n,
+            region_compatible_count=accessible_n,
+            filtered_count=accessible_n,
+        )
+
+    # Legacy path: when auto_pick=False, preserve the existing
+    # same-machine behavior precisely. No region pre-filter (the picker
+    # sees all projects; ``_assert_project_region_matches`` catches
+    # wrong-region picks after the fact). This keeps the behavior
+    # documented as "TTY picker fires for multi-project, E-8 raises for
+    # non-TTY without picker" intact for ``mp login`` (no --finish flag).
+    if not auto_pick:
+        return _resolve_project_legacy(
+            me_resp=me_resp,
+            project_picker=project_picker,
+            region=region,
+            accessible_n=accessible_n,
+        )
+
+    # Auto-pick path (--finish / --resume). Region-filter first, then
+    # apply the aggressive filter cascade with primary-org / lowest-id
+    # tiebreak. TTY picker (if present) preempts auto-pick; same-machine
+    # SSH-into-Cowork users still get to choose interactively.
+    from mixpanel_headless._internal.auth.client_registration import DOMAIN_FOR_REGION
+
+    auth_domain = DOMAIN_FOR_REGION.get(region)
+    region_compat: dict[str, MeProjectInfo] = {}
+    if auth_domain is None:
+        # Unknown region (shouldn't happen under the Region literal) —
+        # don't filter, treat all as region-compat.
+        region_compat = dict(projects)
+    else:
+        for pid, info in projects.items():
+            # Projects with no ``domain`` (older payloads) are kept —
+            # better to surface them than to silently exclude on missing data.
+            if info.domain is None or info.domain == auth_domain:
+                region_compat[pid] = info
+    region_n = len(region_compat)
+
+    if region_n == 0:
+        # All projects in a different cluster. Refuse to publish a
+        # wrong-region account; surface alternatives.
+        cross = [
+            (pid, info.name, info.domain or "(no domain)")
             for pid, info in projects.items()
+        ]
+        per_region: dict[str, int] = {}
+        for _pid, _name, domain in cross:
+            r = _domain_to_region(domain) or "(unknown)"
+            per_region[r] = per_region.get(r, 0) + 1
+        breakdown = ", ".join(
+            f"{count} in {r}" for r, count in sorted(per_region.items())
         )
-        raise ConfigError(
-            f"MP_PROJECT_ID={env_project} is not visible to this account.\n\n"
-            f"Accessible projects:\n{accessible_lines}\n\n"
-            f"Either unset MP_PROJECT_ID, or pass --project ID with a "
-            f"visible value. (Subsequent `mp` calls would otherwise read "
-            f"MP_PROJECT_ID first and silently fail with auth errors.)"
+        suggestion = ""
+        for r in ("eu", "in", "us"):
+            if r != region and per_region.get(r):
+                suggestion = (
+                    f"\n\nRun `mp login --start --region {r}` to create a "
+                    f"separate account for that region."
+                )
+                break
+        pick = ProjectPickResult(
+            project_id=None,
+            method="cross_region_only",
+            auth_region=region,
+            accessible_project_count=accessible_n,
+            region_compatible_count=0,
+            filtered_count=0,
+            cross_region_projects=cross,
+        )
+        raise NeedsRegionSwitchError(
+            f"No projects in region {region} accessible to this account "
+            f"({breakdown}).{suggestion}",
+            pick=pick,
         )
 
-    # Priority 3: single-project auto-pick.
-    if len(projects) == 1:
-        return project_keys[0]
-    if not projects:
-        # No projects at all → leave default_project unset; caller can set
-        # it later via `mp project use ID` once one becomes accessible.
-        return None
+    # Aggressive filter chain: drop demos, then drop unintegrated. Both
+    # fields are undeclared on MeProjectInfo (live API returns them via
+    # model_extra).
+    def _is_demo(info: MeProjectInfo) -> bool:
+        """True if ``info`` is a Mixpanel demo project.
 
-    # Priority 4: picker callback (raises E-8 if absent).
+        Read from the live ``/me`` payload's ``is_demo`` field via
+        ``model_extra`` (the field is not declared on
+        :class:`MeProjectInfo` so it travels through pydantic's extras).
+        Demo projects are excluded from auto-pick unless every
+        region-compatible project is a demo (the
+        ``fallback_with_demos`` last resort).
+        """
+        return bool((info.model_extra or {}).get("is_demo"))
+
+    def _is_integrated(info: MeProjectInfo) -> bool:
+        """True if ``info`` has received events at some point.
+
+        ``has_integrated == True`` means the project has data;
+        anything else (missing, ``False``, ``None``) means
+        "abandoned / never-shipped" for auto-pick purposes. Same
+        ``model_extra`` story as :func:`_is_demo`. Unintegrated
+        projects are excluded unless every non-demo project is
+        unintegrated (the ``fallback_with_unintegrated`` cascade
+        step).
+        """
+        return (info.model_extra or {}).get("has_integrated") is True
+
+    no_demos = {pid: info for pid, info in region_compat.items() if not _is_demo(info)}
+    demo_excluded = region_n - len(no_demos)
+    filtered = {pid: info for pid, info in no_demos.items() if _is_integrated(info)}
+    unintegrated_excluded = len(no_demos) - len(filtered)
+
+    # Sole-survivor short-circuit at the region-compat level.
+    if region_n == 1:
+        only = next(iter(region_compat))
+        only_info = region_compat[only]
+        org = me_resp.organizations.get(str(only_info.organization_id))
+        return ProjectPickResult(
+            project_id=only,
+            method="sole_survivor",
+            auth_region=region,
+            primary_org_id=str(only_info.organization_id),
+            primary_org_name=org.name if org is not None else None,
+            primary_org_survivor_count=1,
+            accessible_project_count=accessible_n,
+            region_compatible_count=region_n,
+            filtered_count=len(filtered),
+            demo_excluded=demo_excluded,
+            unintegrated_excluded=unintegrated_excluded,
+        )
+
+    # TTY picker preempts auto-pick. Operates on region-compat (NOT the
+    # aggressive filter) so interactive users can still pick a demo or
+    # unintegrated project if they want.
+    if project_picker is not None:
+
+        def _sort_key(item: tuple[str, MeProjectInfo]) -> tuple[str, str]:
+            """Build (org_name, project_name) sort key, both case-folded."""
+            _pid, info = item
+            org = me_resp.organizations.get(str(info.organization_id))
+            org_name = org.name if org is not None else f"~org {info.organization_id}"
+            return (org_name.lower(), info.name.lower())
+
+        sorted_projects = sorted(region_compat.items(), key=_sort_key)
+        chosen = project_picker(me_resp, sorted_projects)
+        return ProjectPickResult(
+            project_id=chosen,
+            method="tty_picker",
+            auth_region=region,
+            accessible_project_count=accessible_n,
+            region_compatible_count=region_n,
+            filtered_count=len(filtered),
+            demo_excluded=demo_excluded,
+            unintegrated_excluded=unintegrated_excluded,
+        )
+
+    # No picker, no explicit, auto_pick=True → run the algorithm.
+    return _auto_pick_from_filtered(
+        me_resp=me_resp,
+        region=region,
+        accessible_n=accessible_n,
+        region_compat=region_compat,
+        no_demos=no_demos,
+        filtered=filtered,
+        demo_excluded=demo_excluded,
+        unintegrated_excluded=unintegrated_excluded,
+    )
+
+
+def _resolve_project_legacy(
+    *,
+    me_resp: MeResponse,
+    project_picker: ProjectPicker | None,
+    region: Region,
+    accessible_n: int,
+) -> ProjectPickResult:
+    """Legacy ``auto_pick=False`` path — preserves pre-043 same-machine behavior.
+
+    No region filter (the picker sees all projects; the post-pick
+    ``_assert_project_region_matches`` cross-check raises E-2 on wrong
+    region). Single-project auto-pick when there's exactly one project.
+    Picker fires for multi-project. Raises ``ConfigError`` (E-8) when
+    multi-project and no picker.
+
+    Args:
+        me_resp: Parsed ``/me``.
+        project_picker: TTY picker callback.
+        region: Auth region (carried into the result for the envelope).
+        accessible_n: Total project count (already computed by caller).
+
+    Returns:
+        :class:`ProjectPickResult` with method ``"explicit"`` (single
+        project) or ``"tty_picker"`` (after picker fires).
+
+    Raises:
+        ConfigError: Multi-project context with no picker (E-8).
+    """
+    projects = me_resp.projects
+    if accessible_n == 1:
+        only = next(iter(projects))
+        only_info = projects[only]
+        org = me_resp.organizations.get(str(only_info.organization_id))
+        return ProjectPickResult(
+            project_id=only,
+            method="sole_survivor",
+            auth_region=region,
+            primary_org_id=str(only_info.organization_id),
+            primary_org_name=org.name if org is not None else None,
+            primary_org_survivor_count=1,
+            accessible_project_count=accessible_n,
+            region_compatible_count=accessible_n,
+            filtered_count=accessible_n,
+        )
+
     if project_picker is None:
         accessible_lines = "\n".join(
             f"  - {pid} : {info.name} ({info.domain or '(no domain)'})"
@@ -1990,16 +2846,6 @@ def _resolve_project(
             f"Pass --project ID to select one explicitly, or set MP_PROJECT_ID."
         )
 
-    # Group projects by org first, then alphabetize within. With many
-    # projects spread across multiple orgs, a name-only sort interleaves
-    # orgs and forces the user to scan the whole list. The (org, project)
-    # key produces contiguous per-org blocks. Both axes lowercased so
-    # mixed-case names ("Demo Projects" vs "demo team") collate
-    # intuitively instead of by raw byte order. Unknown org IDs (a
-    # project tied to an org missing from /me.organizations) fall back
-    # to a synthetic ``"~org {id}"`` key — the leading tilde sinks them
-    # to the bottom rather than the chaotic position they would land at
-    # if we used the raw integer-as-string.
     def _sort_key(item: tuple[str, MeProjectInfo]) -> tuple[str, str]:
         """Build (org_name, project_name) sort key, both case-folded."""
         _pid, info = item
@@ -2008,15 +2854,169 @@ def _resolve_project(
         return (org_name.lower(), info.name.lower())
 
     sorted_projects = sorted(projects.items(), key=_sort_key)
-    return project_picker(me_resp, sorted_projects)
+    chosen = project_picker(me_resp, sorted_projects)
+    return ProjectPickResult(
+        project_id=chosen,
+        method="tty_picker",
+        auth_region=region,
+        accessible_project_count=accessible_n,
+        region_compatible_count=accessible_n,
+        filtered_count=accessible_n,
+    )
+
+
+def _auto_pick_from_filtered(
+    *,
+    me_resp: MeResponse,
+    region: Region,
+    accessible_n: int,
+    region_compat: dict[str, MeProjectInfo],
+    no_demos: dict[str, MeProjectInfo],
+    filtered: dict[str, MeProjectInfo],
+    demo_excluded: int,
+    unintegrated_excluded: int,
+) -> ProjectPickResult:
+    """Apply the auto-pick filter cascade and return the structured result.
+
+    Tries the aggressively-filtered set (region + non-demo + integrated)
+    first. Falls back to ``no_demos`` (re-include unintegrated), then to
+    ``region_compat`` (re-include demos). The method enum tells the CLI
+    which fallback fired so it can surface the appropriate caveat.
+
+    Args:
+        me_resp: Parsed ``/me`` response (used to look up org names).
+        region: Region the credential authenticated against.
+        accessible_n: Total ``len(me_resp.projects)`` (for the funnel).
+        region_compat: Projects after region filter (the broadest pool).
+        no_demos: Projects after region + ``is_demo=False``.
+        filtered: Projects after region + ``is_demo=False`` +
+            ``has_integrated=True``.
+        demo_excluded: Count of region-compat projects dropped for is_demo.
+        unintegrated_excluded: Count of non-demo projects dropped for
+            ``has_integrated`` not being True.
+
+    Returns:
+        The :class:`ProjectPickResult` carrying the pick + funnel counts.
+    """
+    region_n = len(region_compat)
+    filtered_n = len(filtered)
+
+    if filtered:
+        chosen, primary_org_id, survivor_count = _pick_from_primary_org(
+            filtered, me_resp.organizations
+        )
+        org = me_resp.organizations.get(str(primary_org_id))
+        return ProjectPickResult(
+            project_id=chosen,
+            method=(
+                "primary_org_lowest_id" if filtered_n > 1 else "sole_survivor_filtered"
+            ),
+            auth_region=region,
+            primary_org_id=str(primary_org_id),
+            primary_org_name=org.name if org is not None else None,
+            primary_org_survivor_count=survivor_count,
+            accessible_project_count=accessible_n,
+            region_compatible_count=region_n,
+            filtered_count=filtered_n,
+            demo_excluded=demo_excluded,
+            unintegrated_excluded=unintegrated_excluded,
+        )
+
+    if no_demos:
+        chosen, primary_org_id, survivor_count = _pick_from_primary_org(
+            no_demos, me_resp.organizations
+        )
+        org = me_resp.organizations.get(str(primary_org_id))
+        return ProjectPickResult(
+            project_id=chosen,
+            method="fallback_with_unintegrated",
+            auth_region=region,
+            primary_org_id=str(primary_org_id),
+            primary_org_name=org.name if org is not None else None,
+            primary_org_survivor_count=survivor_count,
+            accessible_project_count=accessible_n,
+            region_compatible_count=region_n,
+            filtered_count=filtered_n,
+            demo_excluded=demo_excluded,
+            unintegrated_excluded=unintegrated_excluded,
+        )
+
+    # Last resort: re-include demos.
+    chosen, primary_org_id, survivor_count = _pick_from_primary_org(
+        region_compat, me_resp.organizations
+    )
+    org = me_resp.organizations.get(str(primary_org_id))
+    return ProjectPickResult(
+        project_id=chosen,
+        method="fallback_with_demos",
+        auth_region=region,
+        primary_org_id=str(primary_org_id),
+        primary_org_name=org.name if org is not None else None,
+        primary_org_survivor_count=survivor_count,
+        accessible_project_count=accessible_n,
+        region_compatible_count=region_n,
+        filtered_count=filtered_n,
+        demo_excluded=demo_excluded,
+        unintegrated_excluded=unintegrated_excluded,
+    )
+
+
+def _pick_from_primary_org(
+    pool: dict[str, MeProjectInfo],
+    orgs: dict[str, Any],
+) -> tuple[str, int, int]:
+    """Pick the org with the most ``pool`` survivors, then lowest project ID.
+
+    Tiebreak across orgs: lowest org ID (deterministic; orgs with equal
+    survivor counts get sorted by integer ID). Tiebreak within an org:
+    lowest project ID (numeric). Both rules are stable across runs so a
+    re-run on the same ``/me`` produces the same auto-pick.
+
+    Returns ``(project_id, primary_org_id, survivor_count)``.
+
+    Args:
+        pool: Project subset to pick from. Must be non-empty.
+        orgs: ``me_resp.organizations``. Currently unconsulted by the
+            tiebreak rules (which use IDs only); accepted as a parameter
+            for symmetry with the caller and so the algorithm can be
+            extended with name-based heuristics without breaking the call
+            site.
+
+    Returns:
+        Tuple of (chosen project ID, the primary org ID, survivor count
+        in that org).
+    """
+    del orgs  # unused — see docstring
+    counts: dict[int, int] = {}
+    for info in pool.values():
+        counts[info.organization_id] = counts.get(info.organization_id, 0) + 1
+    # Highest count wins; tiebreak by lowest org ID.
+    primary_org_id = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+    survivor_count = counts[primary_org_id]
+    in_primary = [
+        pid for pid, info in pool.items() if info.organization_id == primary_org_id
+    ]
+    # Lowest project ID (numeric) wins. Numeric IDs are guaranteed by the
+    # /me response shape; non-numeric IDs would TypeError here, which is
+    # the right surface signal — silent fallback to lex-sort would mask a
+    # schema regression.
+    chosen = min(in_primary, key=lambda pid: int(pid))
+    return chosen, primary_org_id, survivor_count
 
 
 __all__ = [
+    "LoginFinishResult",
+    "LoginStartResult",
+    "PickMethod",
+    "ProjectPickResult",
     "add",
     "export_bridge",
     "list",
     "login",
     "login_unified",
+    "login_unified_finish",
+    "login_unified_resume",
+    "login_unified_start",
     "logout",
     "remove",
     "remove_bridge",

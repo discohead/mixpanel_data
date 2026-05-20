@@ -107,7 +107,11 @@ def _parse_pasted_redirect(line: str, *, expected_state: str) -> CallbackResult:
         )
     code = code_list[0]
     state = state_list[0]
-    if state != expected_state:
+    # Constant-time compare. Practical timing-oracle exploitability against
+    # a single-use local CLI is limited, but the cost is zero and a string
+    # `!=` here would be the kind of paper cut a future security audit
+    # would (correctly) flag.
+    if not secrets.compare_digest(state, expected_state):
         raise OAuthError(
             "State mismatch — the pasted text does not belong to this login session.",
             code="OAUTH_STATE_MISMATCH",
@@ -165,7 +169,16 @@ class OAuthFlow:
             )
         self._region = region
         self._storage = storage or OAuthStorage()
-        self._http_client = http_client or httpx.Client()
+        # httpx defaults to 5s for every phase. A cold SOCKS5h handshake
+        # (DNS-over-proxy + TLS through tunnel) reliably exceeds 5s on first
+        # call inside Cowork; subsequent warm calls land in 0.5-0.9s. The
+        # Mixpanel /oauth/ endpoints themselves are fast, so a generous
+        # read timeout costs nothing in the happy path and prevents the
+        # confusing "OAUTH_REGISTRATION_ERROR: read timed out" we hit
+        # repeatedly during the diagnosis phase.
+        self._http_client = http_client or httpx.Client(
+            timeout=httpx.Timeout(30.0, connect=10.0),
+        )
         self._base_url = OAUTH_BASE_URLS[region]
 
     @property
@@ -176,6 +189,61 @@ class OAuthFlow:
             The region string (``us``, ``eu``, or ``in``).
         """
         return self._region
+
+    @property
+    def http_client(self) -> httpx.Client:
+        """Shared :class:`httpx.Client` used for token exchange and DCR.
+
+        Exposed publicly so the two-shot ``mp login --start`` /
+        ``--finish`` orchestrators in :mod:`mixpanel_headless.accounts`
+        can pass the same connection pool into
+        :func:`ensure_client_registered` without reaching into a
+        leading-underscore attribute.
+
+        Returns:
+            The underlying ``httpx.Client``.
+        """
+        return self._http_client
+
+    @property
+    def storage(self) -> OAuthStorage:
+        """Shared :class:`OAuthStorage` used for token + client persistence.
+
+        Same rationale as :attr:`http_client`: the two-shot login
+        orchestrators reuse this storage so the cached DCR client info
+        survives across ``--start`` / ``--finish`` invocations.
+
+        Returns:
+            The underlying ``OAuthStorage``.
+        """
+        return self._storage
+
+    def close(self) -> None:
+        """Close the underlying :class:`httpx.Client`. Idempotent.
+
+        Safe to call multiple times — ``httpx.Client.close()`` is a
+        no-op after the first close. Library callers can either invoke
+        this directly or use :class:`OAuthFlow` as a context manager.
+        """
+        self._http_client.close()
+
+    def __enter__(self) -> OAuthFlow:
+        """Enter the context — returns ``self``.
+
+        Returns:
+            This :class:`OAuthFlow` instance.
+        """
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        """Exit the context — closes the underlying ``httpx.Client``.
+
+        Args:
+            *_exc: Standard ``__exit__`` arguments (exception type,
+                value, traceback). Ignored — :meth:`close` runs
+                regardless of whether the body raised.
+        """
+        self.close()
 
     def get_valid_token(self, region: str) -> str:
         """Return a valid access token, refreshing if expired.
@@ -295,15 +363,17 @@ class OAuthFlow:
             state=state,
         )
 
-        # Step 5: Set up two completers that race on a shared queue:
-        #   1) The local callback server (always — handles same-machine case).
-        #   2) Stdin paste reader (only when ``open_browser=False`` — handles
-        #      "I opened the URL on my laptop, the localhost redirect failed,
-        #      let me paste the URL back").
-        # Whichever produces a valid (code, state) first wins. PKCE verifier
-        # stays in this process so no on-disk persistence is needed.
+        # Step 5: Set up two completers that race. The previous version
+        # used a queue.get(timeout=310.0) on a result queue and only
+        # checked an error queue if the wait timed out — meaning a
+        # paste-reader that failed fast (empty stdin, state mismatch) sat
+        # silently in error_q for 5 minutes while the user thought the
+        # CLI was hung. Now both completers signal a single
+        # threading.Event; the main thread wakes within milliseconds of
+        # either completing and pulls from result_q OR error_q.
         result_q: queue.Queue[CallbackResult] = queue.Queue(maxsize=1)
         error_q: queue.Queue[Exception] = queue.Queue(maxsize=1)
+        done_event = threading.Event()
 
         def _run_callback() -> None:
             """Drive the local callback server; first completer wins."""
@@ -317,6 +387,8 @@ class OAuthFlow:
             except Exception as exc:
                 with contextlib.suppress(queue.Full):
                     error_q.put_nowait(exc)
+            finally:
+                done_event.set()
 
         def _run_paste_reader() -> None:
             """Read a pasted redirect URL / query string from stdin."""
@@ -328,10 +400,26 @@ class OAuthFlow:
             except Exception as exc:
                 with contextlib.suppress(queue.Full):
                     error_q.put_nowait(exc)
+            finally:
+                done_event.set()
 
         threading.Thread(target=_run_callback, daemon=True).start()
+        # Skip the paste reader entirely when stdin is non-TTY (Cowork
+        # pipes, CI runners). There is no in-band way to deliver the
+        # paste, and starting the thread just clutters error_q with a
+        # fast "empty paste" failure that races with the legitimate
+        # callback path. Same-machine SSH users with a TTY still get the
+        # paste fallback for the failed-loopback case.
+        paste_reader_started = False
         if not open_browser:
-            threading.Thread(target=_run_paste_reader, daemon=True).start()
+            # Some test fixtures swap in a stdin replacement that lacks
+            # ``isatty`` (intentional or accidental). Treat absence as
+            # "non-TTY" so we don't AttributeError; users with a real
+            # TTY have ``isatty`` available.
+            stdin_is_tty = bool(getattr(sys.stdin, "isatty", lambda: False)())
+            if stdin_is_tty:
+                threading.Thread(target=_run_paste_reader, daemon=True).start()
+                paste_reader_started = True
 
         # Small delay to ensure callback server is listening before opening
         # browser / printing the URL.
@@ -347,6 +435,15 @@ class OAuthFlow:
                     details={"authorize_url": authorize_url},
                 ) from exc
         else:
+            paste_hint = (
+                "Otherwise, paste the redirect URL (or the `code=...&state=...` "
+                "portion) below and press Enter:"
+                if paste_reader_started
+                else (
+                    "Stdin is not a TTY — for non-interactive environments, "
+                    "use `mp login --start` and `mp login --finish URL` instead."
+                )
+            )
             print(
                 "Open this URL in your browser to authorize:\n"
                 f"  {authorize_url}\n"
@@ -354,21 +451,34 @@ class OAuthFlow:
                 "If the redirect to http://localhost:"
                 f"{bound_port}/callback succeeds, the CLI will continue "
                 "automatically.\n"
-                "Otherwise, paste the redirect URL (or the `code=...&state=...` "
-                "portion) below and press Enter:",
+                f"{paste_hint}",
                 file=sys.stderr,
                 flush=True,
             )
 
-        # Step 6: Wait for whichever completer produces first.
+        # Step 6: Wait for either completer to signal done. 310s matches
+        # the inner callback-server 300s timeout plus a small slack so
+        # the explicit OAUTH_TIMEOUT below only fires if both completers
+        # really hung past their own deadlines (callback timed out + no
+        # paste). Done within milliseconds of either completer setting
+        # the event in the happy path.
+        if not done_event.wait(timeout=310.0):
+            raise OAuthError(
+                "Login timed out waiting for callback or paste.",
+                code="OAUTH_TIMEOUT",
+            )
         try:
-            callback_result = result_q.get(timeout=310.0)
-        except queue.Empty as empty:
+            callback_result = result_q.get_nowait()
+        except queue.Empty:
             try:
                 err = error_q.get_nowait()
-            except queue.Empty:
+            except queue.Empty as empty:
+                # Both queues empty after done_event fired — should be
+                # unreachable since every completer puts to one queue
+                # before setting the event. Fall through to a structured
+                # error rather than silently hanging.
                 raise OAuthError(
-                    "Login timed out waiting for callback or paste.",
+                    "Login completer signaled done but produced no result.",
                     code="OAUTH_TIMEOUT",
                 ) from empty
             if isinstance(err, OAuthError):
