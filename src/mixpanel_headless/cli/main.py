@@ -22,7 +22,10 @@ from typing import Annotated, Literal
 import typer
 
 import mixpanel_headless
+from mixpanel_headless._internal.client_metadata import set_entry_point
 from mixpanel_headless.cli.utils import ExitCode, err_console
+
+set_entry_point("cli")
 
 
 def _get_rich_markup_mode() -> Literal["markdown", "rich"] | None:

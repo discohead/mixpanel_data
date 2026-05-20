@@ -29,7 +29,11 @@ from mixpanel_headless._internal.auth.account import (
 )
 from mixpanel_headless._internal.auth.storage import account_dir
 from mixpanel_headless._internal.auth.token import OAuthTokens, token_payload_bytes
-from mixpanel_headless._internal.io_utils import atomic_write_bytes
+from mixpanel_headless._internal.io_utils import (
+    atomic_write_bytes,
+    read_credential_bytes,
+    reject_if_symlink,
+)
 from mixpanel_headless.exceptions import OAuthError
 
 
@@ -90,6 +94,21 @@ class OnDiskTokenResolver(TokenResolver):
                 without a refresh token, or refresh fails.
         """
         path = _account_tokens_path(name)
+        # Probe for symlink before existence check. A dangling symlink at
+        # this path would otherwise silently pass through ``exists()`` and
+        # then hit ``read_credential_bytes`` with no signal that the path
+        # itself was symlinked. ``reject_if_symlink`` raises
+        # ``CredentialPathError``, which the OSError catch below converts
+        # to ``OAuthError``.
+        try:
+            reject_if_symlink(path)
+        except OSError as exc:
+            raise OAuthError(
+                f"OAuth tokens path is a symlink at {path}: {exc}. "
+                f"Remove the symlink and re-run `mp account login {name}`.",
+                code="OAUTH_TOKEN_ERROR",
+                details={"account_name": name, "path": str(path)},
+            ) from exc
         if not path.exists():
             raise OAuthError(
                 (
@@ -100,7 +119,7 @@ class OnDiskTokenResolver(TokenResolver):
                 details={"account_name": name, "path": str(path)},
             )
         try:
-            raw = path.read_bytes()
+            raw = read_credential_bytes(path)
         except OSError as exc:
             raise OAuthError(
                 f"Could not read OAuth tokens for account '{name}' from {path}: {exc}",

@@ -27,6 +27,11 @@ from mixpanel_headless._internal.auth.account import (
 from mixpanel_headless._internal.auth.token_resolver import OnDiskTokenResolver
 from mixpanel_headless.exceptions import OAuthError
 
+_REQUIRES_O_NOFOLLOW = pytest.mark.skipif(
+    not hasattr(os, "O_NOFOLLOW"),
+    reason="O_NOFOLLOW required; Windows is not in scope",
+)
+
 
 @pytest.fixture
 def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -499,3 +504,57 @@ class TestConcurrentRefresh:
         # Both threads triggered an IdP call (the resolver does NOT have a
         # single-flight guard; this assertion documents the current behaviour).
         assert call_count == 2
+
+
+class TestSymlinkRejection:
+    """``get_browser_token`` refuses a symlinked ``tokens.json``.
+
+    Regression for the same-UID symlink attack covered by
+    ``io_utils.read_credential_bytes``. The error is surfaced through
+    the existing ``OAuthError`` translation in
+    ``OnDiskTokenResolver.get_browser_token`` so the CLI output stays
+    domain-specific.
+    """
+
+    @_REQUIRES_O_NOFOLLOW
+    def test_symlinked_tokens_raises_oautherror(self, isolated_home: Path) -> None:
+        """Symlinked tokens.json yields OAuthError with the symlink path named."""
+        account_dir = isolated_home / ".mp" / "accounts" / "personal"
+        account_dir.mkdir(parents=True, mode=0o700)
+        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        attacker = isolated_home / "attacker_tokens.json"
+        attacker.write_text(
+            json.dumps(
+                {
+                    "access_token": "stolen-acc",
+                    "expires_at": future.isoformat(),
+                    "token_type": "Bearer",
+                    "scope": "read:project",
+                }
+            ),
+            encoding="utf-8",
+        )
+        attacker.chmod(0o600)
+        (account_dir / "tokens.json").symlink_to(attacker)
+        resolver = OnDiskTokenResolver()
+        with pytest.raises(OAuthError, match="symlink"):
+            resolver.get_browser_token("personal", "us")
+
+    @_REQUIRES_O_NOFOLLOW
+    def test_dangling_symlink_tokens_raises_oautherror(
+        self, isolated_home: Path
+    ) -> None:
+        """A dangling symlink at tokens.json raises ``OAuthError``.
+
+        Regression for the ``Path.exists()`` follows-symlink trap:
+        without the new ``reject_if_symlink`` probe, a dangling symlink
+        would surface as ``OAuthError("No OAuth tokens found... Run `mp
+        account login`")`` instead of the symlink-specific message, and
+        ``mp login`` would then try to write through the symlink.
+        """
+        account_dir = isolated_home / ".mp" / "accounts" / "personal"
+        account_dir.mkdir(parents=True, mode=0o700)
+        (account_dir / "tokens.json").symlink_to(isolated_home / "missing.json")
+        resolver = OnDiskTokenResolver()
+        with pytest.raises(OAuthError, match="symlink"):
+            resolver.get_browser_token("personal", "us")

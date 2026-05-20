@@ -18,7 +18,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-05-07T23:44:29.929192Z"
+exclude-newer = "2026-05-13T11:16:19.253093Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -1322,9 +1322,11 @@ dev = [
     { name = "mypy" },
     { name = "pandas-stubs", version = "2.3.3.260113", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas-stubs", version = "3.0.0.260204", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "psutil" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "types-psutil" },
 ]
 docs = [
     { name = "mkdocs" },
@@ -1366,6 +1368,7 @@ requires-dist = [
     { name = "networkx", specifier = ">=3.0" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "pandas-stubs", marker = "extra == 'dev'", specifier = ">=2.0" },
+    { name = "psutil", marker = "extra == 'dev'", specifier = ">=7.2.0" },
     { name = "pyarrow", marker = "python_full_version >= '3.11'", specifier = ">=17.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
@@ -1375,6 +1378,7 @@ requires-dist = [
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "tomli-w", specifier = ">=1.0" },
     { name = "typer", specifier = ">=0.12" },
+    { name = "types-psutil", marker = "extra == 'dev'", specifier = ">=7.2.0.20251228" },
 ]
 provides-extras = ["dev", "docs", "notebook"]
 

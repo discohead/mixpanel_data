@@ -38,6 +38,10 @@ from mixpanel_headless._internal.auth.session import (
     WorkspaceRef,
 )
 from mixpanel_headless._internal.auth.token_resolver import OnDiskTokenResolver
+from mixpanel_headless._internal.client_metadata import (
+    QUERY_ORIGIN,
+    get_user_agent,
+)
 from mixpanel_headless.exceptions import (
     AuthenticationError,
     JQLSyntaxError,
@@ -247,15 +251,18 @@ class MixpanelAPIClient:
         return self._client
 
     def _request_headers(self, extra: dict[str, str]) -> dict[str, str]:
-        """Compose the per-request header set: env-var → session → caller.
+        """Compose the per-request header set: defaults → env → session → caller.
 
-        Each layer overrides the prior on header-name collision:
+        Each later layer overrides the prior on header-name collision:
 
-        1. ``MP_CUSTOM_HEADER_NAME`` / ``MP_CUSTOM_HEADER_VALUE`` env pair.
-        2. ``self._session.headers`` (populated from ``[settings].custom_header``
+        1. Library defaults — currently ``User-Agent`` from
+           :func:`get_user_agent` so backend telemetry can attribute traffic
+           to this library.
+        2. ``MP_CUSTOM_HEADER_NAME`` / ``MP_CUSTOM_HEADER_VALUE`` env pair.
+        3. ``self._session.headers`` (populated from ``[settings].custom_header``
            and bridge ``headers`` per FR-014). The resolver merged env into
            the session earlier; the final session state is authoritative.
-        3. ``extra`` — typically ``{"Authorization": auth_header}`` plus any
+        4. ``extra`` — typically ``{"Authorization": auth_header}`` plus any
            per-call ``Accept-Encoding`` etc. supplied by the caller.
 
         Args:
@@ -264,7 +271,7 @@ class MixpanelAPIClient:
         Returns:
             New dict with all layers merged in precedence order.
         """
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = {"User-Agent": get_user_agent()}
         custom_name = os.environ.get("MP_CUSTOM_HEADER_NAME")
         custom_value = os.environ.get("MP_CUSTOM_HEADER_VALUE")
         if custom_name and custom_value:
@@ -510,7 +517,7 @@ class MixpanelAPIClient:
         request_body = json_data or form_data
         if params is None:
             params = {}
-        params["query_origin"] = "mixpanel-headless"
+        params["query_origin"] = QUERY_ORIGIN
         request_headers = self._request_headers(headers)
 
         for attempt in range(self._max_retries + 1):

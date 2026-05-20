@@ -661,7 +661,8 @@ class TestTestOAuthBrowser:
         account_dir = tmp_path / ".mp" / "accounts" / "personal"
         account_dir.mkdir(parents=True)
         past = datetime.now(timezone.utc) - timedelta(hours=1)
-        (account_dir / "tokens.json").write_text(
+        tokens_path = account_dir / "tokens.json"
+        tokens_path.write_text(
             _json.dumps(
                 {
                     "access_token": "expired-tok",
@@ -672,6 +673,7 @@ class TestTestOAuthBrowser:
             ),
             encoding="utf-8",
         )
+        tokens_path.chmod(0o600)
         result = accounts_ns.test("personal")
         assert result.ok is False
         assert result.error is not None
@@ -701,7 +703,8 @@ class TestTestOAuthBrowser:
         account_dir = tmp_path / ".mp" / "accounts" / "personal"
         account_dir.mkdir(parents=True)
         past = datetime.now(timezone.utc) - timedelta(hours=1)
-        (account_dir / "tokens.json").write_text(
+        tokens_path = account_dir / "tokens.json"
+        tokens_path.write_text(
             _json.dumps(
                 {
                     "access_token": "expired-tok",
@@ -713,6 +716,7 @@ class TestTestOAuthBrowser:
             ),
             encoding="utf-8",
         )
+        tokens_path.chmod(0o600)
         # Stub DCR client info so the refresh path can find a client.
         monkeypatch.setattr(
             storage_mod.OAuthStorage,

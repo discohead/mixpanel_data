@@ -1038,6 +1038,7 @@ class TestErrorRendering:
             'region = "us"\n',
             encoding="utf-8",
         )
+        config_path.chmod(0o600)
 
         result = runner.invoke(app, ["account", "list"])
 

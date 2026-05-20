@@ -20,7 +20,12 @@ from typing import TYPE_CHECKING, Any
 import pydantic
 from pydantic import BaseModel, ConfigDict
 
-from mixpanel_headless._internal.io_utils import atomic_write_bytes
+from mixpanel_headless._internal.io_utils import (
+    CredentialPathError,
+    atomic_write_bytes,
+    read_credential_text,
+    reject_if_symlink,
+)
 from mixpanel_headless.exceptions import AuthenticationError, ConfigError, QueryError
 
 if TYPE_CHECKING:
@@ -294,14 +299,33 @@ class MeCache:
             ```
         """
         path = self._cache_path()
+        # Probe for symlink before existence check. A dangling symlink
+        # would silently pass through ``exists()`` returning False, and
+        # the read helper would never see the symlink shape — losing
+        # the security signal we just added. ``reject_if_symlink``
+        # surfaces it as ``CredentialPathError``, caught and logged
+        # below.
+        try:
+            reject_if_symlink(path)
+        except CredentialPathError as e:
+            logger.warning("Refusing to read /me cache at %s: %s", path, e)
+            return None
         if not path.exists():
             return None
 
         try:
-            raw = path.read_text(encoding="utf-8")
+            raw = read_credential_text(path)
             data: dict[str, Any] = json.loads(raw)
+        except CredentialPathError as e:
+            # Structural rejection (symlink at the cache path, or a
+            # mode wider than 0o600). Log at WARNING — louder than the
+            # generic "corrupted cache" path below — so an admin
+            # grepping logs can spot a same-UID attacker probing the
+            # /me cache, instead of seeing only the silent re-fetch.
+            logger.warning("Refusing to read /me cache at %s: %s", path, e)
+            return None
         except (json.JSONDecodeError, OSError) as e:
-            logger.debug("Corrupted cache file %s: %s", path, e)
+            logger.debug("Corrupted cache file %s: %s", path.name, e)
             return None
 
         # Check TTL
@@ -324,9 +348,9 @@ class MeCache:
             # Then unlink the file so the next call deterministically refetches
             # rather than re-paying the parse cost.
             logger.warning(
-                "Cached /me response at %s no longer matches the model "
+                "Cached /me response in %s no longer matches the model "
                 "(schema drift). Invalidating: %s",
-                path,
+                path.name,
                 e,
             )
             path.unlink(missing_ok=True)

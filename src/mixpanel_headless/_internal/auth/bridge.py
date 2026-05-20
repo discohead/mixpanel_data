@@ -48,7 +48,11 @@ from mixpanel_headless._internal.auth.account import (
 )
 from mixpanel_headless._internal.auth.storage import account_dir
 from mixpanel_headless._internal.auth.token import OAuthTokens
-from mixpanel_headless._internal.io_utils import atomic_write_bytes
+from mixpanel_headless._internal.io_utils import (
+    atomic_write_bytes,
+    read_credential_text,
+    reject_if_symlink,
+)
 from mixpanel_headless.exceptions import ConfigError, OAuthError
 
 logger = logging.getLogger(__name__)
@@ -160,10 +164,20 @@ def load_bridge(path: Path | None = None) -> BridgeFile | None:
         candidates.extend(default_bridge_search_paths())
 
     for candidate in candidates:
+        # Probe for a symlink BEFORE the existence check — Path.exists()
+        # follows symlinks and silently returns False for dangling
+        # links, hiding the attack signal.
+        try:
+            reject_if_symlink(candidate)
+        except OSError as exc:
+            raise ConfigError(
+                f"Could not read bridge file at {candidate}: {exc}",
+                details={"path": str(candidate)},
+            ) from exc
         if not candidate.exists():
             continue
         try:
-            payload = json.loads(candidate.read_text(encoding="utf-8"))
+            payload = json.loads(read_credential_text(candidate))
         except (OSError, json.JSONDecodeError) as exc:
             raise ConfigError(
                 f"Could not read bridge file at {candidate}: {exc}",
@@ -202,6 +216,15 @@ def _read_browser_tokens(name: str) -> OAuthTokens:
             refresh attempt.
     """
     path = account_dir(name) / "tokens.json"
+    # Probe for symlink before existence check — see ``load_bridge``.
+    try:
+        reject_if_symlink(path)
+    except OSError as exc:
+        raise OAuthError(
+            f"Could not read OAuth tokens for account '{name}' from {path}: {exc}",
+            code="OAUTH_TOKEN_ERROR",
+            details={"account_name": name, "path": str(path)},
+        ) from exc
     if not path.exists():
         raise OAuthError(
             f"No OAuth tokens found for account '{name}' at {path}. "
@@ -210,7 +233,7 @@ def _read_browser_tokens(name: str) -> OAuthTokens:
             details={"account_name": name, "path": str(path)},
         )
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(read_credential_text(path))
     except (OSError, json.JSONDecodeError) as exc:
         raise OAuthError(
             f"Could not read OAuth tokens for account '{name}' from {path}: {exc}",

@@ -6,6 +6,7 @@ Tests use httpx.MockTransport for deterministic HTTP mocking.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from datetime import date, timedelta
 from typing import Any
 
@@ -19,6 +20,7 @@ from mixpanel_headless._internal.api_client import (
     MixpanelAPIClient,
     _iter_jsonl_lines,
 )
+from mixpanel_headless._internal.auth.account import ServiceAccount
 from mixpanel_headless._internal.auth.session import Session
 from mixpanel_headless.exceptions import (
     AuthenticationError,
@@ -3089,3 +3091,159 @@ class TestWithProject:
         assert isinstance(new_client._session.account, OAuthTokenAccount)
         assert new_client._session.account.token is not None
         assert new_client._session.account.token.get_secret_value() == "my-oauth-token"
+
+
+# =============================================================================
+# Client identification headers (User-Agent)
+# =============================================================================
+
+
+class TestClientIdentificationHeaders:
+    """User-Agent stamping on every outbound request path."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_entry_point(self) -> Iterator[None]:
+        """Force ``"lib"`` for each test, then restore the prior value.
+
+        Other test modules may import ``cli.main``, which flips the
+        process-wide entry point to ``"cli"`` at import time. Pin to
+        ``"lib"`` for deterministic assertions; restore on teardown.
+        """
+        from mixpanel_headless._internal.client_metadata import (
+            get_entry_point,
+            set_entry_point,
+        )
+
+        original = get_entry_point()
+        set_entry_point("lib")
+        yield
+        set_entry_point(original)
+
+    def test_user_agent_set_on_standard_request(
+        self, test_credentials: Session
+    ) -> None:
+        """Standard query-API requests carry the library User-Agent."""
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(dict(request.headers))
+            return httpx.Response(200, json=["event1"])
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.get_events()
+
+        assert captured_headers["user-agent"].startswith("mixpanel-headless/")
+        assert "entry=lib" in captured_headers["user-agent"]
+        assert "python/" in captured_headers["user-agent"]
+
+    def test_user_agent_set_on_app_request(self, test_credentials: Session) -> None:
+        """App API requests carry the library User-Agent."""
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(dict(request.headers))
+            return httpx.Response(200, json={"results": []})
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.app_request("GET", "/projects/12345/dashboards")
+
+        assert captured_headers["user-agent"].startswith("mixpanel-headless/")
+
+    def test_user_agent_set_on_export_stream(self, test_credentials: Session) -> None:
+        """Streaming export requests carry the library User-Agent."""
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(dict(request.headers))
+            return httpx.Response(
+                200, content=b'{"event":"A","properties":{"time":1}}\n'
+            )
+
+        with create_mock_client(test_credentials, handler) as client:
+            list(client.export_events("2024-01-01", "2024-01-31"))
+
+        assert captured_headers["user-agent"].startswith("mixpanel-headless/")
+
+    def test_user_agent_reflects_cli_entry_point(
+        self, test_credentials: Session
+    ) -> None:
+        """After set_entry_point("cli"), outbound UA tags entry=cli."""
+        from mixpanel_headless._internal.client_metadata import set_entry_point
+
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(dict(request.headers))
+            return httpx.Response(200, json=["event1"])
+
+        set_entry_point("cli")
+        with create_mock_client(test_credentials, handler) as client:
+            client.get_events()
+
+        assert "entry=cli" in captured_headers["user-agent"]
+
+    def test_session_headers_override_user_agent(self) -> None:
+        """Session.headers wins over the default User-Agent."""
+        from mixpanel_headless._internal.auth.session import Project
+
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(dict(request.headers))
+            return httpx.Response(200, json=["event1"])
+
+        session = Session(
+            account=ServiceAccount(
+                name="team",
+                region="us",
+                username="team.sa",
+                secret=SecretStr("team-secret"),
+            ),
+            project=Project(id="12345"),
+            headers={"User-Agent": "custom-tester/1.0"},
+        )
+        transport = httpx.MockTransport(handler)
+        client = MixpanelAPIClient(session=session, _transport=transport)
+        with client:
+            client.get_events()
+
+        assert captured_headers["user-agent"] == "custom-tester/1.0"
+
+    def test_mp_custom_header_can_override_user_agent(
+        self,
+        test_credentials: Session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """MP_CUSTOM_HEADER_* env can override the default User-Agent."""
+        monkeypatch.setenv("MP_CUSTOM_HEADER_NAME", "User-Agent")
+        monkeypatch.setenv("MP_CUSTOM_HEADER_VALUE", "env-ua/2.0")
+
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(dict(request.headers))
+            return httpx.Response(200, json=["event1"])
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.get_events()
+
+        assert captured_headers["user-agent"] == "env-ua/2.0"
+
+    def test_caller_extra_header_overrides_default_user_agent(
+        self, test_credentials: Session
+    ) -> None:
+        """Caller-supplied User-Agent via request() wins over the default."""
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(dict(request.headers))
+            return httpx.Response(200, json={})
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.request(
+                "GET",
+                "https://mixpanel.com/api/app/test",
+                headers={"User-Agent": "caller-ua/3.0"},
+            )
+
+        assert captured_headers["user-agent"] == "caller-ua/3.0"

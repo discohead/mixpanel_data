@@ -202,6 +202,7 @@ class TestBridgeTokenMaterialization:
             ),
             encoding="utf-8",
         )
+        stale_path.chmod(0o600)
 
         fresh_expires = datetime.now(timezone.utc) + timedelta(hours=1)
         bridge_payload = {
@@ -222,6 +223,7 @@ class TestBridgeTokenMaterialization:
         }
         bridge_path = tmp_path / "bridge.json"
         bridge_path.write_text(json.dumps(bridge_payload), encoding="utf-8")
+        bridge_path.chmod(0o600)
         monkeypatch.setenv("MP_AUTH_FILE", str(bridge_path))
 
         Workspace()

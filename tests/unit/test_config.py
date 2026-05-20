@@ -10,6 +10,7 @@ Reference: specs/042-auth-architecture-redesign/contracts/config-schema.md §1.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,11 @@ from mixpanel_headless._internal.auth.session import ActiveSession
 from mixpanel_headless._internal.config import ConfigManager
 from mixpanel_headless.exceptions import ConfigError
 from mixpanel_headless.types import AccountSummary, Target
+
+_REQUIRES_O_NOFOLLOW = pytest.mark.skipif(
+    not hasattr(os, "O_NOFOLLOW"),
+    reason="O_NOFOLLOW required; Windows is not in scope",
+)
 
 # Path to the fixture corpus (constructed from project root).
 _FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "configs"
@@ -56,6 +62,7 @@ class TestLoadEmptyOrMissing:
         """An empty TOML file is also valid (no sections) — no errors."""
         p = tmp_path / "config.toml"
         p.write_text("", encoding="utf-8")
+        p.chmod(0o600)
         cm = ConfigManager(config_path=p)
         assert cm.list_accounts() == []
         assert cm.list_targets() == []
@@ -623,6 +630,7 @@ class TestFixtureLoad:
         src = _FIXTURE_DIR / "simple.toml"
         dst = tmp_path / "config.toml"
         dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        dst.chmod(0o600)
         cm = ConfigManager(config_path=dst)
         accounts = cm.list_accounts()
         assert len(accounts) == 1
@@ -638,6 +646,7 @@ class TestFixtureLoad:
         src = _FIXTURE_DIR / "multi.toml"
         dst = tmp_path / "config.toml"
         dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        dst.chmod(0o600)
         cm = ConfigManager(config_path=dst)
         accounts = {a.name: a for a in cm.list_accounts()}
         assert accounts["team"].type == "service_account"
@@ -757,6 +766,7 @@ class TestMutateTransaction:
             'region = "us"\n',
             encoding="utf-8",
         )
+        p.chmod(0o600)
         original = p.read_bytes()
         cm = ConfigManager(config_path=p)
 
@@ -765,3 +775,47 @@ class TestMutateTransaction:
 
         # File untouched — no partial mutation reached disk.
         assert p.read_bytes() == original
+
+
+class TestSymlinkRejection:
+    """``ConfigManager`` refuses to read a ``config.toml`` that is a symlink.
+
+    Regression for the same-UID symlink attack covered by the read-side
+    hardening in ``io_utils.read_credential_text``. An attacker who can
+    write to the user's ``$HOME`` (CI shared $HOME, container shared
+    mounts) could otherwise plant ``config.toml`` as a symlink to an
+    attacker-controlled TOML and steer the user's session at another
+    project / account.
+    """
+
+    @_REQUIRES_O_NOFOLLOW
+    def test_symlink_config_raises_configerror(self, tmp_path: Path) -> None:
+        """A symlink at ``config.toml`` raises ``ConfigError`` rather than reading."""
+        attacker = tmp_path / "attacker.toml"
+        attacker.write_text('[active]\naccount = "evil"\n', encoding="utf-8")
+        attacker.chmod(0o600)
+        link = tmp_path / "config.toml"
+        link.symlink_to(attacker)
+        cm = ConfigManager(config_path=link)
+        with pytest.raises(ConfigError, match="symlink"):
+            cm.list_accounts()
+
+    @_REQUIRES_O_NOFOLLOW
+    def test_dangling_symlink_config_still_rejected(self, tmp_path: Path) -> None:
+        """A dangling symlink at the config path is also rejected.
+
+        Regression for the ``Path.exists()`` follows-symlink trap: before
+        ``reject_if_symlink`` was added at the call site, a dangling
+        symlink would short-circuit through ``not path.exists()`` and
+        silently return an empty config — hiding the attack signal.
+        """
+        link = tmp_path / "config.toml"
+        link.symlink_to(tmp_path / "does-not-exist.toml")
+        cm = ConfigManager(config_path=link)
+        # ConfigManager._read_raw guards with ``if not self._path.exists()``;
+        # without the new ``reject_if_symlink``, this dangling symlink would
+        # silently return an empty dict and ``list_accounts()`` would return
+        # []. The new check raises a CredentialPathError that surfaces as
+        # ConfigError below.
+        with pytest.raises(ConfigError, match="symlink"):
+            cm.list_accounts()

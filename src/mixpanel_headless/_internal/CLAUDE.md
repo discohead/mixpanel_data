@@ -7,7 +7,8 @@ Private infrastructure powering `mixpanel_headless`'s programmable interface to 
 | File | Purpose |
 |------|---------|
 | `config.py` | `ConfigManager` for `~/.mp/config.toml` — single schema (`[accounts.NAME]` / `[active]` / `[targets.NAME]` / `[settings]`); unknown keys are rejected with a clear error |
-| `api_client.py` | `MixpanelAPIClient` — HTTP client; takes a `Session`; preserves the underlying `httpx.Client` across in-session axis switches |
+| `api_client.py` | `MixpanelAPIClient` — HTTP client; takes a `Session`; preserves the underlying `httpx.Client` across in-session axis switches; stamps `User-Agent` and `query_origin` from `client_metadata.py` on every request |
+| `client_metadata.py` | `QUERY_ORIGIN` constant + `get_user_agent()` / `set_entry_point()` helpers — single source of truth for outbound client identification |
 | `me.py` | `MeService` + per-account `MeCache` (`~/.mp/accounts/{name}/me.json`) |
 | `pagination.py` | Cursor-based App API pagination |
 | `io_utils.py` | `atomic_write_bytes` — `O_EXCL` + `os.replace` writes with explicit mode bits |
