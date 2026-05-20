@@ -470,6 +470,7 @@ class TestConfigManagerEdgeCases:
         """
         p = tmp_path / "config.toml"
         p.write_text("config_version = 2\n", encoding="utf-8")
+        p.chmod(0o600)
         cm = ConfigManager(config_path=p)
         assert cm.list_accounts() == []
 

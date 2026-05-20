@@ -48,6 +48,8 @@ dev = [
     "pandas-stubs>=2.0",
     "mutmut>=3.0",
     "interrogate>=1.7",
+    "psutil>=7.2.0",
+    "types-psutil>=7.2.0.20251228",
 ]
 docs = [
     "mkdocs>=1.5",

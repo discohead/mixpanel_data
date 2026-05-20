@@ -66,10 +66,10 @@ class TestLocBudget:
     FILE_COUNT_CAP = 20
     """Maximum number of auth-subsystem files. A 21st file fails this test."""
 
-    LOC_CAP = 8800
+    LOC_CAP = 8900
     """Maximum total LoC across the auth subsystem (~7% headroom over current).
 
-    Bumped 6500 → 6700 → 8800 by 043 (frictionless-auth):
+    Bumped 6500 → 6700 → 8800 → 8900 by SEC-331 follow-up:
     - 6500 → 6700 covered the two new files
       (``_internal/auth/region_probe.py``, ``_internal/auth/naming.py``)
       plus the relaxations in ``cli/commands/account.py`` /
@@ -77,8 +77,12 @@ class TestLocBudget:
     - 6700 → 8800 added ``accounts.py`` (1500+ lines after the
       ``login_unified`` orchestrator landed) to the scope so the
       orchestrator's growth is also guarded going forward.
-    See ``specs/043-frictionless-auth/plan.md`` §"Scale/Scope" and the
-    rescue plan at ``~/.claude/plans/thoroughly-and-rigorously-and-gentle-lemur.md``.
+    - 8800 → 8900 covers the SEC-331 follow-up additions: dirfd-walk
+      ``_open_credential_fd``, ``reject_if_symlink`` helper, S_ISREG +
+      size cap checks in ``_enforce_credential_file_invariants``,
+      ``_fchmod_no_follow`` in ``storage.py``, and the
+      ``reject_if_symlink`` wires at the five call sites.
+    See ``specs/043-frictionless-auth/plan.md`` §"Scale/Scope".
     """
 
     def test_file_count_cap(self) -> None:
