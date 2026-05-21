@@ -61,7 +61,7 @@ def get_user_agent() -> str:
     Example:
         ```python
         get_user_agent()
-        # "mixpanel-headless/0.1.0 (entry=lib; python/3.11)"
+        # "mixpanel-headless/0.1.1 (entry=lib; python/3.11)"
         ```
     """
     # Lazy import: mixpanel_headless/__init__.py defines __version__ after
