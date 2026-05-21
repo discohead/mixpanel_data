@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -725,7 +726,7 @@ class TestDiscovery:
     """Test discovery APIs (US5)."""
 
     def test_get_events(self, test_credentials: Session) -> None:
-        """Should list events with type=general parameter."""
+        """Should list events with widest defaults (type=general, limit=5000, wide date range)."""
         captured_params: dict[str, Any] = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -738,6 +739,146 @@ class TestDiscovery:
 
         assert events == ["event1", "event2", "event3"]
         assert captured_params["type"] == "general"
+        assert captured_params["limit"] == "5000"
+        assert captured_params["from_date"] == "2000-01-01"
+        # to_date defaults to today; just assert it's present and well-formed.
+        assert "to_date" in captured_params
+        assert len(captured_params["to_date"]) == 10
+
+    def test_get_events_caller_overrides(self, test_credentials: Session) -> None:
+        """Caller-supplied limit/from_date/to_date should override the wide defaults."""
+        captured_params: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            for key, value in request.url.params.items():
+                captured_params[key] = value
+            return httpx.Response(200, json=["a", "b"])
+
+        with create_mock_client(test_credentials, handler) as client:
+            events = client.get_events(
+                limit=42, from_date="2024-01-01", to_date="2024-12-31"
+            )
+
+        assert events == ["a", "b"]
+        assert captured_params["limit"] == "42"
+        assert captured_params["from_date"] == "2024-01-01"
+        assert captured_params["to_date"] == "2024-12-31"
+
+    def test_get_events_falls_back_on_date_range_403(
+        self, test_credentials: Session
+    ) -> None:
+        """A 403 'Date range exceeds N days' should retry with today - N days."""
+        captured_from_dates: list[str] = []
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            captured_from_dates.append(request.url.params["from_date"])
+            if call_count == 1:
+                return httpx.Response(
+                    403,
+                    json={"error": "Date range exceeds 90 days into the past"},
+                )
+            return httpx.Response(200, json=["e1"])
+
+        with create_mock_client(test_credentials, handler) as client:
+            events = client.get_events()
+
+        assert events == ["e1"]
+        assert call_count == 2
+        assert captured_from_dates[0] == "2000-01-01"
+        expected_retry = (date.today() - timedelta(days=90)).isoformat()
+        assert captured_from_dates[1] == expected_retry
+
+    def test_get_events_does_not_retry_when_caller_set_from_date(
+        self, test_credentials: Session
+    ) -> None:
+        """Explicit from_date should not be silently overridden on a 403."""
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(
+                403,
+                json={"error": "Date range exceeds 30 days into the past"},
+            )
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(QueryError),
+        ):
+            client.get_events(from_date="1999-01-01")
+
+        assert call_count == 1
+
+    def test_get_events_does_not_retry_on_unrelated_403(
+        self, test_credentials: Session
+    ) -> None:
+        """A 403 unrelated to the date-range gate should propagate as QueryError."""
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(403, json={"error": "Permission denied"})
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(QueryError),
+        ):
+            client.get_events()
+
+        assert call_count == 1
+
+    def test_get_events_does_not_retry_on_non_403_with_matching_text(
+        self, test_credentials: Session
+    ) -> None:
+        """A 400 whose message coincidentally matches the gate text must not retry.
+
+        Guards against an over-eager retry triggered by any QueryError whose
+        message happens to contain ``exceeds N days``.
+        """
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(
+                400,
+                json={"error": "Query exceeds 90 days lookback in custom filter"},
+            )
+
+        with (
+            create_mock_client(test_credentials, handler) as client,
+            pytest.raises(QueryError),
+        ):
+            client.get_events()
+
+        assert call_count == 1
+
+    def test_get_events_empty_string_from_date_is_not_replaced(
+        self, test_credentials: Session
+    ) -> None:
+        """``from_date=""`` is passed through as-is, not silently defaulted.
+
+        Locks the ``is None`` check: callers who pass a falsy-but-non-None
+        value should get whatever the server returns (probably a 400), not
+        the library's default ``2000-01-01``.
+        """
+        captured_params: dict[str, Any] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            for key, value in request.url.params.items():
+                captured_params[key] = value
+            return httpx.Response(200, json=[])
+
+        with create_mock_client(test_credentials, handler) as client:
+            client.get_events(from_date="", to_date="")
+
+        assert captured_params["from_date"] == ""
+        assert captured_params["to_date"] == ""
 
     def test_get_event_properties(self, test_credentials: Session) -> None:
         """Should list event properties from /events/properties/top endpoint."""

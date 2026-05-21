@@ -320,9 +320,7 @@ class OAuthStorage:
         except FileNotFoundError:
             dir_st = None
         if dir_st is not None and stat.S_ISLNK(dir_st.st_mode):
-            logger.warning(
-                "Refusing to chmod through symlinked storage directory."
-            )
+            logger.warning("Refusing to chmod through symlinked storage directory.")
         elif dir_st is not None:
             dir_mode = stat.S_IMODE(dir_st.st_mode)
             if dir_mode != 0o700:

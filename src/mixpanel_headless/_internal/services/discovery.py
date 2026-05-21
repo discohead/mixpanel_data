@@ -399,23 +399,55 @@ class DiscoveryService:
         # Internal cache: tuple keys map to cached results
         self._cache: dict[tuple[str | int | None, ...], list[Any]] = {}
 
-    def list_events(self) -> list[str]:
-        """List all event names in the project.
+    def list_events(
+        self,
+        *,
+        limit: int | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> list[str]:
+        """List event names in the project.
+
+        Defaults to the widest range the underlying ``/events/names``
+        endpoint will accept (``limit=5000``, ``from_date=2000-01-01``
+        — the API's earliest accepted year — and ``to_date=today``).
+        Results for each unique ``(limit, from_date, to_date)`` triple
+        are cached separately for the lifetime of this service
+        instance.
+
+        Args:
+            limit: Maximum events to return. ``None`` defers to the
+                API client's default (5000, the server-side ceiling).
+            from_date: ``YYYY-MM-DD`` lower bound. ``None`` defers to
+                the API client's default of ``2000-01-01``.
+            to_date: ``YYYY-MM-DD`` upper bound. ``None`` defers to
+                the API client's default (today).
 
         Returns:
             Alphabetically sorted list of event names.
 
         Raises:
             AuthenticationError: Invalid credentials.
-
-        Note:
-            Results are cached for the lifetime of this service instance.
+            QueryError: 403 errors unrelated to date-range gating, or
+                any other 4xx the ``/events/names`` endpoint emits.
         """
-        cache_key = ("list_events",)
+        cache_key: tuple[str | int | None, ...] = (
+            "list_events",
+            limit,
+            from_date,
+            to_date,
+        )
         if cache_key in self._cache:
             return list(self._cache[cache_key])
 
-        result = self._api_client.get_events()
+        kwargs: dict[str, Any] = {}
+        if limit is not None:
+            kwargs["limit"] = limit
+        if from_date is not None:
+            kwargs["from_date"] = from_date
+        if to_date is not None:
+            kwargs["to_date"] = to_date
+        result = self._api_client.get_events(**kwargs)
         sorted_result = sorted(result)
         self._cache[cache_key] = sorted_result
         return list(sorted_result)

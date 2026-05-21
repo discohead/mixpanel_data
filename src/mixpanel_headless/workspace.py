@@ -932,10 +932,41 @@ class Workspace:
     # DISCOVERY METHODS
     # =========================================================================
 
-    def events(self) -> list[str]:
-        """List all event names in the Mixpanel project.
+    def events(
+        self,
+        *,
+        limit: int | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> list[str]:
+        """List event names in the Mixpanel project.
 
-        Results are cached for the lifetime of the Workspace.
+        Defaults to the widest window the underlying
+        ``/events/names`` endpoint will accept: ``limit=5000`` (the
+        server-side ceiling), ``from_date=2000-01-01`` (the API's
+        earliest accepted year — pre-2000 values come back as
+        ``"invalid date, bad year"``), and ``to_date`` set to today.
+        The endpoint is gated by the per-project
+        ``max_data_history_days`` feature; if the wide ``from_date``
+        is rejected (HTTP 403, "Date range exceeds N days into the
+        past"), the call automatically retries with ``today - N days``.
+
+        Note that this method reflects events seen during the queried
+        window — it is not the schema registry. Events that were
+        registered in Lexicon but never fired in the window are
+        absent. For the full registered schema, use the Lexicon
+        endpoints (e.g. :meth:`get_event_definitions`).
+
+        Results are cached per ``(limit, from_date, to_date)`` triple
+        for the lifetime of the Workspace.
+
+        Args:
+            limit: Maximum events to return. Defaults to the
+                server-side ceiling (5000).
+            from_date: ``YYYY-MM-DD`` lower bound. Defaults to
+                ``2000-01-01`` and falls back to the project's
+                ``max_data_history_days`` ceiling on rejection.
+            to_date: ``YYYY-MM-DD`` upper bound. Defaults to today.
 
         Returns:
             Alphabetically sorted list of event names.
@@ -943,8 +974,14 @@ class Workspace:
         Raises:
             ConfigError: If API credentials not available.
             AuthenticationError: If credentials are invalid.
+            QueryError: 403 errors unrelated to date-range gating, or
+                any other 4xx the ``/events/names`` endpoint emits.
         """
-        return self._discovery_service.list_events()
+        return self._discovery_service.list_events(
+            limit=limit,
+            from_date=from_date,
+            to_date=to_date,
+        )
 
     def properties(self, event: str) -> list[str]:
         """List all property names for an event.
